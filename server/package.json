@@ -1,0 +1,14 @@
+{
+  "name": "resume-pdf-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "简历 PDF 本地渲染服务：驱动系统已装的 Edge / Chrome 生成矢量 PDF，不下载任何浏览器",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "playwright-core": "^1.50.0"
+  }
+}

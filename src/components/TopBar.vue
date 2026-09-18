@@ -1,0 +1,209 @@
+<script setup>
+/**
+ * 顶部操作栏。
+ * 数据导入导出与 PDF 导出逻辑分别在 useResumeFile / usePdfExport，
+ * 本组件只负责按钮编排与状态展示。
+ */
+import { computed, useTemplateRef } from 'vue'
+
+import PasswordDialog from '@/components/PasswordDialog.vue'
+import SvgIcon from '@/components/SvgIcon.vue'
+import { usePdfExport } from '@/composables/usePdfExport'
+import { useResumeFile } from '@/composables/useResumeFile'
+import { TEMPLATES } from '@/data/presets'
+import { useResumeStore } from '@/stores/resume'
+import { formatTime } from '@/utils/helpers'
+
+const props = defineProps({
+  panelVisible: { type: Boolean, default: true },
+})
+
+const emit = defineEmits(['toggle-panel'])
+
+const store = useResumeStore()
+const fileInput = useTemplateRef('fileInput')
+
+const { exportJSON, importFromFile, resetResume } = useResumeFile()
+const {
+  exporting,
+  quota,
+  quotaExhausted,
+  needPassword,
+  passwordOpen,
+  passwordError,
+  printPdf,
+  exportViaServer,
+  submitPassword,
+  cancelPassword,
+} = usePdfExport()
+
+const serverExportText = computed(() => {
+  if (exporting.value) return '渲染中…'
+  if (quotaExhausted.value) return '今日额度已用完'
+  return '一键导出 PDF'
+})
+
+/** 服务要口令时换成锁图标，让按钮在点击前就说明为什么会被拦下 */
+const serverExportIcon = computed(() => (needPassword.value ? 'lock' : 'download'))
+
+const serverExportTitle = computed(() => {
+  if (quotaExhausted.value) {
+    return '今日导出额度已用完，次日 0 点重置；可改用「打印导出」，它不消耗额度'
+  }
+  if (needPassword.value) {
+    return '渲染服务已启用访问口令，点击后输入口令即可导出'
+  }
+  const state = quota.value ? `今日剩余 ${quota.value.remaining} / ${quota.value.limit} 次` : '自动带背景、无需勾选任何选项'
+  return `由本地渲染服务生成矢量 PDF：${state}`
+})
+
+const templateName = computed(
+  () => TEMPLATES.find((t) => t.id === store.resume.template)?.name || '自定义',
+)
+
+const saveText = computed(() => {
+  if (store.storageWarning) return '保存受限'
+  return store.savedAt ? `已保存 ${formatTime(store.savedAt).slice(11)}` : '尚未修改'
+})
+
+/** 每次选择前清空，保证连续选同一个文件也能触发 change */
+function pickFile() {
+  fileInput.value.value = ''
+  fileInput.value.click()
+}
+
+function onFileChange(event) {
+  importFromFile(event.target.files?.[0])
+}
+</script>
+
+<template>
+  <header class="editor-topbar">
+    <div class="brand">
+      <SvgIcon name="layout" :size="17" />
+      <span class="brand-name">简历工坊</span>
+      <small>{{ templateName }}</small>
+    </div>
+
+    <div class="spacer"></div>
+
+    <span v-if="store.storageWarning" class="save-state warn">{{ store.storageWarning }}</span>
+    <span v-else class="save-state">{{ saveText }}</span>
+
+    <button class="ed-btn" @click="emit('toggle-panel')">
+      <SvgIcon :name="props.panelVisible ? 'eyeOff' : 'eye'" :size="14" />
+      <span>{{ props.panelVisible ? '隐藏面板' : '显示面板' }}</span>
+    </button>
+
+    <button class="ed-btn" @click="pickFile">
+      <SvgIcon name="upload" :size="14" />
+      <span>导入数据</span>
+    </button>
+
+    <button class="ed-btn" @click="exportJSON">
+      <SvgIcon name="download" :size="14" />
+      <span>导出数据</span>
+    </button>
+
+    <button class="ed-btn" @click="resetResume">
+      <SvgIcon name="refresh" :size="14" />
+      <span>恢复示例</span>
+    </button>
+
+    <button
+      class="ed-btn"
+      title="在打印窗口另存为 PDF：文本可选、体积最小，需手动勾选「背景图形」"
+      @click="printPdf"
+    >
+      <SvgIcon name="print" :size="14" />
+      <span>打印导出</span>
+    </button>
+
+    <button
+      class="ed-btn ed-btn-primary"
+      :disabled="exporting || quotaExhausted"
+      :title="serverExportTitle"
+      @click="exportViaServer"
+    >
+      <SvgIcon :name="serverExportIcon" :size="14" />
+      <span>{{ serverExportText }}</span>
+      <span v-if="quota && !quotaExhausted" class="quota-badge">{{ quota.remaining }}</span>
+    </button>
+
+    <input
+      ref="fileInput"
+      type="file"
+      accept="application/json,.json"
+      hidden
+      @change="onFileChange"
+    />
+
+    <!-- 组件内部会 Teleport 到 body，放在这里只是便于与导出按钮就近阅读 -->
+    <PasswordDialog
+      :open="passwordOpen"
+      :error="passwordError"
+      :busy="exporting"
+      @submit="submitPassword"
+      @cancel="cancelPassword"
+    />
+  </header>
+</template>
+
+<style scoped>
+.editor-topbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #e3e6ec;
+  background: #fff;
+  flex-wrap: wrap;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #2b579a;
+}
+
+.brand-name {
+  color: #1f2329;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.brand small {
+  color: #7b8494;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.save-state {
+  max-width: 320px;
+  color: #8b93a1;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.save-state.warn {
+  color: #b45309;
+}
+
+/* 主按钮内的剩余额度角标 */
+.quota-badge {
+  margin-left: 2px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+</style>

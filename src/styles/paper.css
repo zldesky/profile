@@ -1,0 +1,746 @@
+/**
+ * 简历纸张排版基座。
+ * 所有模板共享这套类名约定，模板组件只负责外层布局的差异化。
+ *
+ * 约定类名：
+ *  .paper           A4 纸张容器（主题 CSS 变量在此声明）
+ *  .r-title         模块标题（受 .paper[data-tstyle] 控制装饰样式）
+ *  .r-sec / .r-entry / .r-kv / .r-bullets / .r-bars / .r-avatar ...
+ *
+ * 画布容器约定类名（打印时统一隐藏）：
+ *  .editor-app / .editor-main / .editor-topbar / .editor-stage / .editor-panel / .editor-toast
+ */
+
+:root {
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #eef0f4;
+  color: #1f2329;
+  font-family: -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+#app {
+  height: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+/* ---------------- 纸张 ---------------- */
+
+.paper {
+  --accent: #2b579a;
+  --accent-rgb: 43, 87, 154;
+  --text: #2b2f36;
+  --font: 'Microsoft YaHei', sans-serif;
+  --fs: 1;
+  --lh: 1.75;
+  --gap: 1;
+  --mv: 12mm;
+  --mh: 14mm;
+  /* 标题装饰色，深色区域内会被改写为白色 */
+  --title-line-color: var(--accent);
+  --title-marker-color: var(--accent);
+  /* 正文缩进，与有内边距的标题样式保持左轴对齐 */
+  --body-indent: 0;
+
+  zoom: var(--zoom, 1);
+  width: 210mm;
+  min-height: 297mm;
+  padding: var(--mv) var(--mh);
+  background: #fff;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: calc(13px * var(--fs));
+  line-height: var(--lh);
+  overflow-wrap: break-word;
+}
+
+.paper *,
+.paper *::before,
+.paper *::after {
+  box-sizing: border-box;
+}
+
+.paper p,
+.paper h1,
+.paper h2,
+.paper h3,
+.paper ul {
+  margin: 0;
+}
+
+.paper ::selection {
+  background: rgba(var(--accent-rgb), 0.22);
+}
+
+/* ---------------- 模块与标题 ---------------- */
+
+/* 正文与标题块的内边缘对齐：带内边距的标题样式，正文同步缩进 */
+.paper[data-tstyle='fill'],
+.paper[data-tstyle='pill'],
+.paper[data-tstyle='gradient'],
+.paper[data-tstyle='boxed'] {
+  --body-indent: 0.75em;
+}
+
+.paper[data-tstyle='bar'] {
+  --body-indent: 0.6em;
+}
+
+.r-sec {
+  margin-top: calc(1.15em * var(--gap));
+  text-align: var(--sec-align, inherit);
+  break-inside: avoid;
+}
+
+/* 模块正文容器，缩进在此统一施加，避免内部块重复偏移 */
+.r-body {
+  padding-left: var(--body-indent, 0);
+}
+
+.r-title {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--title-gap, 0.5em);
+  margin-bottom: var(--title-margin, 0.55em);
+  padding: 0.4em 0.75em;
+  font-size: 1.08em;
+  font-weight: 700;
+  line-height: 1.35;
+  border-radius: 0.25em;
+  background: rgba(var(--accent-rgb), 0.11);
+  break-after: avoid;
+  break-inside: avoid;
+}
+
+.r-title .dot {
+  flex: 0 0 auto;
+  width: 0.82em;
+  height: 0.82em;
+  border-radius: 0.16em;
+  background: var(--title-marker-color, var(--accent));
+}
+
+/* ---------------- 标题标记形状 ---------------- */
+
+.paper[data-marker='diamond'] .r-title .dot {
+  width: 0.64em;
+  height: 0.64em;
+  border-radius: 0.08em;
+  transform: rotate(45deg);
+}
+
+.paper[data-marker='circle'] .r-title .dot {
+  border-radius: 50%;
+}
+
+.paper[data-marker='ring'] .r-title .dot {
+  border: 0.16em solid var(--title-marker-color, var(--accent));
+  border-radius: 50%;
+  background: transparent;
+}
+
+.paper[data-marker='triangle'] .r-title .dot {
+  width: 0.9em;
+  height: 0.78em;
+  border-radius: 0;
+  clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+}
+
+.paper[data-marker='bar'] .r-title .dot {
+  width: 0.28em;
+  height: 1em;
+  border-radius: 0.08em;
+}
+
+.paper[data-marker='none'] .r-title .dot {
+  display: none;
+}
+
+/* ---------------- 标题主体样式 ---------------- */
+
+.paper[data-tstyle='pill'] .r-title {
+  border-radius: 999em;
+  background: rgba(var(--accent-rgb), 0.14);
+}
+
+.paper[data-tstyle='gradient'] .r-title {
+  border-radius: 0.2em;
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.24), rgba(var(--accent-rgb), 0.02));
+}
+
+.paper[data-tstyle='underline'] .r-title {
+  padding: 0.1em 0 0.3em;
+  border-bottom: 2px solid var(--title-line-color, var(--accent));
+  border-radius: 0;
+  background: transparent;
+}
+
+.paper[data-tstyle='bar'] .r-title {
+  padding: 0.1em 0 0.1em 0.6em;
+  border-left: 3px solid var(--title-line-color, var(--accent));
+  border-radius: 0;
+  background: transparent;
+}
+
+/* 左竖条自带竖向装饰，不再叠加标记 */
+.paper[data-tstyle='bar'] .r-title .dot {
+  display: none;
+}
+
+.paper[data-tstyle='boxed'] .r-title {
+  border: 1px solid rgba(var(--accent-rgb), 0.5);
+  border-radius: 0.2em;
+  background: transparent;
+}
+
+.paper[data-tstyle='center'] .r-title {
+  justify-content: center;
+  padding: 0.1em 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.paper[data-tstyle='center'] .r-title .r-leader {
+  display: none;
+}
+
+.paper[data-tstyle='plain'] .r-title {
+  padding: 0.1em 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* 标题后延伸的点线，用于纯文字标题的经典排版 */
+.r-leader {
+  display: none;
+  flex: 1 1 auto;
+  min-width: 1.5em;
+  height: 1px;
+  margin-left: 0.2em;
+  background: repeating-linear-gradient(to right, currentColor 0 3px, transparent 3px 7px);
+  opacity: 0.4;
+}
+
+.paper[data-tstyle='leader'] .r-title {
+  padding: 0.1em 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.paper[data-tstyle='leader'] .r-title .r-leader {
+  display: block;
+}
+
+/* ---------------- 标题底边线 ---------------- */
+
+/* 线条挂在标题伪元素上，位置与长度全部由主题变量控制，不参与文档流 */
+.r-title::after {
+  content: '';
+  position: absolute;
+  bottom: calc(var(--title-line-gap, 4px) * -1);
+  left: var(--title-line-left, 0%);
+  width: var(--title-line-w, 100%);
+  height: var(--title-line-size, 2px);
+  border-radius: var(--title-line-size, 2px);
+  background: var(--title-line-color, var(--accent));
+  opacity: 0;
+  pointer-events: none;
+}
+
+.paper[data-line='solid'] .r-title::after {
+  opacity: 1;
+}
+
+.paper[data-line='dashed'] .r-title::after {
+  opacity: 1;
+  border-radius: 0;
+  background: repeating-linear-gradient(
+    to right,
+    var(--title-line-color, var(--accent)) 0 9px,
+    transparent 9px 15px
+  );
+}
+
+.paper[data-line='dotted'] .r-title::after {
+  opacity: 1;
+  border-radius: 50%;
+  background: repeating-linear-gradient(
+    to right,
+    var(--title-line-color, var(--accent)) 0 2.5px,
+    transparent 2.5px 6.5px
+  );
+}
+
+.paper[data-line='gradient'] .r-title::after {
+  opacity: 1;
+  background: linear-gradient(
+    to right,
+    var(--title-line-color, var(--accent)),
+    rgba(var(--accent-rgb), 0)
+  );
+}
+
+.paper[data-line='double'] .r-title::after {
+  opacity: 1;
+  height: calc(var(--title-line-size, 2px) * 2 + 2px);
+  background: linear-gradient(
+    to bottom,
+    var(--title-line-color, var(--accent)) 0 var(--title-line-size, 2px),
+    transparent var(--title-line-size, 2px) calc(var(--title-line-size, 2px) + 2px),
+    var(--title-line-color, var(--accent)) calc(var(--title-line-size, 2px) + 2px) 100%
+  );
+}
+
+/* 形状类装饰：以线宽的三倍作为高度，再裁剪成梯形 / 彩带 / 箭头 */
+.paper[data-line='trapezoid'] .r-title::after {
+  opacity: 1;
+  height: calc(var(--title-line-size, 2px) * 3);
+  border-radius: 0;
+  clip-path: polygon(0 0, 100% 0, 88% 100%, 12% 100%);
+}
+
+.paper[data-line='ribbon'] .r-title::after {
+  opacity: 1;
+  height: calc(var(--title-line-size, 2px) * 3);
+  border-radius: 0;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 9px) 50%, 100% 100%, 0 100%, 9px 50%);
+}
+
+.paper[data-line='chevron'] .r-title::after {
+  opacity: 1;
+  height: calc(var(--title-line-size, 2px) * 3);
+  border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%);
+}
+
+/* ---------------- 文字与键值 ---------------- */
+
+.r-name {
+  font-size: 1.9em;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.06em;
+}
+
+.r-job {
+  margin-top: 0.25em;
+  color: var(--accent);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.r-para {
+  text-align: var(--sec-align, justify);
+  white-space: pre-wrap;
+}
+
+.r-lab {
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.r-val {
+  min-width: 0;
+  white-space: pre-wrap;
+  /*
+   * 邮箱、URL 这类没有空格的长串在 pre-wrap 下找不到断点，
+   * 而 min-width: 0 会让盒子先收窄，文字随即溢出压住相邻列。
+   * anywhere 允许在任意字符处断开，作为窄容器下的最后一道保险。
+   */
+  overflow-wrap: anywhere;
+}
+
+.r-kv {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3em;
+}
+
+.r-kv .r-k {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.r-kv .r-v {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+}
+
+/* ---------------- 信息网格 ---------------- */
+
+.r-info-grid {
+  display: grid;
+  grid-template-columns: var(--grid-template, repeat(2, minmax(0, 1fr)));
+  gap: 0.5em 2em;
+}
+
+.r-info-item {
+  display: flex;
+  align-items: center;
+  justify-content: var(--sec-item-justify, flex-start);
+  gap: 0.45em;
+  min-width: 0;
+}
+
+/*
+ * 未指定列数时的流式排布。
+ * 每个「标签：内容」作为一个整体参与换行，min-width 取内容宽度，
+ * 因此标签与内容不会被拆到两行；flex-grow 负责把剩余空间均分给同行各项。
+ */
+.r-info-grid.is-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em 1.8em;
+}
+
+.r-info-grid.is-flow .r-info-item {
+  flex: 1 1 auto;
+  min-width: max-content;
+}
+
+.r-info-item .svg-icon,
+.r-kv .svg-icon {
+  width: 1.05em;
+  height: 1.05em;
+  color: var(--accent);
+}
+
+/*
+ * 一个字段（标签 + 内容）作为整体换行，不允许在字段内部断开。
+ * 页头的联系方式网格位于 .head 下方，头像被 min-height 限制在页头内、压不到它，
+ * 因此这里不需要头像避让内边距，只要保证字段不被拆散即可。
+ */
+.contact .r-info-item {
+  min-width: max-content;
+}
+
+.contact .r-val {
+  white-space: nowrap;
+}
+
+/* ---------------- 经历条目 ---------------- */
+
+.r-entry {
+  break-inside: avoid;
+}
+
+.r-entry + .r-entry {
+  margin-top: 0.75em;
+}
+
+/* 机构图标（校徽 / 公司 logo），无图片时以机构名首字占位 */
+.r-logo {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
+  width: 1.5em;
+  height: 1.5em;
+  overflow: hidden;
+  border-radius: 50%;
+  color: var(--title-marker-color, var(--accent));
+  font-size: 0.8em;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.r-logo.is-placeholder {
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.r-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.r-entry-head {
+  display: flex;
+  align-items: baseline;
+  gap: 1em;
+  break-after: avoid;
+}
+
+.r-time {
+  color: #6b7280;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.r-org {
+  font-weight: 700;
+}
+
+.r-role {
+  margin-left: auto;
+  text-align: right;
+  font-weight: 700;
+}
+
+.r-bullets {
+  list-style: none;
+  margin-top: 0.35em;
+  padding: 0;
+}
+
+.r-bullets li {
+  position: relative;
+  margin-bottom: 0.12em;
+  padding-left: 1.05em;
+  white-space: pre-wrap;
+}
+
+.r-bullets li::before {
+  content: '';
+  position: absolute;
+  left: 0.15em;
+  top: 0.68em;
+  width: 0.32em;
+  height: 0.32em;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.r-bullets li:last-child {
+  margin-bottom: 0;
+}
+
+/* ---------------- 技能进度条 ---------------- */
+
+.r-bars {
+  display: grid;
+  grid-template-columns: var(--bars-template, repeat(3, minmax(0, 1fr)));
+  gap: 1.2em;
+  margin-top: 0.85em;
+}
+
+.r-bar-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5em;
+  margin-bottom: 0.32em;
+}
+
+.r-bar-pct {
+  color: #6b7280;
+  font-variant-numeric: tabular-nums;
+}
+
+.r-bar-track {
+  height: 0.42em;
+  border-radius: 0.21em;
+  background: rgba(var(--accent-rgb), 0.16);
+  overflow: hidden;
+}
+
+.r-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 0.21em;
+  background: var(--accent);
+}
+
+/* ---------------- 头像 ---------------- */
+
+/*
+ * 头像尺寸由主题统一给出，默认 1 寸证件照 25×35mm，各模板不再自行指定。
+ *
+ * 定位方式：绝对定位在页头右上角，再靠 translate 做拖拽位移。
+ * 关键点是它「不参与横向布局」——若留在文档流里，即使视觉上移走，
+ * 它仍占着 25mm 的槽位，正文会被挤到放不下一行内容。
+ * 脱离文档流后正文拿到整行宽度，--avatar-pad-* 才能精确等于剩余可用宽度。
+ * 页头用 min-height 撑出与头像等高的空间（各模板模板内声明）。
+ */
+.r-avatar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--avatar-w, 25mm);
+  height: var(--avatar-h, 35mm);
+  overflow: hidden;
+  border: 2px solid var(--accent);
+  border-radius: 0;
+  background: #f2f4f7;
+  color: var(--accent);
+  transform: translate(var(--avatar-dx, 0mm), var(--avatar-dy, 0mm));
+  cursor: grab;
+  transition: box-shadow 0.15s;
+  /* 触屏拖动时不触发滚动 */
+  touch-action: none;
+}
+
+.r-avatar:hover {
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.22);
+}
+
+.paper.is-avatar-dragging .r-avatar {
+  cursor: grabbing;
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.32);
+}
+
+.paper.is-avatar-dragging {
+  user-select: none;
+}
+
+.paper[data-shape='rounded'] .r-avatar {
+  border-radius: 2mm;
+}
+
+.paper[data-shape='circle'] .r-avatar {
+  border-radius: 50%;
+}
+
+.r-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 占位图标按头像比例缩放，不再依赖固定像素 */
+.r-avatar .svg-icon {
+  width: 45%;
+  height: 45%;
+}
+
+/* ---------------- 深色区域反白 ---------------- */
+
+.on-dark .r-title {
+  --title-line-color: #fff;
+  --title-marker-color: #fff;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.on-dark .r-lab,
+.on-dark .r-k,
+.on-dark .r-bar-pct,
+.on-dark .r-time {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.on-dark .r-val,
+.on-dark .r-v,
+.on-dark .r-org,
+.on-dark .r-role,
+.on-dark .r-para {
+  color: #fff;
+}
+
+.on-dark .r-bullets li::before {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.on-dark .r-bar-track {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.on-dark .r-bar-fill {
+  background: #fff;
+}
+
+.on-dark .r-avatar {
+  border-color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+/* ---------------- 满版出血容器 ---------------- */
+
+/* 负外边距抵消纸张内边距，使色块可贴到纸边；打印时由 @page 边距接管，需归零 */
+.tpl-bleed {
+  margin: calc(var(--mv) * -1) calc(var(--mh) * -1);
+  min-height: 297mm;
+}
+
+/* ---------------- 打印 ---------------- */
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  .editor-topbar,
+  .editor-panel,
+  .editor-toast,
+  .editor-tools,
+  .no-print {
+    display: none !important;
+  }
+
+  .editor-app {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .editor-main {
+    display: block !important;
+  }
+
+  .editor-stage {
+    display: block !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  /* 预览区的滚动容器带内边距与 flex 居中，打印时必须一并归零，
+     否则会与 @page 边距叠加，把内容整体推向右下角 */
+  .stage-scroll {
+    display: block !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  .paper {
+    zoom: 1 !important;
+    width: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .r-avatar {
+    cursor: auto;
+    box-shadow: none !important;
+  }
+
+  .tpl-bleed {
+    margin: 0 !important;
+    min-height: 0 !important;
+  }
+}

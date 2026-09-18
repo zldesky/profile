@@ -1,0 +1,528 @@
+/**
+ * 编辑器控件统一样式。
+ * 各编辑组件只写布局相关的 scoped 样式，按钮、输入框、卡片等复用这里的 .ed-* 类。
+ */
+
+/* ---------------- 按钮 ---------------- */
+
+.ed-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid #d8dce4;
+  border-radius: 8px;
+  background: #fff;
+  color: #2b2f36;
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.ed-btn:hover {
+  border-color: #c3c9d4;
+  background: #f5f7fa;
+}
+
+.ed-btn.is-active {
+  border-color: #2b579a;
+  background: #eaf0fa;
+  color: #24487f;
+  font-weight: 600;
+}
+
+.ed-btn-primary {
+  border-color: #2b579a;
+  background: #2b579a;
+  color: #fff;
+}
+
+.ed-btn-primary:hover {
+  border-color: #24487f;
+  background: #24487f;
+}
+
+.ed-btn-block {
+  width: 100%;
+  justify-content: center;
+}
+
+.ed-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ed-btn:disabled:hover {
+  border-color: #d8dce4;
+  background: #fff;
+}
+
+.ed-btn-icon {
+  padding: 6px 8px;
+}
+
+.ed-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #8b93a1;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.ed-icon-btn:hover {
+  border-color: #e3e6ec;
+  background: #fff;
+  color: #2b579a;
+}
+
+.ed-icon-btn.danger:hover {
+  border-color: #e8c4c4;
+  background: #fdf6f6;
+  color: #a12626;
+}
+
+/* ---------------- 表单控件 ---------------- */
+
+.ed-input,
+.ed-select,
+.ed-textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #d8dce4;
+  border-radius: 7px;
+  background: #fff;
+  color: #1f2329;
+  font: inherit;
+  font-size: 13px;
+}
+
+.ed-textarea {
+  min-height: 64px;
+  line-height: 1.65;
+  resize: vertical;
+}
+
+.ed-input:focus,
+.ed-select:focus,
+.ed-textarea:focus {
+  outline: none;
+  border-color: #2b579a;
+  box-shadow: 0 0 0 2px rgba(43, 87, 154, 0.13);
+}
+
+.ed-color {
+  width: 34px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid #d8dce4;
+  border-radius: 7px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.ed-range {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: #2b579a;
+}
+
+/* ---------------- 行与分组 ---------------- */
+
+.ed-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 9px;
+  font-size: 13px;
+}
+
+.ed-row:last-child {
+  margin-bottom: 0;
+}
+
+.ed-row > .ed-label {
+  flex: 0 0 66px;
+  color: #5b6472;
+}
+
+.ed-grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ed-value {
+  flex: 0 0 46px;
+  color: #8b93a1;
+  font-size: 12px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ed-hint {
+  margin: 6px 0 0;
+  color: #8b93a1;
+  font-size: 11.5px;
+  line-height: 1.65;
+}
+
+.ed-group {
+  padding: 14px 0;
+  border-bottom: 1px solid #eef0f4;
+}
+
+.ed-group:last-child {
+  border-bottom: 0;
+}
+
+.ed-group-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: #5b6472;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+/* ---------------- 分段选择与色板 ---------------- */
+
+.ed-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.ed-seg button {
+  flex: 1 1 auto;
+  padding: 6px 8px;
+  border: 1px solid #d8dce4;
+  border-radius: 7px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.ed-seg button:hover {
+  background: #f5f7fa;
+}
+
+.ed-seg button.is-active {
+  border-color: #2b579a;
+  background: #eaf0fa;
+  color: #24487f;
+  font-weight: 600;
+}
+
+.ed-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.ed-swatch {
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.ed-swatch:hover {
+  transform: scale(1.08);
+}
+
+.ed-swatch.is-active {
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 3px #2b579a;
+}
+
+/* ---------------- 模块卡片 ---------------- */
+
+.ed-card {
+  margin-bottom: 9px;
+  border: 1px solid #e3e6ec;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.ed-card.is-dragging {
+  opacity: 0.45;
+}
+
+.ed-card.is-drop-target {
+  border-color: #2b579a;
+}
+
+.ed-card-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 9px;
+  background: #fafbfc;
+}
+
+.ed-card-head:hover {
+  background: #f4f6f9;
+}
+
+.ed-drag {
+  display: flex;
+  align-items: center;
+  color: #c3c9d4;
+  cursor: grab;
+}
+
+.ed-drag:active {
+  cursor: grabbing;
+}
+
+.ed-card-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #2b2f36;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ed-card-title:hover {
+  background: #fff;
+}
+
+.ed-card-title:focus {
+  outline: none;
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(43, 87, 154, 0.13);
+}
+
+.ed-card.is-hidden .ed-card-title {
+  color: #b6bcc6;
+}
+
+.ed-card-body {
+  padding: 10px;
+  border-top: 1px solid #eef0f4;
+}
+
+/* ---------------- 条目与要点 ---------------- */
+
+.ed-sub {
+  margin-bottom: 9px;
+  padding: 9px;
+  border: 1px solid #eceff4;
+  border-radius: 8px;
+  background: #fcfdfe;
+}
+
+.ed-sub:last-child {
+  margin-bottom: 0;
+}
+
+.ed-sub-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+/* 经历段标题（「第 N 段」），位于 .ed-sub-head 内并占据剩余宽度 */
+.ed-sub-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: #5b6472;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ed-bullet-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+
+.ed-bullet-row .ed-textarea {
+  min-height: 46px;
+}
+
+.ed-empty {
+  padding: 16px;
+  border: 1px dashed #d8dce4;
+  border-radius: 9px;
+  color: #8b93a1;
+  font-size: 12.5px;
+  text-align: center;
+}
+
+/* ---------------- 补充控件 ---------------- */
+
+.ed-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.ed-icon-btn:disabled:hover {
+  border-color: transparent;
+  background: transparent;
+  color: #8b93a1;
+}
+
+.ed-check {
+  width: 15px;
+  height: 15px;
+  accent-color: #2b579a;
+  cursor: pointer;
+}
+
+.ed-count {
+  color: #b6bcc6;
+  font-weight: 400;
+}
+
+.ed-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 9px;
+  padding-bottom: 9px;
+  border-bottom: 1px dashed #eef0f4;
+}
+
+.ed-actions .ed-spacer {
+  flex: 1 1 auto;
+}
+
+.ed-add-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.ed-seg-caption,
+.seg-caption {
+  margin: 4px 0 6px;
+  color: #5b6472;
+  font-size: 12px;
+}
+
+/* ---------------- 模块编辑器内部共用控件 ---------------- */
+
+.ed-icon-select {
+  flex: 0 0 84px;
+}
+
+.ed-meta-label {
+  flex: 0 0 40%;
+}
+
+.ed-para-input {
+  min-height: 130px;
+}
+
+/* 分段标题，右侧可挂开关 */
+.ed-sub-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 12px 0 8px;
+  color: #5b6472;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+/* 「复选框 + 文字」开关行 */
+.ed-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  color: #5b6472;
+  font-size: 12.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.ed-logo-picker {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  overflow: hidden;
+  padding: 0;
+  border: 1px dashed #d8dce4;
+  border-radius: 8px;
+  background: #fafbfc;
+  color: #b6bcc6;
+  cursor: pointer;
+}
+
+.ed-logo-picker:hover {
+  border-color: #2b579a;
+  color: #2b579a;
+}
+
+.ed-logo-picker img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.ed-hint-inline {
+  margin: 0;
+}
+
+/* ---------------- 全局轻提示 ---------------- */
+
+.editor-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 99;
+  max-width: 460px;
+  padding: 9px 16px;
+  border-radius: 9px;
+  background: #1f2329;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+  opacity: 0;
+  transform: translate(-50%, 16px);
+  pointer-events: none;
+  transition: 0.25s;
+}
+
+.editor-toast.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
