@@ -44,6 +44,12 @@ export function useAvatarDrag(paperRef, zoom) {
     const containerRect = container.getBoundingClientRect()
     const avatarRect = avatar.getBoundingClientRect()
 
+    /*
+     * 预览被 v-show 隐藏时所有矩形都是 0，据此算出的边界会把偏移夹到错误的值上，
+     * 而且 setAvatarPos 会把结果写回数据。等容器重新可见时会再测一次，直接跳过即可。
+     */
+    if (!paperRect.width || !avatarRect.width) return
+
     const offsetX = (Number(store.basics.avatarPos?.dx) || 0) * MM_TO_PX * scale
     const offsetY = (Number(store.basics.avatarPos?.dy) || 0) * MM_TO_PX * scale
     const baseLeft = avatarRect.left - offsetX

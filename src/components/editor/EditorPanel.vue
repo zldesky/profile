@@ -83,5 +83,26 @@ const tab = shallowRef('content')
   min-height: 0;
   padding: 0 14px 40px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 900px) {
+  /* 窄屏这一栏独占整个宽度：预览此时已被 v-show 隐藏，不存在并排关系 */
+  .editor-panel {
+    flex: 1 1 auto;
+    border-left: 0;
+  }
+
+  .panel-tabs {
+    /* 页签常驻可见，长面板滚动时仍能换页签 */
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #fff;
+  }
+
+  .panel-body {
+    padding: 0 12px 48px;
+  }
 }
 </style>

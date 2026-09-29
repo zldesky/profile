@@ -15,10 +15,24 @@ import { useResumeStore } from '@/stores/resume'
 import { formatTime } from '@/utils/helpers'
 
 const props = defineProps({
+  /** 窄屏两栏二选一，此按钮的含义随之改变 */
+  isMobile: { type: Boolean, default: false },
+  /** 编辑面板当前是否可见 */
   panelVisible: { type: Boolean, default: true },
 })
 
 const emit = defineEmits(['toggle-panel'])
+
+/** 宽屏是显隐面板，窄屏是「编辑 / 预览」切换，同一颗按钮两种语义 */
+const toggleLabel = computed(() => {
+  if (props.isMobile) return props.panelVisible ? '预览' : '编辑'
+  return props.panelVisible ? '隐藏面板' : '显示面板'
+})
+
+const toggleIcon = computed(() => {
+  if (props.isMobile) return props.panelVisible ? 'eye' : 'text'
+  return props.panelVisible ? 'eyeOff' : 'eye'
+})
 
 const store = useResumeStore()
 const fileInput = useTemplateRef('fileInput')
@@ -91,23 +105,39 @@ function onFileChange(event) {
     <span v-else class="save-state">{{ saveText }}</span>
 
     <button class="ed-btn" @click="emit('toggle-panel')">
-      <SvgIcon :name="props.panelVisible ? 'eyeOff' : 'eye'" :size="14" />
-      <span>{{ props.panelVisible ? '隐藏面板' : '显示面板' }}</span>
+      <SvgIcon :name="toggleIcon" :size="14" />
+      <span>{{ toggleLabel }}</span>
     </button>
 
-    <button class="ed-btn" @click="pickFile">
+    <!-- 下面三个属于次要操作，窄屏收成图标；文字仍在无障碍树里，靠 aria-label 保留语义 -->
+    <button
+      class="ed-btn is-compact"
+      title="导入数据"
+      aria-label="导入数据"
+      @click="pickFile"
+    >
       <SvgIcon name="upload" :size="14" />
-      <span>导入数据</span>
+      <span class="btn-label">导入数据</span>
     </button>
 
-    <button class="ed-btn" @click="exportJSON">
+    <button
+      class="ed-btn is-compact"
+      title="导出数据"
+      aria-label="导出数据"
+      @click="exportJSON"
+    >
       <SvgIcon name="download" :size="14" />
-      <span>导出数据</span>
+      <span class="btn-label">导出数据</span>
     </button>
 
-    <button class="ed-btn" @click="resetResume">
+    <button
+      class="ed-btn is-compact"
+      title="恢复示例"
+      aria-label="恢复示例"
+      @click="resetResume"
+    >
       <SvgIcon name="refresh" :size="14" />
-      <span>恢复示例</span>
+      <span class="btn-label">恢复示例</span>
     </button>
 
     <button
@@ -205,5 +235,38 @@ function onFileChange(event) {
   background: rgba(255, 255, 255, 0.22);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+  .editor-topbar {
+    gap: 6px;
+    padding: 8px 10px;
+  }
+
+  /* 模板名属于可省略信息，窄屏把它让给操作按钮 */
+  .brand small {
+    display: none;
+  }
+
+  .save-state {
+    max-width: 108px;
+  }
+
+  /* 触控目标不小于 36px，同时压掉多余的横向留白 */
+  .ed-btn {
+    min-height: 36px;
+    padding: 8px 10px;
+    font-size: 12.5px;
+  }
+
+  /* 次要操作收成纯图标，标签仍在无障碍树中（aria-label 已给出） */
+  .is-compact {
+    gap: 0;
+    padding: 8px;
+  }
+
+  .is-compact .btn-label {
+    display: none;
+  }
 }
 </style>

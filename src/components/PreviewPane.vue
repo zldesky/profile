@@ -162,10 +162,24 @@ async function compressToOnePage() {
   min-height: 0;
   padding: 26px 28px 34px;
   overflow: auto;
+  /* 滚到底后不要继续带动外层（移动端会触发下拉刷新/橡皮筋） */
+  overscroll-behavior: contain;
 }
 
 .paper {
   flex: 0 0 auto;
   box-shadow: 0 3px 22px rgba(20, 30, 50, 0.14);
+}
+
+@media (max-width: 900px) {
+  /* 窄屏这一栏独占宽度，把留白收紧换成纸张空间。
+     usePaperZoom 的 fit() 直接读实际内边距，改这里不需要同步改常量。 */
+  .stage-scroll {
+    padding: 12px 14px 16px;
+  }
+
+  .paper {
+    box-shadow: 0 2px 14px rgba(20, 30, 50, 0.16);
+  }
 }
 </style>

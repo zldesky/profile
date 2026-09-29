@@ -526,3 +526,85 @@
   opacity: 1;
   transform: translate(-50%, 0);
 }
+
+/* ---------------- 触控适配 ---------------- */
+
+/* 移动端点按会闪一层灰色高亮，在这种按钮密集的界面上很干扰 */
+.ed-btn,
+.ed-icon-btn,
+.ed-seg button,
+.ed-swatch,
+.ed-card-head,
+.ed-logo-picker {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 声明只做平移与缩放，浏览器不再等待判断双击缩放，点击响应更快 */
+.ed-btn,
+.ed-icon-btn,
+.ed-seg button,
+.ed-swatch {
+  touch-action: manipulation;
+}
+
+/* 拖拽把手：扩大命中区域，并交出触摸手势的所有权，否则会被面板滚动抢先接管。
+   注意 vue-draggable-plus 的其它交互区域不要加这条，会干扰它自己的手势处理 */
+.ed-drag {
+  padding: 6px 4px;
+  touch-action: none;
+}
+
+@media (max-width: 900px) {
+  /*
+   * iOS 在聚焦 font-size 小于 16px 的输入框时会自动放大整个页面，
+   * 结果是每点一次输入框页面就跳一次缩放。16px 是阻止该行为的门槛。
+   * 这里只放大字号，不放大控件本身，避免面板被撑高。
+   */
+  .ed-input,
+  .ed-select,
+  .ed-textarea {
+    font-size: 16px;
+  }
+
+  /* 桌面端 26px 的点击目标在手机上很难点准，统一放大 */
+  .ed-icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .ed-btn {
+    min-height: 36px;
+  }
+
+  .ed-seg button {
+    padding: 9px 10px;
+  }
+
+  .ed-swatch {
+    width: 34px;
+    height: 34px;
+  }
+
+  .ed-check {
+    width: 18px;
+    height: 18px;
+  }
+
+  .ed-logo-picker {
+    width: 40px;
+    height: 40px;
+  }
+
+  /* 窄屏没有横向空间，提示条改成通栏，避免长文案被挤出屏幕 */
+  .editor-toast {
+    right: 12px;
+    bottom: 16px;
+    left: 12px;
+    max-width: none;
+    transform: translateY(16px);
+  }
+
+  .editor-toast.is-visible {
+    transform: translateY(0);
+  }
+}
