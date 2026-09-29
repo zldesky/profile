@@ -19,7 +19,8 @@ const emit = defineEmits(['toggle', 'remove'])
 
 const store = useResumeStore()
 
-const toggleVisible = () => store.updateSection(props.section.id, { visible: !props.section.visible })
+const toggleVisible = () =>
+  store.updateSection(props.section.id, { visible: !props.section.visible })
 </script>
 
 <template>
@@ -72,11 +73,7 @@ const toggleVisible = () => store.updateSection(props.section.id, { visible: !pr
         >
           <SvgIcon name="down" :size="14" />
         </button>
-        <button
-          class="ed-icon-btn"
-          title="复制该模块"
-          @click="store.duplicateSection(section.id)"
-        >
+        <button class="ed-icon-btn" title="复制该模块" @click="store.duplicateSection(section.id)">
           <SvgIcon name="copy" :size="14" />
         </button>
         <span class="ed-spacer"></span>

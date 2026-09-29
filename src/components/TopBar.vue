@@ -8,8 +8,10 @@ import { computed, useTemplateRef } from 'vue'
 
 import PasswordDialog from '@/components/PasswordDialog.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
+import { useAuth } from '@/composables/useAuth'
 import { usePdfExport } from '@/composables/usePdfExport'
 import { useResumeFile } from '@/composables/useResumeFile'
+import { useToast } from '@/composables/useToast'
 import { TEMPLATES } from '@/data/presets'
 import { useResumeStore } from '@/stores/resume'
 import { formatTime } from '@/utils/helpers'
@@ -37,6 +39,9 @@ const toggleIcon = computed(() => {
 const store = useResumeStore()
 const fileInput = useTemplateRef('fileInput')
 
+const auth = useAuth()
+const { toast } = useToast()
+
 const { exportJSON, importFromFile, resetResume } = useResumeFile()
 const {
   exporting,
@@ -49,7 +54,15 @@ const {
   exportViaServer,
   submitPassword,
   cancelPassword,
+  refreshQuota,
 } = usePdfExport()
+
+/** 退出后同步一次额度（未登录时服务端不再返回），让导出按钮立刻反映状态 */
+async function onLogout() {
+  await auth.logout()
+  await refreshQuota()
+  toast('已退出登录，简历仍保留在本机')
+}
 
 const serverExportText = computed(() => {
   if (exporting.value) return '渲染中…'
@@ -67,7 +80,9 @@ const serverExportTitle = computed(() => {
   if (needPassword.value) {
     return '渲染服务已启用访问口令，点击后输入口令即可导出'
   }
-  const state = quota.value ? `今日剩余 ${quota.value.remaining} / ${quota.value.limit} 次` : '自动带背景、无需勾选任何选项'
+  const state = quota.value
+    ? `今日剩余 ${quota.value.remaining} / ${quota.value.limit} 次`
+    : '自动带背景、无需勾选任何选项'
   return `由本地渲染服务生成矢量 PDF：${state}`
 })
 
@@ -101,6 +116,26 @@ function onFileChange(event) {
 
     <div class="spacer"></div>
 
+    <button
+      class="ed-btn is-compact"
+      :disabled="!store.canUndo"
+      title="撤销（Ctrl+Z）"
+      aria-label="撤销"
+      @click="store.undo"
+    >
+      <SvgIcon name="undo" :size="14" />
+    </button>
+
+    <button
+      class="ed-btn is-compact"
+      :disabled="!store.canRedo"
+      title="重做（Ctrl+Shift+Z）"
+      aria-label="重做"
+      @click="store.redo"
+    >
+      <SvgIcon name="redo" :size="14" />
+    </button>
+
     <span v-if="store.storageWarning" class="save-state warn">{{ store.storageWarning }}</span>
     <span v-else class="save-state">{{ saveText }}</span>
 
@@ -110,32 +145,17 @@ function onFileChange(event) {
     </button>
 
     <!-- 下面三个属于次要操作，窄屏收成图标；文字仍在无障碍树里，靠 aria-label 保留语义 -->
-    <button
-      class="ed-btn is-compact"
-      title="导入数据"
-      aria-label="导入数据"
-      @click="pickFile"
-    >
+    <button class="ed-btn is-compact" title="导入数据" aria-label="导入数据" @click="pickFile">
       <SvgIcon name="upload" :size="14" />
       <span class="btn-label">导入数据</span>
     </button>
 
-    <button
-      class="ed-btn is-compact"
-      title="导出数据"
-      aria-label="导出数据"
-      @click="exportJSON"
-    >
+    <button class="ed-btn is-compact" title="导出数据" aria-label="导出数据" @click="exportJSON">
       <SvgIcon name="download" :size="14" />
       <span class="btn-label">导出数据</span>
     </button>
 
-    <button
-      class="ed-btn is-compact"
-      title="恢复示例"
-      aria-label="恢复示例"
-      @click="resetResume"
-    >
+    <button class="ed-btn is-compact" title="恢复示例" aria-label="恢复示例" @click="resetResume">
       <SvgIcon name="refresh" :size="14" />
       <span class="btn-label">恢复示例</span>
     </button>
@@ -159,6 +179,22 @@ function onFileChange(event) {
       <span>{{ serverExportText }}</span>
       <span v-if="quota && !quotaExhausted" class="quota-badge">{{ quota.remaining }}</span>
     </button>
+
+    <!-- 账号区：未登录给入口，已登录只显示身份与退出 -->
+    <router-link v-if="auth.status.value === 'anon'" class="ed-btn" :to="{ name: 'login' }">
+      <SvgIcon name="user" :size="14" />
+      <span>登录 / 注册</span>
+    </router-link>
+    <template v-else-if="auth.status.value === 'authed'">
+      <span class="user-chip" :title="`已登录：${auth.user.value?.username}`">
+        <SvgIcon name="user" :size="14" />
+        <span class="user-chip-name">{{ auth.user.value?.username }}</span>
+      </span>
+      <button class="ed-btn is-compact" title="退出登录" aria-label="退出登录" @click="onLogout">
+        <SvgIcon name="close" :size="14" />
+        <span class="btn-label">退出</span>
+      </button>
+    </template>
 
     <input
       ref="fileInput"
@@ -235,6 +271,23 @@ function onFileChange(event) {
   background: rgba(255, 255, 255, 0.22);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+
+/* 登录用户的身份展示：纯文本、不可点，与按钮区分开 */
+.user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 4px;
+  color: #5b6472;
+  font-size: 12.5px;
+}
+
+.user-chip-name {
+  max-width: 120px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 @media (max-width: 900px) {

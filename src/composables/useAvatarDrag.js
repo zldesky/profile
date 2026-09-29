@@ -67,10 +67,7 @@ export function useAvatarDrag(paperRef, zoom) {
       minDx: (minX - baseLeft) * mmPerPx,
       maxDx: (maxX - baseRight) * mmPerPx,
       minDy: (Math.max(paperRect.top + padY, containerRect.top) - baseTop) * mmPerPx,
-      maxDy: Math.min(
-        store.basics.avatarHeight,
-        (paperRect.bottom - padY - baseBottom) * mmPerPx,
-      ),
+      maxDy: Math.min(store.basics.avatarHeight, (paperRect.bottom - padY - baseBottom) * mmPerPx),
     })
 
     // 切换模板或改尺寸后边界会变，用新边界重新裁剪一次当前偏移

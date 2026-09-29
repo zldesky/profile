@@ -7,7 +7,7 @@ import SvgIcon from '@/components/SvgIcon.vue'
 import ExperienceEntryEditor from '@/components/editor/sections/ExperienceEntryEditor.vue'
 import { useResumeStore } from '@/stores/resume'
 
-const props = defineProps({
+defineProps({
   section: { type: Object, required: true },
 })
 

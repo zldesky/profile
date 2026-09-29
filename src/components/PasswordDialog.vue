@@ -48,7 +48,8 @@ function submit() {
         </h3>
 
         <p class="pw-desc">
-          服务端启用了 PDF_ACCESS_PASSWORD。口令只发送给本机渲染服务，不会写入简历数据，也不会随导出文件带出。
+          服务端启用了
+          PDF_ACCESS_PASSWORD。口令只发送给本机渲染服务，不会写入简历数据，也不会随导出文件带出。
         </p>
 
         <div class="pw-field">
@@ -81,11 +82,7 @@ function submit() {
 
         <div class="pw-actions">
           <button class="ed-btn" :disabled="busy" @click="emit('cancel')">取消</button>
-          <button
-            class="ed-btn ed-btn-primary"
-            :disabled="!value.trim() || busy"
-            @click="submit"
-          >
+          <button class="ed-btn ed-btn-primary" :disabled="!value.trim() || busy" @click="submit">
             {{ busy ? '验证中…' : '确定并导出' }}
           </button>
         </div>

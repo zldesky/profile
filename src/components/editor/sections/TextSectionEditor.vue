@@ -4,7 +4,7 @@
  */
 import { useResumeStore } from '@/stores/resume'
 
-const props = defineProps({
+defineProps({
   section: { type: Object, required: true },
 })
 

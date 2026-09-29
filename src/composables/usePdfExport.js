@@ -1,4 +1,5 @@
 import { computed, onMounted, shallowRef } from 'vue'
+import { useRouter } from 'vue-router'
 
 import { usePdfPassword } from '@/composables/usePdfPassword'
 import { useToast } from '@/composables/useToast'
@@ -11,13 +12,15 @@ const PRINT_HINT = '打印窗口请将「边距」设为默认、勾选「背景
 /**
  * PDF 导出的两条路径，产物都是矢量文本：
  *  1. 打印导出——走浏览器打印，零依赖、不消耗额度，但需要用户手动勾选「背景图形」；
- *  2. 一键导出——走本地渲染服务，服务端自动开启背景，但受每日额度限制。
+ *  2. 一键导出——走渲染服务，服务端自动开启背景，按用户计每日额度。
  *
- * 渲染服务若设置了 PDF_ACCESS_PASSWORD，一键导出会先索取口令：
+ * 服务端鉴别身份靠会话 Cookie（登录后自动携带）或脚本口令 Bearer：
  * 口令只在本地保存，服务端用常量时间比较校验，连续错误会被临时锁定。
+ * 未登录点击一键导出时，服务端返回 loginRequired，这里引导去登录页。
  */
 export function usePdfExport() {
   const store = useResumeStore()
+  const router = useRouter()
   const { toast } = useToast()
   const { password, set: setPassword, clear: clearPassword } = usePdfPassword()
 
@@ -87,9 +90,14 @@ export function usePdfExport() {
 
     switch (error.code) {
       case 'AUTH_REQUIRED':
-        // 服务端要求口令，弹窗保持打开，让用户输入
-        passwordError.value = ''
-        passwordOpen.value = true
+        // 服务开了口令通道却没带对口令 → 弹口令框；否则是没登录 → 去登录页
+        if (authRequired.value) {
+          passwordError.value = ''
+          passwordOpen.value = true
+        } else {
+          toast('登录后即可一键导出，正在前往登录页…', 2600)
+          router.push({ name: 'login' })
+        }
         return
 
       case 'AUTH_FAILED':

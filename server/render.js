@@ -16,14 +16,41 @@
  */
 import { chromium } from 'playwright-core'
 
+import { createSemaphore } from './semaphore.js'
+
 /** 需与前端 stores/resume.js 中的 STORAGE_KEY 保持一致 */
 const STORAGE_KEY = 'resume-studio-v1'
 
-/** 关闭字体微调，CJK 字形在不同环境下更一致 */
-const LAUNCH_ARGS = ['--font-render-hinting=none', '--disable-lcd-text']
+/**
+ * 浏览器启动参数。
+ *  - 字体微调：关闭后 CJK 字形在不同环境下更一致；
+ *  - /dev/shm：容器里默认只有 64MB，Chromium 的共享内存超了会直接「Target closed」，
+ *    改用 /tmp 是容器部署的标准动作，物理机上也无副作用；
+ *  - BROWSER_EXTRA_ARGS：环境变量追加的自定义参数（空格分隔），容器内需要
+ *    --no-sandbox 之类的场景从这里进，不必改代码。
+ */
+const LAUNCH_ARGS = [
+  '--font-render-hinting=none',
+  '--disable-lcd-text',
+  '--disable-dev-shm-usage',
+  ...(process.env.BROWSER_EXTRA_ARGS
+    ? process.env.BROWSER_EXTRA_ARGS.split(/\s+/).filter(Boolean)
+    : []),
+]
 
 /** 依次尝试的浏览器渠道，Edge 在 Windows 上命中率最高 */
 const CHANNELS = ['msedge', 'chrome', 'msedge-beta', 'chrome-beta']
+
+/**
+ * 渲染并发闸门。并发与排队上限可用环境变量调整：
+ * 小内存机器（2-4G）保持默认的 1 并发即可，配 2G swap 更稳。
+ */
+const RENDER_CONCURRENCY = Number(process.env.RENDER_CONCURRENCY) || 1
+const RENDER_QUEUE_MAX = Number(process.env.RENDER_QUEUE_MAX ?? 3)
+const renderSlots = createSemaphore({
+  concurrency: RENDER_CONCURRENCY,
+  maxQueue: RENDER_QUEUE_MAX,
+})
 
 let browserPromise = null
 let resolvedChannel = ''
@@ -33,7 +60,13 @@ async function launch() {
 
   if (process.env.BROWSER_PATH) {
     try {
-      return { browser: await chromium.launch({ executablePath: process.env.BROWSER_PATH, args: LAUNCH_ARGS }), channel: 'BROWSER_PATH' }
+      return {
+        browser: await chromium.launch({
+          executablePath: process.env.BROWSER_PATH,
+          args: LAUNCH_ARGS,
+        }),
+        channel: 'BROWSER_PATH',
+      }
     } catch (error) {
       failures.push(`BROWSER_PATH：${firstLine(error)}`)
     }
@@ -92,6 +125,11 @@ export function getResolvedChannel() {
   return resolvedChannel
 }
 
+/** 当前渲染占用情况，供日志与健康检查使用 */
+export function getRenderStats() {
+  return renderSlots.stats()
+}
+
 export async function closeBrowser() {
   if (!browserPromise) return
   const browser = await browserPromise.catch(() => null)
@@ -125,51 +163,54 @@ async function waitForAssets(page) {
  * @returns {Promise<Buffer>} PDF 字节流
  */
 export async function renderResumePdf({ resume, renderUrl, title }) {
-  const browser = await getBrowser()
-  const context = await browser.newContext({ viewport: { width: 1123, height: 1588 } })
-  const page = await context.newPage()
+  // 排队失败（队满 / 等待超时）在这里抛出 429，由路由层直接透传
+  return renderSlots.run(async () => {
+    const browser = await getBrowser()
+    const context = await browser.newContext({ viewport: { width: 1123, height: 1588 } })
+    const page = await context.newPage()
 
-  try {
-    await context.addInitScript(
-      ([key, payload]) => window.localStorage.setItem(key, payload),
-      [STORAGE_KEY, JSON.stringify(resume)],
-    )
+    try {
+      await context.addInitScript(
+        ([key, payload]) => window.localStorage.setItem(key, payload),
+        [STORAGE_KEY, JSON.stringify(resume)],
+      )
 
-    // 只放行应用自身的源。即使渲染内容里混进了外部引用，
-    // 也无法加载远程资源或把数据外发出去。
-    const appOrigin = new URL(renderUrl).origin
-    await context.route('**', (route) => {
-      const target = route.request().url()
-      return target.startsWith(appOrigin) ? route.continue() : route.abort()
-    })
+      // 只放行应用自身的源。即使渲染内容里混进了外部引用，
+      // 也无法加载远程资源或把数据外发出去。
+      const appOrigin = new URL(renderUrl).origin
+      await context.route('**', (route) => {
+        const target = route.request().url()
+        return target.startsWith(appOrigin) ? route.continue() : route.abort()
+      })
 
-    await page.goto(renderUrl, { waitUntil: 'load', timeout: 20000 })
-    await page.waitForSelector('.paper', { timeout: 15000 })
-    await waitForAssets(page)
+      await page.goto(renderUrl, { waitUntil: 'load', timeout: 20000 })
+      await page.waitForSelector('.paper', { timeout: 15000 })
+      await waitForAssets(page)
 
-    if (title) {
-      await page.evaluate((value) => {
-        document.title = value
-      }, title)
+      if (title) {
+        await page.evaluate((value) => {
+          document.title = value
+        }, title)
+      }
+
+      // page.pdf 默认走 print media，前端 @media print 的隐藏规则会自动生效
+      const { mv, mh } = resume.theme || {}
+      const buffer = await page.pdf({
+        format: 'A4',
+        // 等价于打印窗口里勾选「背景图形」，服务端导出无需用户操作
+        printBackground: true,
+        margin: {
+          top: `${Number(mv) || 12}mm`,
+          bottom: `${Number(mv) || 12}mm`,
+          left: `${Number(mh) || 14}mm`,
+          right: `${Number(mh) || 14}mm`,
+        },
+        preferCSSPageSize: false,
+      })
+
+      return Buffer.from(buffer)
+    } finally {
+      await context.close()
     }
-
-    // page.pdf 默认走 print media，前端 @media print 的隐藏规则会自动生效
-    const { mv, mh } = resume.theme || {}
-    const buffer = await page.pdf({
-      format: 'A4',
-      // 等价于打印窗口里勾选「背景图形」，服务端导出无需用户操作
-      printBackground: true,
-      margin: {
-        top: `${Number(mv) || 12}mm`,
-        bottom: `${Number(mv) || 12}mm`,
-        left: `${Number(mh) || 14}mm`,
-        right: `${Number(mh) || 14}mm`,
-      },
-      preferCSSPageSize: false,
-    })
-
-    return Buffer.from(buffer)
-  } finally {
-    await context.close()
-  }
+  })
 }

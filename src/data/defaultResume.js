@@ -57,8 +57,6 @@ export const DEFAULT_AVATAR = {
   height: 35,
 }
 
-
-
 export function createBullet(text = '') {
   return { id: uid('b'), text }
 }
@@ -294,9 +292,15 @@ export function createResume() {
             org: '某某科技有限公司',
             role: '高级前端开发工程师',
             bullets: [
-              createBullet('主导公司中后台微前端体系改造，将 12 个子应用接入统一基座，构建耗时从 8 分钟降至 90 秒。'),
-              createBullet('搭建组件库与脚手架，沉淀 60+ 业务组件，新项目初始化时间由 2 天缩短至 2 小时。'),
-              createBullet('推动前端监控与性能治理，首屏 LCP 从 3.2s 优化至 1.4s，线上白屏率下降 76%。'),
+              createBullet(
+                '主导公司中后台微前端体系改造，将 12 个子应用接入统一基座，构建耗时从 8 分钟降至 90 秒。',
+              ),
+              createBullet(
+                '搭建组件库与脚手架，沉淀 60+ 业务组件，新项目初始化时间由 2 天缩短至 2 小时。',
+              ),
+              createBullet(
+                '推动前端监控与性能治理，首屏 LCP 从 3.2s 优化至 1.4s，线上白屏率下降 76%。',
+              ),
             ],
           }),
           createEntry({
@@ -322,8 +326,12 @@ export function createResume() {
             org: '企业数据可视化平台',
             role: '前端负责人',
             bullets: [
-              createBullet('负责整体技术选型与架构设计，采用 Vue3 + ECharts 实现 20+ 图表类型与自由拖拽看板。'),
-              createBullet('针对万级数据渲染卡顿问题，引入虚拟滚动与增量更新，渲染帧率稳定在 55FPS 以上。'),
+              createBullet(
+                '负责整体技术选型与架构设计，采用 Vue3 + ECharts 实现 20+ 图表类型与自由拖拽看板。',
+              ),
+              createBullet(
+                '针对万级数据渲染卡顿问题，引入虚拟滚动与增量更新，渲染帧率稳定在 55FPS 以上。',
+              ),
             ],
           }),
           createEntry({
@@ -349,7 +357,9 @@ export function createResume() {
             org: '某某大学',
             role: '计算机科学与技术（本科）',
             meta: [createMeta('专业成绩', 'GPA 3.7/4.0，专业排名前 5%')],
-            bullets: [createBullet('主修课程：数据结构、计算机网络、操作系统、数据库原理、软件工程。')],
+            bullets: [
+              createBullet('主修课程：数据结构、计算机网络、操作系统、数据库原理、软件工程。'),
+            ],
           }),
         ],
       },
@@ -359,7 +369,10 @@ export function createResume() {
         title: '技能特长',
         visible: true,
         fields: [
-          createMeta('技术栈', '熟练使用 Vue3、TypeScript、Vite、Node.js，具备完整的前端工程化落地经验。'),
+          createMeta(
+            '技术栈',
+            '熟练使用 Vue3、TypeScript、Vite、Node.js，具备完整的前端工程化落地经验。',
+          ),
           createMeta('语言能力', '大学英语六级，可无障碍阅读英文技术文档并进行日常技术交流。'),
         ],
         items: [

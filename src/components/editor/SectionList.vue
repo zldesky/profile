@@ -21,9 +21,7 @@ const presetKey = shallowRef('project')
 
 const isOpen = (id) => expandedIds.value.includes(id)
 
-const typeHint = computed(
-  () => SECTION_TYPES.find((t) => t.value === addingType.value)?.hint || '',
-)
+const typeHint = computed(() => SECTION_TYPES.find((t) => t.value === addingType.value)?.hint || '')
 
 const presetHint = computed(
   () => SECTION_PRESETS.find((p) => p.key === presetKey.value)?.desc || '',

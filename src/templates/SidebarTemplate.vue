@@ -71,7 +71,9 @@ const bodySections = computed(() => sections.value.filter((s) => !railTypes.incl
         class="r-sec"
         :style="sectionLayoutStyle(section)"
       >
-        <h2 class="r-title"><span class="dot"></span><span>{{ section.title }}</span></h2>
+        <h2 class="r-title">
+          <span class="dot"></span><span>{{ section.title }}</span>
+        </h2>
         <SectionBody :section="section" />
       </section>
     </main>

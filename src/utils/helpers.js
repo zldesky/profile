@@ -21,7 +21,9 @@ export function uid(prefix = 'id') {
  * @returns {string}
  */
 export function hexToRgb(hex, fallback = '43,87,154') {
-  const value = String(hex || '').replace('#', '').trim()
+  const value = String(hex || '')
+    .replace('#', '')
+    .trim()
   const normalized =
     value.length === 3
       ? value
@@ -52,14 +54,27 @@ export function clone(value) {
 
 /**
  * 防抖包装。
+ * flush() 立即执行一次挂起的调用（撤销前补记一笔时用），cancel() 丢弃。
  */
 export function debounce(fn, wait = 300) {
-  let timer
+  let timer = null
   const wrapped = (...args) => {
     clearTimeout(timer)
-    timer = setTimeout(() => fn(...args), wait)
+    timer = setTimeout(() => {
+      timer = null
+      fn(...args)
+    }, wait)
   }
-  wrapped.cancel = () => clearTimeout(timer)
+  wrapped.cancel = () => {
+    clearTimeout(timer)
+    timer = null
+  }
+  wrapped.flush = (...args) => {
+    if (timer === null) return
+    clearTimeout(timer)
+    timer = null
+    fn(...args)
+  }
   return wrapped
 }
 
@@ -122,7 +137,9 @@ export function readImageAsDataUrl(file, maxSize = 420, format = 'jpeg') {
         }
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
 
-        resolve(format === 'png' ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.9))
+        resolve(
+          format === 'png' ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.9),
+        )
       }
       img.src = reader.result
     }

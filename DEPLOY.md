@@ -2,18 +2,18 @@
 
 项目由两部分组成，部署形态取决于两者是否都在线：
 
-| 部分 | 内容 | 端口 | 必需性 |
-| --- | --- | --- | --- |
-| 前端（`src/`） | Vue 3 单页编辑器，构建产物为纯静态文件 | 开发 5173 | 必需 |
-| PDF 服务（`server/`） | Express + playwright-core，驱动本机 Edge/Chrome 生成矢量 PDF | 3001 | 可选 |
+| 部分                  | 内容                                                        | 端口      | 必需性 |
+| --------------------- | ----------------------------------------------------------- | --------- | ------ |
+| 前端（`src/`）        | Vue 3 单页编辑器，构建产物为纯静态文件                      | 开发 5173 | 必需   |
+| 应用服务（`server/`） | Express：账号 + 云端简历 + PDF 渲染（驱动本机 Edge/Chrome） | 3001      | 可选   |
 
-PDF 服务只影响「一键导出」。没有它，编辑、自动保存、JSON 导入导出、「打印导出」全部照常工作。
+服务承载三件事：**账号与会话**（SQLite）、**云端简历同步**、**一键导出 PDF**。没有它，编辑、自动保存（localStorage）、JSON 导入导出、「打印导出」全部照常工作——编辑器不强制登录，匿名用户是「纯本地模式」。
 
 ## 环境要求
 
-- Node.js `^22.18.0` 或 `>= 24.12.0`（根 `package.json` 的 engines 约束；`--env-file-if-exists` 需要 Node 22+）
-- 「一键导出」额外要求：机器上装有 Edge 或 Chrome（服务按 msedge → chrome → msedge-beta → chrome-beta 顺序探测，也可用 `BROWSER_PATH` 指定）
-- Linux/Docker 部署时：Chromium + 中文字体（否则 PDF 中文会变方框），见「形态三」
+- Node.js `^22.18.0` 或 `>= 24.12.0`（`node:sqlite` 需要 22.13+，服务端零原生编译依赖）
+- 「一键导出」额外要求：机器上装有 Edge 或 Chrome（按 msedge → chrome → msedge-beta → chrome-beta 顺序探测，可用 `BROWSER_PATH` 指定）
+- Linux/Docker 部署时：Chromium + 中文字体（否则 PDF 中文变方框），见「形态三」
 
 ## 本地开发
 
@@ -21,42 +21,45 @@ PDF 服务只影响「一键导出」。没有它，编辑、自动保存、JSON
 # 1. 前端依赖
 npm install
 
-# 2. PDF 服务依赖（独立 package.json，必须单独装；
+# 2. 应用服务依赖（独立 package.json，必须单独装；
 #    npm run pdf 以 server/index.js 为入口，模块从 server/node_modules 解析）
 cd server && npm install && cd ..
 
-# 3. 可选：配置。复制模板为 .env，按需修改（端口、口令、每日额度）
+# 3. 可选：配置。复制模板为 .env，按需修改
 cp .env.example .env
 
 # 4. 两个终端分别启动
 npm run dev    # 前端 http://localhost:5173
-npm run pdf    # PDF 服务 http://127.0.0.1:3001
+npm run pdf    # 应用服务 http://127.0.0.1:3001
 ```
 
-开发态无需任何代理配置：Vite 已把 `/api` 代理到 3001（`vite.config.js`）。
+开发态无需代理配置：Vite 已把 `/api` 代理到 3001（`vite.config.js`）。
 
 ## 形态一：本机自用（默认形态，零配置）
 
 ```sh
 npm run build  # 产出 dist/
-npm run pdf    # 同一进程托管 dist/ 静态站点 + /api，访问 http://127.0.0.1:3001
+npm run pdf    # 同一进程托管 dist/ + /api，访问 http://127.0.0.1:3001
 ```
 
-只跑 `npm run build && npm run pdf` 即可，不需要常驻 Vite。服务启动时会自动探测渲染源：先试 5173（开发服务器，保证「所见即所得」），不通则回退到自身端口托管的构建产物。想强制指定时设 `RENDER_URL`。
+只跑 `npm run build && npm run pdf` 即可，不需要常驻 Vite。服务启动时自动探测渲染源：先试 5173（保证「所见即所得」），不通则回退到自身端口托管的构建产物。
 
-## 形态二：局域网 / 服务器单进程部署
+账号系统在本机形态同样可用：注册一个账号即可获得云端简历同步（数据在 `server/.data/app.db`），一键导出按用户计每日额度。
 
-仍是一个 Node 进程：`npm run build && npm run pdf`，但把服务暴露出去。
+## 形态二：局域网 / 服务器部署
 
-### 必做的三件事
+仍是一个 Node 进程：`npm run build && npm run pdf`，把服务暴露出去。
 
-1. **设置口令**：`.env` 里写 `PDF_ACCESS_PASSWORD=<强口令>`。不设的话，服务检测到非回环 `HOST` 会**拒绝启动**（设计如此：该进程能启动浏览器、能读本机文件）。
-2. **声明监听地址**：`HOST=0.0.0.0`（或内网 IP），`PORT=3001`。
-3. **放行来源（易踩坑）**：`server/index.js` 的来源白名单默认只含 localhost 端口。一旦用户从域名访问，浏览器请求带 `Origin: https://你的域名`，会被 403。解法是把公网地址告诉服务——设 `RENDER_URL=https://你的域名/`，代码会把该来源自动加入白名单（同时固定渲染源）。
+### 必做的四件事
+
+1. **声明监听地址**：`.env` 里 `HOST=0.0.0.0`（或内网 IP）、`PORT=3001`。对外暴露时 `/api` 一律要求登录，匿名请求返回 401——不再像旧版本那样拒绝启动，但安全依赖下面的配置。
+2. **放行来源（易踩坑）**：`ALLOWED_ORIGINS=https://你的域名`。服务端来源白名单默认只含 localhost，公网域名的浏览器请求会被 403；此项就是为公网域名准备的。
+3. **反向代理终止 TLS**：口令与 Cookie 在 HTTP 上是明文的，公网必须套 TLS。
+4. **启用代理头解析**：`TRUST_PROXY=1`。登录锁定、注册限频按 `req.ip` 计数，不设此项在代理后所有请求看起来都来自 127.0.0.1；反过来直接暴露时**不要**设置，否则客户端可伪造头绕过限流。
 
 ### 反向代理终止 TLS（推荐）
 
-口令在 HTTP 上是明文传输的，公网部署必须套 TLS。以 Caddy 为例（自动签证书）：
+以 Caddy 为例（自动签证书）：
 
 ```caddy
 resume.example.com {
@@ -76,6 +79,7 @@ server {
         proxy_pass http://127.0.0.1:3001;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 }
 ```
@@ -88,7 +92,7 @@ Linux（systemd，`/etc/systemd/system/resume.service`）：
 
 ```ini
 [Unit]
-Description=Resume editor + PDF service
+Description=Resume editor + app service
 After=network.target
 
 [Service]
@@ -98,8 +102,8 @@ WorkingDirectory=/opt/vue-project
 ExecStart=/usr/bin/node --env-file-if-exists=.env server/index.js
 Restart=on-failure
 Environment=HOST=127.0.0.1
-Environment=PDF_ACCESS_PASSWORD=change-me
-Environment=RENDER_URL=https://resume.example.com/
+Environment=TRUST_PROXY=1
+Environment=ALLOWED_ORIGINS=https://resume.example.com
 
 [Install]
 WantedBy=multi-user.target
@@ -107,49 +111,61 @@ WantedBy=multi-user.target
 
 Windows：任务计划程序开机运行，或 `nssm install resume "C:\Program Files\nodejs\node.exe" "--env-file-if-exists=.env server\index.js"`（工作目录设为项目根），或 `pm2 start npm --name resume -- run pdf`。
 
-## 形态三：Docker 部署
+## 形态三：Docker 部署（一键）
 
-PDF 渲染依赖浏览器二进制与中文字体，镜像里必须装齐；以非 root 运行可避免 Chromium 的 sandbox 限制。
+前置要求：服务器装 Docker 与 compose 插件（`docker compose version` 能出版本号即可）。
 
-```dockerfile
-FROM node:24-bookworm-slim
-
-# Chromium 渲染内核 + Noto CJK 中文字体（缺字体则 PDF 中文全部变成方框）
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends chromium fonts-noto-cjk \
-    && rm -rf /var/lib/apt/lists/*
-
-ENV BROWSER_PATH=/usr/bin/chromium
-ENV PUPPETEER_SKIP_DOWNLOAD=1
-
-WORKDIR /app
-
-# 先装依赖再拷代码，充分利用构建缓存
-COPY package.json package-lock.json ./
-RUN npm ci
-COPY server/package.json server/package-lock.json ./server/
-RUN cd server && npm ci
-
-COPY . .
-RUN npm run build
-
-ENV HOST=0.0.0.0 PORT=3001
-EXPOSE 3001
-
-USER node
-CMD ["node", "server/index.js"]
+```sh
+# 在项目根目录
+docker compose up -d --build
+# 查看状态与健康检查
+docker compose ps
+docker compose logs -f resume
 ```
+
+`docker-compose.yml` 已按安全默认配置好：
+
+- 端口只绑宿主机回环（`127.0.0.1:3001`），供反代使用；直接 `IP:3001` 访问需自行改映射（不推荐公网裸跑）；
+- `resume-data` 卷持久化 `server/.data/`（SQLite：账号、简历、配额），容器重建数据不丢；
+- 镜像内置 Chromium + Noto CJK 中文字体（缺字体的后果是 PDF 中文全变方框）；
+- `shm_size: 256m` + 应用默认 `--disable-dev-shm-usage`，解决容器 `/dev/shm` 默认 64MB 导致的渲染崩溃；
+- 容器内没有 user namespace，Chromium 沙箱起不来，compose 里通过 `BROWSER_EXTRA_ARGS: --no-sandbox` 放行——风险已被收窄（渲染只加载应用自身源、外联全断、入参全量清洗），物理机部署时不要带这个参数；
+- 内置 healthcheck（探活 `/api/health`）。
+
+公网域名 + TLS 的完整形态：取消 compose 中 `caddy` 服务的注释，把 `Caddyfile.example` 复制为 `Caddyfile` 并填入域名，`resume` 的端口映射改为 `"3001:3001"`（仅 compose 内网），80/443 对外——Caddy 自动签发续期证书，同时按「形态二」的说明设置 `TRUST_PROXY=1` 与 `ALLOWED_ORIGINS`。
+
+不用 compose 时的等价手动操作：
 
 ```sh
 docker build -t resume-studio .
 docker run -d --name resume \
   -p 127.0.0.1:3001:3001 \
-  -e PDF_ACCESS_PASSWORD=change-me \
-  -e RENDER_URL=https://resume.example.com/ \
+  -v resume-data:/app/server/.data \
+  --shm-size 256m \
+  -e BROWSER_EXTRA_ARGS=--no-sandbox \
+  -e TRUST_PROXY=1 \
+  -e ALLOWED_ORIGINS=https://resume.example.com \
   resume-studio
 ```
 
-对外仍建议前置 Caddy/Nginx 终止 TLS（同形态二）。`server/.data/quota.json` 是运行时状态，需要保留额度记录时挂载卷：`-v resume-data:/app/server/.data`。
+### 小内存机器（2G）能跑，但要按这个来
+
+| 部分                             | 大致占用         |
+| -------------------------------- | ---------------- |
+| 系统 + Docker 守护进程           | 300–500MB        |
+| Node 服务（账号/简历/PDF 接口）  | 80–150MB         |
+| Chromium 常驻实例（空闲）        | 150–250MB        |
+| 单次渲染峰值（大头像、多页简历） | +200–400MB       |
+| **渲染时峰值合计**               | **约 0.9–1.2GB** |
+
+结论：**单用户/小流量够用，但没有任何余量跑别的东西**。必须遵守四条：
+
+1. **先加 swap（2G）**：`fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile`，并写入 `/etc/fstab`。这是把「OOM 杀进程」降级为「变慢」的关键；
+2. **`RENDER_CONCURRENCY` 保持 1**（compose 默认即 1）——渲染并发在 2G 机器上没有上调空间；
+3. **放开 compose 里的 `mem_limit: 1536m`**：给容器封顶，渲染峰值越界只影响导出（429/失败并自动退还额度），不会拖死宿主机；
+4. **同机不要再跑 MySQL/Redis 等其他服务**，也**不要在低峰以外的时间在 2G 机器上重建镜像**——`npm ci` + `vite build` 本身也有几百 MB 峰值，构建期同样吃 swap；稳妥做法是本地（或 CI）构建好镜像推上去，服务器只 `docker compose up -d --no-build`。
+
+另外注意：Cloudflare 等免费的 2G 套餐云主机通常还限制 CPU，渲染耗时的主要来源是 Chromium 单页渲染（约 1–3 秒），CPU 限频会直接放大这个时间，选型时优先保证内存而不是核数。
 
 ## 形态四：纯静态托管（GitHub Pages / Vercel / Netlify / 对象存储 + CDN）
 
@@ -159,30 +175,47 @@ npm run build   # 上传/托管 dist/ 即可
 
 - 部署到子路径（如 GitHub Pages 的 `用户名.github.io/仓库名/`）时：`npm run build -- --base=/仓库名/`。
 - 可用能力：编辑、自动保存、JSON 导入导出、**打印导出**——全部纯前端。
-- 不可用：「一键导出」走 `/api/pdf`，静态托管上不存在，前端会提示改用打印导出（现有降级逻辑已覆盖，无需改动）。
-- 路由说明：`src/router/index.js` 路由表为空，单页应用没有深层链接，因此不需要服务端 SPA fallback 配置。
+- 不可用：登录、云端同步、一键导出（走 `/api`，静态托管上不存在），前端会提示改用打印导出（现有降级逻辑已覆盖）。
+- SPA 路由说明：`/login` 等深层链接由前端路由接管，主流静态托管默认带 SPA fallback，无需额外配置；自建对象存储需加「全部回退到 index.html」规则。
 
 ## 环境变量参考
 
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `PORT` | `3001` | 服务监听端口，需与 `vite.config.js` 的 `PDF_PORT` 一致 |
-| `HOST` | `127.0.0.1` | 监听地址；非回环地址必须配 `PDF_ACCESS_PASSWORD`，否则拒绝启动 |
-| `DEV_PORT` | `5173` | 渲染源自动探测的开发服务器端口 |
-| `PDF_ACCESS_PASSWORD` | 空（不校验） | `/api` 访问口令；Bearer 认证，错误 10 次锁定 15 分钟 |
-| `PDF_DAILY_LIMIT` | `20` | 每自然日导出上限，计数落盘 `server/.data/quota.json`，次日 0 点重置 |
-| `RENDER_URL` | 自动探测 | 渲染源；显式设置时其来源同时加入 Origin 白名单 |
-| `BROWSER_PATH` | 自动探测 | Chromium 内核浏览器可执行文件路径 |
+| 变量                   | 默认值                | 说明                                                   |
+| ---------------------- | --------------------- | ------------------------------------------------------ |
+| `PORT`                 | `3001`                | 服务监听端口，需与 `vite.config.js` 的 `PDF_PORT` 一致 |
+| `HOST`                 | `127.0.0.1`           | 监听地址；对外暴露时 `/api` 仅限登录用户               |
+| `DEV_PORT`             | `5173`                | 渲染源自动探测的开发服务器端口                         |
+| `DB_PATH`              | `server/.data/app.db` | SQLite 数据库路径（账号/会话/简历/配额）               |
+| `PDF_USER_DAILY_LIMIT` | `10`                  | 每用户每日导出上限                                     |
+| `PDF_DAILY_LIMIT`      | `100`                 | 全站每日导出总额度（成本兜底）                         |
+| `RENDER_CONCURRENCY`   | `1`                   | 同时渲染的浏览器页面上限，小内存机器保持 1             |
+| `RENDER_QUEUE_MAX`     | `3`                   | 渲染排队上限，超过直接 429                             |
+| `BROWSER_EXTRA_ARGS`   | 空                    | 追加浏览器启动参数（容器内 `--no-sandbox` 从这里进）   |
+| `PDF_ACCESS_PASSWORD`  | 空（通道关闭）        | 脚本 Bearer 通道口令；连续错 10 次锁 15 分钟           |
+| `ALLOWED_ORIGINS`      | 空                    | 公网域名 Origin 白名单（逗号分隔）                     |
+| `TRUST_PROXY`          | 空                    | 前置反向代理时设 `1`，解析 X-Forwarded-*               |
+| `RENDER_URL`           | 自动探测              | 渲染源；显式设置时其来源同时加入白名单                 |
+| `BROWSER_PATH`         | 自动探测              | Chromium 内核浏览器可执行文件路径                      |
 
 配置统一写在项目根 `.env`（已 gitignore，模板见 `.env.example`），由 `npm run pdf` 的 `--env-file-if-exists` 自动加载。
 
-## 安全检查清单（对外暴露前逐项确认）
+## 安全模型速览
 
-- [ ] 已设置 `PDF_ACCESS_PASSWORD`（强口令），或保持 `HOST=127.0.0.1` 仅本机访问
-- [ ] 公网部署时前面有 TLS（Caddy / Nginx 证书），口令不裸奔在 HTTP 上
-- [ ] 公网域名已通过 `RENDER_URL` 加入来源白名单，否则浏览器请求全部 403
-- [ ] `.env` 未入库（gitignore 已覆盖，提交前 `git status` 复查）
-- [ ] 知道每日额度限制的存在与重置时间（次日 0 点），避免误判为故障
+- **认证**：服务端 Session（SQLite）+ httpOnly SameSite=Lax Cookie，令牌 256 位随机；密码 scrypt 摘要（N=2^15）；登录失败按「IP+用户名」锁定 15 分钟；注册限每小时 5 次/IP。会话过期自动降级为本地编辑，不丢数据。
+- **导出防刷**：渲染并发信号量（默认 1 并发 3 排队，队满 429）→ 每用户每日额度 → 全站每日额度 → 同内容 10 分钟缓存命中不扣额度。四层叠加，任何一层被绕过都不会造成实质伤害。
+- **输入**：所有简历数据入库/渲染前过 `sanitize.js` 白名单清洗（枚举、颜色、数值、长度、数量），文本剥标签，图片仅限 dataURL 白名单格式。
+- **渲染隔离**：渲染页面只允许访问应用自身源，注入内容无法外联；请求体上限 8MB；静态站点带 CSP。
+- **日志**：`/api` 请求按一行 JSON 记录（方法、路径、状态、耗时），健康检查除外。
+
+## 检查清单（对外暴露前逐项确认）
+
+- [ ] `ALLOWED_ORIGINS` 已设置公网域名，否则登录与导出全部 403
+- [ ] 前面有 TLS（Caddy / Nginx 证书），Cookie 与口令不裸奔在 HTTP 上
+- [ ] `TRUST_PROXY=1` 已设置（且服务不直接暴露公网）
+- [ ] `server/.data/` 已纳入备份/挂卷策略——丢了它等于丢了所有账号与简历
+- [ ] 明确开放注册的口径：如需收紧，可在反代层给 `/api/auth/register` 加访问控制
+- [ ] 额度参数符合预期（每用户 10/日、全站 100/日），避免误判为故障
+- [ ] 2G 内存机器：swap 已加、`RENDER_CONCURRENCY=1`、`mem_limit` 已放开（见形态三）
 
 ## 常见问题
 
@@ -190,8 +223,12 @@ npm run build   # 上传/托管 dist/ 即可
 
 **导出的 PDF 中文是方框 / 字体不对** — Linux 容器/服务器缺中文字体。Docker 里装 `fonts-noto-cjk`；裸机安装 `fonts-noto-cjk` 或 Windows 字体包，重启服务。
 
-**请求被 403（请求来源不被允许）** — 见形态二第 3 条：把访问域名写入 `RENDER_URL`。
+**容器里导出报「Target closed」或渲染内核起不来** — 两个容器专属原因：`/dev/shm` 太小（compose 已配 `shm_size: 256m`，应用也默认带 `--disable-dev-shm-usage`）和 Chromium 沙箱无法在容器内启动（compose 默认带 `BROWSER_EXTRA_ARGS: --no-sandbox`）。手动 `docker run` 时别漏了这两个参数。
 
-**额度用完但明明是新的一天** — 按自然日、以服务进程所在时区 0 点重置；`server/.data/quota.json` 可查看已用次数，删除该文件即立即清零。
+**登录/导出被 403（请求来源不被允许）** — 把访问域名写入 `ALLOWED_ORIGINS`。
 
-**口令被锁定** — 连续错误 10 次锁 15 分钟，等待即可；本地缓存的错误口令会在下次失败时自动清除（前端已处理）。
+**额度用完但明明是新的一天** — 按自然日、以服务进程所在时区 0 点重置；同内容重复导出命中缓存不扣额度。删除 `server/.data/app.db` 会连同账号一起清掉，别用它来「清额度」。
+
+**口令被锁定** — 登录连续失败 10 次锁 15 分钟（按 IP+用户名）；脚本口令连续错误锁 15 分钟，等待即可。
+
+**想迁移到另一台机器** — 停服后拷贝整个 `server/.data/` 目录即可，账号、简历、配额都在这一个 SQLite 文件里。

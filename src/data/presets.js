@@ -121,7 +121,8 @@ export const FONT_KEY_MIGRATION = {
 }
 
 /** 正文字号层级参考，仅作面板提示用 */
-export const FONT_SIZE_TIPS = '正文建议 10–10.5pt，模块标题 12–14pt，姓名 16–22pt，行距 1.15–1.5 倍。'
+export const FONT_SIZE_TIPS =
+  '正文建议 10–10.5pt，模块标题 12–14pt，姓名 16–22pt，行距 1.15–1.5 倍。'
 
 /** 主色预设 */
 export const ACCENT_PRESETS = [

@@ -1,0 +1,89 @@
+# 一键部署：docker compose up -d --build
+# 访问：http://服务器IP:3001（或按注释前置 Caddy/Nginx 终止 TLS）
+#
+# 2G 内存机器的必要调整：
+#   1. 先加 swap（2G），见 DEPLOY.md「小内存机器」一节；
+#   2. RENDER_CONCURRENCY 保持 1（默认即 1），不要调大；
+#   3. 可选：放开下方 mem_limit，防止渲染峰值吃光宿主机内存触发 OOM。
+
+services:
+  resume:
+    build: .
+    container_name: resume-studio
+    restart: unless-stopped
+
+    ports:
+      # 默认只绑本机回环，供宿主机上的 Caddy/Nginx 反代用；
+      # 没有 TLS 网关、想直接 IP:3001 访问时改成 "3001:3001"（不推荐公网裸跑）
+      - "127.0.0.1:3001:3001"
+
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3001
+
+      # 导出额度：每用户每日 / 全站每日兜底
+      PDF_USER_DAILY_LIMIT: 10
+      PDF_DAILY_LIMIT: 100
+
+      # 渲染并发。2G 内存机器务必保持 1；4G 及以上可考虑 2
+      RENDER_CONCURRENCY: 1
+      RENDER_QUEUE_MAX: 3
+
+      # 容器内没有 user namespace，Chromium 自带沙箱起不来，必须 no-sandbox。
+      # 风险已被收窄：渲染进程只加载应用自身源、外联全部被断、入参全量清洗。
+      # 自建内核支持 userns 或换用物理机部署时，删掉这一行更稳。
+      BROWSER_EXTRA_ARGS: --no-sandbox
+
+      # 公网域名部署时必设（否则登录/导出被 403），配合反代再加 TLS：
+      # TRUST_PROXY: 1
+      # ALLOWED_ORIGINS: https://resume.example.com
+
+      # 可选：脚本调 /api/pdf 的 Bearer 通道
+      # PDF_ACCESS_PASSWORD: change-me
+
+    volumes:
+      # SQLite（账号、简历、配额）持久化，容器重建不丢数据
+      - resume-data:/app/server/.data
+
+    # Chromium 共享内存：默认 64MB 不够渲染大图，给到 256m。
+    # （应用已加 --disable-dev-shm-usage 兜底，这里是让渲染走得更稳）
+    shm_size: 256m
+
+    # 2G 内存机器建议放开：给容器封顶 1.5G，峰值越界只会容器内 429/失败，
+    # 不会拖死宿主机上其他服务
+    # mem_limit: 1536m
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # 可选：一键带上 TLS 网关（自动签发续期证书）。
+  # 启用：取消注释 → 把域名写进 Caddyfile.example 并重命名为 Caddyfile →
+  #       resume.ports 改回 "3001:3001"（只在 compose 网络内暴露）→ 80/443 对外。
+  # caddy:
+  #   image: caddy:2-alpine
+  #   container_name: resume-caddy
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./Caddyfile:/etc/caddy/Caddyfile:ro
+  #     - caddy-data:/data
+  #   depends_on:
+  #     - resume
+
+# volumes:
+#   caddy-data:
+
+volumes:
+  resume-data:

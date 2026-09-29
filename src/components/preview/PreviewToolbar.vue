@@ -19,25 +19,13 @@ const emit = defineEmits(['zoom-in', 'zoom-out', 'fit', 'compress'])
 
 <template>
   <footer class="editor-tools">
-    <span v-if="dragging" class="drag-readout">
-      头像 X {{ offset.x }} / Y {{ offset.y }} mm
-    </span>
+    <span v-if="dragging" class="drag-readout"> 头像 X {{ offset.x }} / Y {{ offset.y }} mm </span>
 
-    <button
-      class="ed-btn ed-btn-icon"
-      title="缩小"
-      aria-label="缩小"
-      @click="emit('zoom-out')"
-    >
+    <button class="ed-btn ed-btn-icon" title="缩小" aria-label="缩小" @click="emit('zoom-out')">
       <SvgIcon name="zoomOut" :size="15" />
     </button>
     <span class="zoom-value">{{ Math.round(zoom * 100) }}%</span>
-    <button
-      class="ed-btn ed-btn-icon"
-      title="放大"
-      aria-label="放大"
-      @click="emit('zoom-in')"
-    >
+    <button class="ed-btn ed-btn-icon" title="放大" aria-label="放大" @click="emit('zoom-in')">
       <SvgIcon name="zoomIn" :size="15" />
     </button>
     <!-- 窄屏收成图标，给「压缩到一页」腾出位置 -->

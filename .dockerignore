@@ -1,0 +1,11 @@
+# 构建上下文越小越好：依赖、构建产物、运行时数据与密钥都不进镜像
+node_modules
+server/node_modules
+dist
+server/.data
+.git
+.env
+.env.*
+!.env.example
+*.log
+.github

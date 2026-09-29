@@ -53,7 +53,12 @@ function selectTemplate(id) {
           <strong>{{ tpl.name }}</strong>
           <span>{{ tpl.desc }}</span>
         </div>
-        <SvgIcon v-if="store.resume.template === tpl.id" class="tpl-check" name="check" :size="14" />
+        <SvgIcon
+          v-if="store.resume.template === tpl.id"
+          class="tpl-check"
+          name="check"
+          :size="14"
+        />
       </button>
     </div>
 

@@ -111,7 +111,9 @@ const currentFont = computed(() => FONTS[store.theme.fontKey] || FONTS.yahei)
     <p class="ed-hint">留白同时作用于预览与打印的页边距。</p>
     <p class="ed-hint">{{ FONT_SIZE_TIPS }}同一份简历建议只用 1–2 种字体。</p>
     <p class="ed-hint">
-      「一键导出 PDF」会把字体嵌入文件，不受对方电脑字体影响；「打印导出」以本机字体渲染，建议优先选系统自带字体（微软雅黑、宋体、Arial、Times New Roman 最保险）。
+      「一键导出
+      PDF」会把字体嵌入文件，不受对方电脑字体影响；「打印导出」以本机字体渲染，建议优先选系统自带字体（微软雅黑、宋体、Arial、Times
+      New Roman 最保险）。
     </p>
   </div>
 </template>

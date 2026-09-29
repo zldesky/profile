@@ -15,6 +15,7 @@ import {
 } from '@/data/defaultResume'
 import { normalizeResume } from '@/data/normalizeResume'
 import { FONTS, PAGE } from '@/data/presets'
+import { createHistory } from '@/utils/history'
 import { clamp, clone, debounce, hexToRgb, moveItem, uid } from '@/utils/helpers'
 
 const STORAGE_KEY = 'resume-studio-v1'
@@ -145,6 +146,55 @@ export const useResumeStore = defineStore('resume', () => {
   }
 
   const scheduleSave = debounce(save, 400)
+
+  // 关页/切后台前把防抖窗口里的改动立即落盘，最后的输入不丢
+  const flushSave = () => {
+    scheduleSave.cancel()
+    save()
+  }
+  window.addEventListener('pagehide', flushSave)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushSave()
+  })
+
+  /* ---------------- 撤销 / 重做 ---------------- */
+
+  const serializeForHistory = () => JSON.stringify(resume.value)
+  const history = createHistory()
+
+  /** 驱动顶栏撤销/重做按钮的禁用态 */
+  const canUndo = shallowRef(false)
+  const canRedo = shallowRef(false)
+  const syncHistoryFlags = () => {
+    canUndo.value = history.canUndo()
+    canRedo.value = history.canRedo()
+  }
+
+  /**
+   * 成组修改（一次输入、一次拖拽、一次增删）停顿后记一笔。
+   * 入栈的是修改前的基线：连续敲字只在停顿后产生一条历史。
+   */
+  const commitHistory = debounce(() => {
+    if (history.commit(serializeForHistory())) syncHistoryFlags()
+  }, 600)
+
+  watch(resume, commitHistory, { deep: true })
+
+  /** 撤销。先把未满停顿窗口的输入补记入栈，保证当前状态能被「重做」回来 */
+  function undo() {
+    commitHistory.flush()
+    const snapshot = history.undo(serializeForHistory())
+    if (!snapshot) return
+    resume.value = normalizeResume(JSON.parse(snapshot))
+    syncHistoryFlags()
+  }
+
+  function redo() {
+    const snapshot = history.redo(serializeForHistory())
+    if (!snapshot) return
+    resume.value = normalizeResume(JSON.parse(snapshot))
+    syncHistoryFlags()
+  }
 
   function load() {
     try {
@@ -407,10 +457,15 @@ export const useResumeStore = defineStore('resume', () => {
 
   function resetAll() {
     resume.value = createResume()
+    // 重置是「从这里重新数」的边界：清空历史，避免撤销一路回到重置前
+    history.reset(serializeForHistory())
+    syncHistoryFlags()
   }
 
   function replaceResume(data) {
     resume.value = normalizeResume(data)
+    history.reset(serializeForHistory())
+    syncHistoryFlags()
   }
 
   function toJSON() {
@@ -418,6 +473,10 @@ export const useResumeStore = defineStore('resume', () => {
   }
 
   load()
+
+  // 历史基线以最终载入的数据为准：默认示例 → 已保存内容不算一次「修改」，
+  // 否则页面刚打开撤销按钮就是亮的。基线必须在 load() 之后建立。
+  history.init(serializeForHistory())
 
   return {
     resume,
@@ -432,8 +491,12 @@ export const useResumeStore = defineStore('resume', () => {
     savedAt,
     storageWarning,
     restored,
+    canUndo,
+    canRedo,
 
     save,
+    undo,
+    redo,
     resetAll,
     replaceResume,
     toJSON,

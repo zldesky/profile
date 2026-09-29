@@ -76,12 +76,14 @@ const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
  */
 function cleanText(value, maxLength = LIMITS.text) {
   if (value === null || value === undefined) return ''
-  return String(value)
-    .replace(/<[^>]*>/g, '')
-    .replace(/[<>]/g, '')
-    // 保留换行、制表与回车，其余控制字符一律去掉
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
-    .slice(0, maxLength)
+  return (
+    String(value)
+      .replace(/<[^>]*>/g, '')
+      .replace(/[<>]/g, '')
+      // 保留换行、制表与回车，其余控制字符一律去掉
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+      .slice(0, maxLength)
+  )
 }
 
 /** 枚举白名单，未命中时回退 */
@@ -138,8 +140,7 @@ const SKILL_SPEC = {
 const LAYOUT_SPEC = {
   align: (value) => pickEnum(value, ALLOW.sectionAlign, 'inherit'),
   indent: (value) => clampNumber(value, LAYOUT_RANGE.indent.min, LAYOUT_RANGE.indent.max, 0),
-  extraGap: (value) =>
-    clampNumber(value, LAYOUT_RANGE.extraGap.min, LAYOUT_RANGE.extraGap.max, 0),
+  extraGap: (value) => clampNumber(value, LAYOUT_RANGE.extraGap.min, LAYOUT_RANGE.extraGap.max, 0),
   columns: (value) => pickEnum(String(value ?? 'auto'), ALLOW.sectionColumns, 'auto'),
 }
 
@@ -147,7 +148,11 @@ const take = (value, max) => (Array.isArray(value) ? value.slice(0, max) : [])
 
 function buildSectionBody(section) {
   if (section.type === 'grid') {
-    return { items: take(section.items, LIMITS.itemsPerSection).map((item) => pickFields(item, GRID_ITEM_SPEC)) }
+    return {
+      items: take(section.items, LIMITS.itemsPerSection).map((item) =>
+        pickFields(item, GRID_ITEM_SPEC),
+      ),
+    }
   }
 
   if (section.type === 'entries') {
@@ -169,8 +174,12 @@ function buildSectionBody(section) {
   if (section.type === 'skills') {
     return {
       showBars: section.showBars === true,
-      fields: take(section.fields, LIMITS.fieldsPerSection).map((field) => pickFields(field, META_SPEC)),
-      items: take(section.items, LIMITS.itemsPerSection).map((skill) => pickFields(skill, SKILL_SPEC)),
+      fields: take(section.fields, LIMITS.fieldsPerSection).map((field) =>
+        pickFields(field, META_SPEC),
+      ),
+      items: take(section.items, LIMITS.itemsPerSection).map((skill) =>
+        pickFields(skill, SKILL_SPEC),
+      ),
     }
   }
 
@@ -229,7 +238,9 @@ function sanitizeBasics(rawBasics) {
       dx: clampNumber(pos.dx, -300, 300, 0),
       dy: clampNumber(pos.dy, -100, 200, 0),
     },
-    fields: take(basics.fields, LIMITS.basicsFields).map((field) => pickFields(field, GRID_ITEM_SPEC)),
+    fields: take(basics.fields, LIMITS.basicsFields).map((field) =>
+      pickFields(field, GRID_ITEM_SPEC),
+    ),
   }
 }
 
