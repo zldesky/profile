@@ -50,6 +50,49 @@ npm run pdf    # 同一进程托管 dist/ + /api，访问 http://127.0.0.1:3001
 
 仍是一个 Node 进程：`npm run build && npm run pdf`，把服务暴露出去。
 
+### 一键脚本（推荐）
+
+```sh
+git clone <你的仓库地址> /opt/resume && cd /opt/resume
+bash deploy.sh
+```
+
+`deploy.sh` 会自动完成：swap 检查与创建（2G 以下内存机器）、安装 Node 22 / Chromium / 中文字体、双份 `npm ci`、构建、生成 `.env`、注册并启动 systemd 服务（`resume`）、健康检查。重复执行即更新部署（自动 `git pull` → 重建 → 重启）。执行完的「必做的四件事」（公网域名时）仍需手动补 `.env` 并重启。
+
+### 手动步骤（理解脚本在做什么，或脚本不适用时）
+
+```sh
+# 1. Node.js 22（需要 22.18+，node:sqlite 是内置能力）
+sudo apt update && sudo apt install -y curl git
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+node -v   # 应 >= 22.18
+
+# 2. 渲染内核 + 中文字体（一键导出 PDF 依赖；缺字体的后果是 PDF 中文全变方框）
+sudo apt install -y chromium fonts-noto-cjk
+
+# 3. 代码（需要先配好 git 远端并推送；没配就用 tar/scp 拷源码，见前文）
+sudo mkdir -p /opt/resume && sudo chown $USER /opt/resume
+git clone <你的仓库地址> /opt/resume && cd /opt/resume
+
+# 4. 依赖与构建（server 依赖必须单独装）
+npm ci
+npm ci --prefix server
+npm run build
+
+# 5. 配置
+cp .env.example .env
+# 编辑 .env，至少设置：
+#   HOST=127.0.0.1                （配合反代；直接暴露改 0.0.0.0）
+#   BROWSER_PATH=/usr/bin/chromium （Linux 上必须指定，自动探测的 msedge/chrome 渠道在服务器上不存在）
+#   公网域名部署再加：ALLOWED_ORIGINS=https://你的域名 和 TRUST_PROXY=1
+
+# 6. 试跑，浏览器确认后再转常驻
+npm run pdf
+```
+
+2G 内存机器：先加 2G swap（命令见形态三末尾），`RENDER_CONCURRENCY` 保持默认 1。裸机相比 Docker 的好处：省掉 Docker 守护进程的一两百 MB、没有镜像构建的内存峰值，且普通用户运行时 Chromium 沙箱正常生效，**不需要** `--no-sandbox`。
+
 ### 必做的四件事
 
 1. **声明监听地址**：`.env` 里 `HOST=0.0.0.0`（或内网 IP）、`PORT=3001`。对外暴露时 `/api` 一律要求登录，匿名请求返回 401——不再像旧版本那样拒绝启动，但安全依赖下面的配置。
