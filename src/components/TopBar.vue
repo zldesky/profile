@@ -4,10 +4,11 @@
  * 数据导入导出与 PDF 导出逻辑分别在 useResumeFile / usePdfExport，
  * 本组件只负责按钮编排与状态展示。
  */
-import { computed, useTemplateRef } from 'vue'
+import { computed, shallowRef, useTemplateRef } from 'vue'
 import { useRouter } from 'vue-router'
 
 import AuthDialog from '@/components/AuthDialog.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import PasswordDialog from '@/components/PasswordDialog.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { useAuth } from '@/composables/useAuth'
@@ -76,6 +77,14 @@ async function onLogout() {
   await auth.logout()
   await refreshQuota()
   toast('已退出登录，简历仍保留在本机')
+}
+
+/** 退出前先确认：误触退出会打断云端同步，值得多一次点击 */
+const logoutConfirmOpen = shallowRef(false)
+
+async function confirmLogout() {
+  logoutConfirmOpen.value = false
+  await onLogout()
 }
 
 const serverExportText = computed(() => {
@@ -204,7 +213,12 @@ function onFileChange(event) {
         <SvgIcon name="user" :size="14" />
         <span class="user-chip-name">{{ auth.user.value?.username }}</span>
       </span>
-      <button class="ed-btn is-compact" title="退出登录" aria-label="退出登录" @click="onLogout">
+      <button
+        class="ed-btn is-compact"
+        title="退出登录"
+        aria-label="退出登录"
+        @click="logoutConfirmOpen = true"
+      >
         <SvgIcon name="close" :size="14" />
         <span class="btn-label">退出</span>
       </button>
@@ -218,8 +232,17 @@ function onFileChange(event) {
       @change="onFileChange"
     />
 
-    <!-- 两个弹窗组件内部都会 Teleport 到 body，放在这里只是便于就近阅读 -->
+    <!-- 三个弹窗组件内部都会 Teleport 到 body，放在这里只是便于就近阅读 -->
     <AuthDialog />
+    <ConfirmDialog
+      :open="logoutConfirmOpen"
+      title="退出登录"
+      description="退出后简历仍保留在本机，重新登录后继续云端同步。"
+      confirm-text="退出登录"
+      danger
+      @confirm="confirmLogout"
+      @cancel="logoutConfirmOpen = false"
+    />
     <PasswordDialog
       :open="passwordOpen"
       :error="passwordError"
