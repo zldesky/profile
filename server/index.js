@@ -76,6 +76,13 @@ const registerLimiter = createSlidingWindowCounter({ max: 5, windowMs: 60 * 60 *
  */
 const captcha = createCaptcha({ secret: process.env.CAPTCHA_SECRET })
 
+/**
+ * 登录/注册弹窗交互开关（AUTH_POPUP=off|false|0 关闭，默认开启）。
+ * 只影响前端交互形态：开启时点「登录/注册」与未登录一键导出在当前页弹窗；
+ * 关闭时回退为跳转独立登录页。经 /api/health 下发给前端。
+ */
+const AUTH_POPUP_ENABLED = !/^(off|false|0)$/i.test(String(process.env.AUTH_POPUP ?? '').trim())
+
 /** 会话令牌只存服务端，Cookie 里放随机令牌即可 */
 const SESSION_COOKIE = 'rs_session'
 const SESSION_TTL_DAYS = 30
@@ -323,6 +330,7 @@ app.get('/api/health', async (req, res) => {
   res.json({
     ok: true,
     loginEnabled: true,
+    authPopup: AUTH_POPUP_ENABLED,
     authRequired: guard.enabled,
     user: session
       ? { id: session.userId, username: db.findUserById(session.userId)?.username || '' }

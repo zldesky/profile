@@ -68,9 +68,10 @@ export async function requestServerPdf(resume, filename, password = '') {
  * authRequired 用来判断是否需要向用户索取口令；
  * quota 只在服务端确认口令有效时才返回，未通过时为 null——此时不应展示额度，
  * 否则等于把「今天还剩多少次」这类服务端信息泄露给未验证的调用方。
+ * authPopup 是登录/注册弹窗交互开关（AUTH_POPUP 配置），异常时按开启处理。
  *
  * @param {string} [password] 访问口令
- * @returns {Promise<{ authRequired: boolean, quota: object | null } | null>} 服务未启动时返回 null
+ * @returns {Promise<{ authRequired: boolean, quota: object | null, authPopup: boolean } | null>} 服务未启动时返回 null
  */
 export async function fetchServerHealth(password = '') {
   try {
@@ -78,7 +79,11 @@ export async function fetchServerHealth(password = '') {
     if (!response.ok) return null
 
     const data = await response.json()
-    return { authRequired: data?.authRequired === true, quota: data?.quota ?? null }
+    return {
+      authRequired: data?.authRequired === true,
+      quota: data?.quota ?? null,
+      authPopup: data?.authPopup !== false,
+    }
   } catch {
     return null
   }

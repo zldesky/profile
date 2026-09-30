@@ -1,6 +1,8 @@
 import { computed, onMounted, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 
+import { useAuth } from '@/composables/useAuth'
+import { useAuthDialog } from '@/composables/useAuthDialog'
 import { usePdfPassword } from '@/composables/usePdfPassword'
 import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
@@ -16,12 +18,14 @@ const PRINT_HINT = '打印窗口请将「边距」设为默认、勾选「背景
  *
  * 服务端鉴别身份靠会话 Cookie（登录后自动携带）或脚本口令 Bearer：
  * 口令只在本地保存，服务端用常量时间比较校验，连续错误会被临时锁定。
- * 未登录点击一键导出时，服务端返回 loginRequired，这里引导去登录页。
+ * 未登录点击一键导出时弹出登录/注册弹窗，成功后自动续跑导出（可配置关闭）。
  */
 export function usePdfExport() {
   const store = useResumeStore()
   const router = useRouter()
   const { toast } = useToast()
+  const auth = useAuth()
+  const authDialog = useAuthDialog()
   const { password, set: setPassword, clear: clearPassword } = usePdfPassword()
 
   const exporting = shallowRef(false)
@@ -82,6 +86,18 @@ export function usePdfExport() {
   }
 
   /**
+   * 需要登录时的统一入口：默认弹出登录/注册弹窗（不打断编辑），
+   * 认证成功后续跑 action；服务端配置关闭弹窗时回退为跳转登录页。
+   */
+  async function requireAuthThen(action) {
+    const opened = await authDialog.open({ mode: 'login', onAuthed: action })
+    if (!opened) {
+      toast('登录后即可一键导出，正在前往登录页…', 2600)
+      router.push({ name: 'login' })
+    }
+  }
+
+  /**
    * 按错误成因分流处理。
    * 口令类错误不能笼统提示「导出失败」——用户需要知道是输错了、还是被锁了。
    */
@@ -90,13 +106,12 @@ export function usePdfExport() {
 
     switch (error.code) {
       case 'AUTH_REQUIRED':
-        // 服务开了口令通道却没带对口令 → 弹口令框；否则是没登录 → 去登录页
+        // 服务开了口令通道却没带对口令 → 弹口令框；否则是没登录 → 弹登录/注册框
         if (authRequired.value) {
           passwordError.value = ''
           passwordOpen.value = true
         } else {
-          toast('登录后即可一键导出，正在前往登录页…', 2600)
-          router.push({ name: 'login' })
+          requireAuthThen(() => runExport())
         }
         return
 
@@ -148,6 +163,12 @@ export function usePdfExport() {
 
   async function exportViaServer() {
     if (exporting.value || quotaExhausted.value) return
+
+    // 未登录且无脚本口令通道时，请求注定 401：直接弹登录/注册弹窗，
+    // 登录成功后自动续跑导出，省一次失败的往返
+    if (auth.status.value === 'anon' && !password.value && !authRequired.value) {
+      return requireAuthThen(() => runExport())
+    }
 
     // 已知需要口令而本地没有，直接弹窗，省掉一次注定失败的请求
     if (needPassword.value) {

@@ -48,6 +48,10 @@ services:
       # deploy-docker.sh 会自动探测公网 IP 写入；手动部署时自己 export 这个变量。
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
 
+      # 登录/注册弹窗交互开关（默认开启）：off 时前端改为跳转独立登录页。
+      # 在 .env 里写 AUTH_POPUP=off 即可生效，无需重建镜像。
+      AUTH_POPUP: ${AUTH_POPUP:-}
+
       # 导出额度：每用户每日 / 全站每日兜底
       PDF_USER_DAILY_LIMIT: 10
       PDF_DAILY_LIMIT: 100

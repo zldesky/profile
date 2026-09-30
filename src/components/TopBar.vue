@@ -5,10 +5,13 @@
  * 本组件只负责按钮编排与状态展示。
  */
 import { computed, useTemplateRef } from 'vue'
+import { useRouter } from 'vue-router'
 
+import AuthDialog from '@/components/AuthDialog.vue'
 import PasswordDialog from '@/components/PasswordDialog.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { useAuth } from '@/composables/useAuth'
+import { useAuthDialog } from '@/composables/useAuthDialog'
 import { usePdfExport } from '@/composables/usePdfExport'
 import { useResumeFile } from '@/composables/useResumeFile'
 import { useToast } from '@/composables/useToast'
@@ -41,6 +44,17 @@ const fileInput = useTemplateRef('fileInput')
 
 const auth = useAuth()
 const { toast } = useToast()
+const router = useRouter()
+const authDialog = useAuthDialog()
+
+/**
+ * 登录 / 注册入口：默认在编辑器内弹窗完成，不丢当前编辑；
+ * 服务端配置关闭弹窗（AUTH_POPUP=off）时回退为跳转独立登录页。
+ */
+async function openLogin() {
+  const opened = await authDialog.open({ mode: 'login' })
+  if (!opened) router.push({ name: 'login' })
+}
 
 const { exportJSON, importFromFile, resetResume } = useResumeFile()
 const {
@@ -181,10 +195,10 @@ function onFileChange(event) {
     </button>
 
     <!-- 账号区：未登录给入口，已登录只显示身份与退出 -->
-    <router-link v-if="auth.status.value === 'anon'" class="ed-btn" :to="{ name: 'login' }">
+    <button v-if="auth.status.value === 'anon'" class="ed-btn" @click="openLogin">
       <SvgIcon name="user" :size="14" />
       <span>登录 / 注册</span>
-    </router-link>
+    </button>
     <template v-else-if="auth.status.value === 'authed'">
       <span class="user-chip" :title="`已登录：${auth.user.value?.username}`">
         <SvgIcon name="user" :size="14" />
@@ -204,7 +218,8 @@ function onFileChange(event) {
       @change="onFileChange"
     />
 
-    <!-- 组件内部会 Teleport 到 body，放在这里只是便于与导出按钮就近阅读 -->
+    <!-- 两个弹窗组件内部都会 Teleport 到 body，放在这里只是便于就近阅读 -->
+    <AuthDialog />
     <PasswordDialog
       :open="passwordOpen"
       :error="passwordError"
