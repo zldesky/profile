@@ -13,9 +13,13 @@ import SvgIcon from '@/components/SvgIcon.vue'
 const props = defineProps({
   open: { type: Boolean, default: false },
 })
-const emit = defineEmits(['verified', 'cancel'])
+const emit = defineEmits(['verified', 'cancel', 'exhausted'])
+
+/** 连续失败上限：达到后向宿主报 exhausted，由宿主关闭窗口并提示 */
+const MAX_FAILURES = 3
 
 const token = ref('')
+const failCount = ref(0)
 /** 每次打开都换 key 重挂滑块：拿一张新的挑战图 */
 const openCount = ref(0)
 
@@ -24,6 +28,7 @@ watch(
   (open) => {
     if (open) {
       token.value = ''
+      failCount.value = 0
       openCount.value += 1
     }
   },
@@ -32,6 +37,11 @@ watch(
 watch(token, (value) => {
   if (value) emit('verified', value)
 })
+
+function onFailed() {
+  failCount.value += 1
+  if (failCount.value >= MAX_FAILURES) emit('exhausted')
+}
 </script>
 
 <template>
@@ -47,7 +57,7 @@ watch(token, (value) => {
 
         <p class="cd-desc">拖动滑块将拼图对准缺口，完成验证后自动继续注册</p>
 
-        <SliderCaptcha :key="openCount" v-model="token" />
+        <SliderCaptcha :key="openCount" v-model="token" @failed="onFailed" />
       </div>
     </div>
   </Teleport>

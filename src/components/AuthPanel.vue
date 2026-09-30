@@ -85,6 +85,12 @@ function onCaptchaVerified(token) {
   captchaOpen.value = false
   submit()
 }
+
+/** 连续失败达上限：验证窗口自动关闭，表单上给出红色说明 */
+function onCaptchaExhausted() {
+  captchaOpen.value = false
+  error.value = '滑块验证失败次数过多，已自动关闭；点击「注册并登录」可重试'
+}
 </script>
 
 <template>
@@ -154,6 +160,7 @@ function onCaptchaVerified(token) {
       :open="captchaOpen"
       @verified="onCaptchaVerified"
       @cancel="captchaOpen = false"
+      @exhausted="onCaptchaExhausted"
     />
   </div>
 </template>

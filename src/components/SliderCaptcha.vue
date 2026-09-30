@@ -14,7 +14,7 @@ const props = defineProps({
   modelValue: { type: String, default: '' },
   disabled: { type: Boolean, default: false },
 })
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue', 'failed'])
 
 /** 与服务端约定的视图盒尺寸与拼图块尺寸（见 server/captcha.js） */
 const VIEW_WIDTH = 320
@@ -23,11 +23,12 @@ const PIECE_SIZE = 46
 const KNOB_RADIUS = 8
 /** 拼图块在视图盒坐标里可移动的最大横向距离 */
 const MAX_X = VIEW_WIDTH - PIECE_SIZE
+/** 校验失败后红色提示的停留时长，让人看清再换下一张图 */
+const FAIL_PAUSE_MS = 900
 
 const stageEl = ref(null)
 const challenge = shallowRef(null)
-const state = shallowRef('loading') // loading | idle | dragging | verifying | done
-const failed = shallowRef(false)
+const state = shallowRef('loading') // loading | idle | dragging | verifying | failed | done
 /** 拼图块左上角的横向位置（视图盒坐标） */
 const dragX = ref(0)
 /** 视图盒坐标 → 屏幕像素 的缩放比 */
@@ -37,12 +38,20 @@ let requestSeq = 0
 let pointerId = null
 let dragStartClientX = 0
 let dragStartX = 0
+let failedTimer = null
+
+function clearFailedTimer() {
+  if (failedTimer) {
+    clearTimeout(failedTimer)
+    failedTimer = null
+  }
+}
 
 const hint = computed(() => {
   if (state.value === 'loading') return '加载中…'
   if (state.value === 'verifying') return '校验中…'
   if (state.value === 'done') return '验证通过'
-  if (failed.value) return '未对准缺口，请重试'
+  if (state.value === 'failed') return '未对准缺口，请重试'
   return '按住滑块，拖动到缺口处'
 })
 
@@ -52,6 +61,7 @@ const fillWidth = computed(() => `${pieceLeftPx.value + handleWidthPx.value}px`)
 
 /** 拉一张新挑战。验证失败、父层清空令牌后都会走这里重来 */
 async function refresh() {
+  clearFailedTimer()
   const seq = ++requestSeq
   state.value = 'loading'
   dragX.value = 0
@@ -63,12 +73,10 @@ async function refresh() {
     if (seq !== requestSeq) return
     if (!response.ok || !data?.id) throw new Error('挑战响应不完整')
     challenge.value = data
-    failed.value = false
     state.value = 'idle'
   } catch {
     if (seq !== requestSeq) return
     challenge.value = null
-    failed.value = true
     state.value = 'idle'
   }
 }
@@ -90,6 +98,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
+  clearFailedTimer()
 })
 
 function onPointerDown(event) {
@@ -159,11 +168,14 @@ async function onPointerUp(event) {
       return
     }
   } catch {
-    /* 网络/服务异常与验证失败同样处理：换一张新图重来 */
+    /* 网络/服务异常与验证失败同样处理：红色提示停留片刻后换新图 */
   }
 
-  failed.value = true
-  refresh()
+  // 失败：红色提示停留 FAIL_PAUSE_MS 让人看清，期间禁止再拖，
+  // 然后自动换一张新图；每次失败都上报给宿主（用于连续失败关闭弹窗）
+  state.value = 'failed'
+  emit('failed')
+  failedTimer = setTimeout(() => refresh(), FAIL_PAUSE_MS)
 }
 
 /** 父层清空令牌（如注册失败后重置）时，图形同步换新 */
@@ -182,7 +194,7 @@ defineExpose({ refresh })
     <div
       ref="stageEl"
       class="sc-stage"
-      :class="{ 'is-failed': failed && challenge, 'is-done': state === 'done' }"
+      :class="{ 'is-failed': state === 'failed', 'is-done': state === 'done' }"
     >
       <img v-if="challenge" class="sc-bg" :src="challenge.background" alt="" draggable="false" />
       <img
@@ -203,17 +215,14 @@ defineExpose({ refresh })
       </button>
     </div>
 
-    <div
-      class="sc-track"
-      :class="{ 'is-done': state === 'done', 'is-failed': failed && challenge }"
-    >
+    <div class="sc-track" :class="{ 'is-done': state === 'done', 'is-failed': state === 'failed' }">
       <div class="sc-fill" :style="{ width: fillWidth }"></div>
       <span class="sc-hint">{{ hint }}</span>
       <button
         type="button"
         class="sc-handle"
         :style="{ left: `${pieceLeftPx}px`, width: `${handleWidthPx}px` }"
-        :disabled="disabled || state === 'done' || !challenge"
+        :disabled="disabled || state === 'done' || state === 'failed' || !challenge"
         @pointerdown="onPointerDown"
         @pointermove="onPointerMove"
         @pointerup="onPointerUp"
