@@ -46,3 +46,6 @@ server/.data/
 .env
 .env.*
 !.env.example
+
+# nginx 入口的证书与私钥（nginx/default.conf 是配置模板，要入库）
+nginx/certs/

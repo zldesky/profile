@@ -4,6 +4,10 @@ server/node_modules
 dist
 server/.data
 .git
+
+# nginx 入口配置与证书：只在宿主机上被 nginx 容器挂载，应用自己不用，
+# 且 nginx/certs 下可能有私钥，绝不能被 COPY . . 带进镜像
+nginx
 .env
 .env.*
 !.env.example

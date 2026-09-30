@@ -1,5 +1,18 @@
 # 一键部署：docker compose up -d --build
-# 访问：http://服务器IP:3001（或按注释前置 Caddy/Nginx 终止 TLS）
+# 访问：http://服务器IP（默认 80 端口，由 nginx 容器反向代理到应用容器）
+#
+# 对外形态：nginx（容器，占宿主机端口）→ resume（容器，只在 compose 网络内可见）
+#
+# 可用环境变量（不设也能起，但公网访问会 403，见下方 ALLOWED_ORIGINS 注释）：
+#   ALLOWED_ORIGINS       浏览器访问地址，逗号分隔，如 http://1.2.3.4,https://resume.example.com
+#   NGINX_HTTP_PORT       nginx 对外端口，默认 80
+#   NGINX_IMAGE           nginx 镜像，默认 nginx:alpine（拉不动时换成镜像站地址）
+#   NPM_REGISTRY          构建期 npm 源，默认空（走官方源）
+#   COMPOSE_PROJECT_NAME  项目名，脚本固定成 resume（避免目录名带中文/大写直接报错）
+#
+# 这些变量由 deploy-docker.sh 注入（它用 env 显式传递，因为 sudo 会重置环境）。
+# 手动部署时自己带齐，并统一加 -p resume，否则 compose 按目录名算项目名、找不到这套容器：
+#   sudo env ALLOWED_ORIGINS=http://1.2.3.4 docker compose -p resume up -d --build
 #
 # 2G 内存机器的必要调整：
 #   1. 先加 swap（2G），见 DEPLOY.md「小内存机器」一节；
@@ -8,18 +21,32 @@
 
 services:
   resume:
-    build: .
+    build:
+      context: .
+      args:
+        # 国内 npm 拉包加速；默认空 = 与不带 build args 时行为完全一致
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
     container_name: resume-studio
     restart: unless-stopped
 
-    ports:
-      # 默认只绑本机回环，供宿主机上的 Caddy/Nginx 反代用；
-      # 没有 TLS 网关、想直接 IP:3001 访问时改成 "3001:3001"（不推荐公网裸跑）
-      - "127.0.0.1:3001:3001"
+    # 不再映射到宿主机：外部流量统一从 nginx 进。
+    # 需要直连调试时：docker compose exec resume node -e "fetch('http://127.0.0.1:3001/api/health')..."
+    expose:
+      - "3001"
 
     environment:
       HOST: 0.0.0.0
       PORT: 3001
+
+      # 前面有一层 nginx，必须信任代理头。不设的后果：
+      #   1. req.ip 全是 nginx 容器 IP → 登录失败按「IP+用户名」计数，一个人连错十次会把全站锁死；
+      #   2. req.secure 恒为 false → 上了 TLS 之后会话 Cookie 也不会带 Secure。
+      TRUST_PROXY: "1"
+
+      # 放行浏览器 Origin（http://公网IP、https://域名，逗号分隔）。
+      # 留空时只允许 localhost，公网访问的登录与导出会全部 403。
+      # deploy-docker.sh 会自动探测公网 IP 写入；手动部署时自己 export 这个变量。
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
 
       # 导出额度：每用户每日 / 全站每日兜底
       PDF_USER_DAILY_LIMIT: 10
@@ -34,9 +61,7 @@ services:
       # 自建内核支持 userns 或换用物理机部署时，删掉这一行更稳。
       BROWSER_EXTRA_ARGS: --no-sandbox
 
-      # 公网域名部署时必设（否则登录/导出被 403），配合反代再加 TLS：
-      # TRUST_PROXY: 1
-      # ALLOWED_ORIGINS: https://resume.example.com
+      # TRUST_PROXY 与 ALLOWED_ORIGINS 已在上方设置，理由见那两处注释
 
       # 可选：脚本调 /api/pdf 的 Bearer 通道
       # PDF_ACCESS_PASSWORD: change-me
@@ -66,24 +91,38 @@ services:
       retries: 3
       start_period: 30s
 
-  # 可选：一键带上 TLS 网关（自动签发续期证书）。
-  # 启用：取消注释 → 把域名写进 Caddyfile.example 并重命名为 Caddyfile →
-  #       resume.ports 改回 "3001:3001"（只在 compose 网络内暴露）→ 80/443 对外。
-  # caddy:
-  #   image: caddy:2-alpine
-  #   container_name: resume-caddy
-  #   restart: unless-stopped
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #   volumes:
-  #     - ./Caddyfile:/etc/caddy/Caddyfile:ro
-  #     - caddy-data:/data
-  #   depends_on:
-  #     - resume
+  # 对外入口：nginx 反向代理。端口、TLS 终止、真实客户端 IP、缓存策略都在这一层。
+  # 配置见 nginx/default.conf，改完执行 docker compose restart nginx 即生效。
+  nginx:
+    # 拉不动 Docker Hub 时换成镜像站地址，如 NGINX_IMAGE=registry.example.com/nginx:alpine
+    image: ${NGINX_IMAGE:-nginx:alpine}
+    container_name: resume-nginx
+    restart: unless-stopped
 
-# volumes:
-#   caddy-data:
+    ports:
+      # 对外只开这一个口。
+      # 想退回「宿主机自己装 nginx 做反代」的形态，改成 "127.0.0.1:${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTP_PORT:-80}:80"
+
+    volumes:
+      # 只挂配置文件，不挂整个目录：应用镜像里既不需要它，也不该看到仓库结构。
+      # 末尾的 z 是给 CentOS 的 SELinux 用的——enforcing 下不标 container_file_t 会读不到文件。
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro,z
+      # 要上 HTTPS 时：证书放 nginx/certs/（fullchain.pem + privkey.pem，权限 600），
+      # 取消下面这行注释，再按 nginx/default.conf 末尾的说明放开 443 的 server 块
+      # - ./nginx/certs:/etc/nginx/certs:ro,z
+
+    depends_on:
+      # 等后端健康检查通过再启动，避免部署完的第一个请求就吃一个 502
+      resume:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/nginx-health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
 
 volumes:
   resume-data:
