@@ -108,41 +108,52 @@ export function createCaptcha({
         )
       }
     }
-    const content =
-      `<rect width="${VIEW_WIDTH}" height="${VIEW_HEIGHT}" fill="url(#${id}g)"/>` + shapes.join('')
-
     const holeRect = `<rect x="${x}" y="${y}" width="${PIECE_SIZE}" height="${PIECE_SIZE}" rx="8"/>`
     const knob = `<circle cx="${x + PIECE_SIZE / 2}" cy="${y}" r="${KNOB_RADIUS}"/>`
+
+    // 渐变定义在两份 SVG 里各放一份：背景与拼图块是两个独立的 <img> 文档，
+    // piece 里引用 background 的 defs 是解析不到的（悬空引用会让整块底色
+    // 不渲染，滑块就「隐形」了）。id 各自独占，互不冲突。
+    const gradientDef =
+      `<linearGradient id="${id}g" x1="0" y1="0" x2="1" y2="1">` +
+      `<stop offset="0" stop-color="hsl(${hue}, 62%, 72%)"/>` +
+      `<stop offset="1" stop-color="hsl(${hue2}, 55%, 45%)"/>` +
+      `</linearGradient>`
+    const scene =
+      `<rect width="${VIEW_WIDTH}" height="${VIEW_HEIGHT}" fill="url(#${id}g)"/>` + shapes.join('')
 
     const background =
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}">` +
       `<defs>` +
-      `<linearGradient id="${id}g" x1="0" y1="0" x2="1" y2="1">` +
-      `<stop offset="0" stop-color="hsl(${hue}, 62%, 72%)"/>` +
-      `<stop offset="1" stop-color="hsl(${hue2}, 55%, 45%)"/>` +
-      `</linearGradient>` +
+      gradientDef +
       `<mask id="${id}m" maskUnits="userSpaceOnUse" x="0" y="0" width="${VIEW_WIDTH}" height="${VIEW_HEIGHT}">` +
       `<rect width="${VIEW_WIDTH}" height="${VIEW_HEIGHT}" fill="#fff"/>` +
       holeRect.replace('/>', ' fill="#000"/>') +
       knob.replace('/>', ' fill="#000"/>') +
       `</mask></defs>` +
-      content +
+      scene +
       `<rect width="${VIEW_WIDTH}" height="${VIEW_HEIGHT}" fill="#0f172a" opacity="0.6" mask="url(#${id}m)"/>` +
       `</svg>`
 
-    // 拼图块：viewBox 直接裁成缺口区域的小图（含上方凸起的余量），
-    // 元素随拖动整体平移，落到缺口横向位置时内容恰好对齐。
-    // 凸起朝上，viewBox 从 y-KNOB_RADIUS 起，clipPath 用平移后的局部坐标。
+    // 拼图块：viewBox 裁出缺口区域的小窗（含上方凸起余量），元素随拖动
+    // 整体平移，落到缺口横向位置时内容恰好对齐。注意 viewBox 只是定义
+    // 可见窗口、不平移坐标系——clipPath/提亮/描边必须沿用全局缺口坐标，
+    // 写成局部坐标会整块裁空（表现为滑块「隐形」）。
     const piece =
       `<svg xmlns="http://www.w3.org/2000/svg" ` +
       `viewBox="${x} ${y - KNOB_RADIUS} ${PIECE_SIZE} ${PIECE_SIZE + KNOB_RADIUS}">` +
-      `<defs><clipPath id="${id}c">` +
-      `<rect x="0" y="${KNOB_RADIUS}" width="${PIECE_SIZE}" height="${PIECE_SIZE}" rx="8"/>` +
-      `<circle cx="${PIECE_SIZE / 2}" cy="${KNOB_RADIUS}" r="${KNOB_RADIUS}"/>` +
+      `<defs>` +
+      gradientDef +
+      `<clipPath id="${id}c">` +
+      holeRect +
+      knob +
       `</clipPath></defs>` +
-      `<g clip-path="url(#${id}c)">${content}</g>` +
-      `<g fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.5">` +
-      `<rect x="0" y="${KNOB_RADIUS}" width="${PIECE_SIZE}" height="${PIECE_SIZE}" rx="8"/>` +
+      `<g clip-path="url(#${id}c)">${scene}` +
+      holeRect.replace('/>', ' fill="#fff" opacity="0.14"/>') +
+      `</g>` +
+      `<g fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="2">` +
+      holeRect +
+      knob +
       `</g>` +
       `</svg>`
 

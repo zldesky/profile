@@ -65,6 +65,16 @@ describe('滑块验证码', () => {
     expect(a.consume(token)).toBe(true)
   })
 
+  it('拼图块 SVG 自带渐变定义，不悬空引用背景的 defs', () => {
+    const challenge = fixedCaptcha().challenge()
+    const svg = Buffer.from(challenge.piece.split(',')[1], 'base64').toString('utf8')
+    // 块是独立 <img> 文档：渐变必须定义在自己内部，否则整块底色不渲染（隐形）
+    expect(svg).toContain('<linearGradient')
+    expect(svg).toContain('<clipPath')
+    // 描边让块在拖动中可见
+    expect(svg).toContain('stroke=')
+  })
+
   it('未完成挑战超过内存上限时淘汰最早的', () => {
     const captcha = fixedCaptcha({ maxPending: 2 })
 

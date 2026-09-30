@@ -258,6 +258,8 @@ defineExpose({ refresh })
   left: 0;
   pointer-events: none;
   will-change: transform;
+  /* 投影让块在拖动时与背景拉开层次，配合描边保证可见 */
+  filter: drop-shadow(0 2px 6px rgba(15, 23, 42, 0.45));
 }
 
 .sc-retry {
