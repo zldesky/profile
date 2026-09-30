@@ -49,12 +49,13 @@ export function useAuth() {
   /**
    * 登录/注册共用：失败抛出带服务端可读信息的 Error，调用方展示在表单上。
    * @param {'login' | 'register'} action
+   * @param {string} [captchaToken] 注册必填：滑块验证通过令牌，登录不传
    */
-  async function submitCredentials(action, username, password) {
+  async function submitCredentials(action, username, password, captchaToken) {
     const response = await fetch(`/api/auth/${action}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, captchaToken }),
     })
 
     const data = await response.json().catch(() => ({}))
@@ -73,8 +74,8 @@ export function useAuth() {
     return submitCredentials('login', username, password)
   }
 
-  function register(username, password) {
-    return submitCredentials('register', username, password)
+  function register(username, password, captchaToken) {
+    return submitCredentials('register', username, password, captchaToken)
   }
 
   async function logout() {

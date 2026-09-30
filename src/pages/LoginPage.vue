@@ -9,6 +9,7 @@ import { ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import SvgIcon from '@/components/SvgIcon.vue'
+import SliderCaptcha from '@/components/SliderCaptcha.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useToast } from '@/composables/useToast'
 
@@ -19,6 +20,8 @@ const { toast } = useToast()
 const mode = shallowRef('login') // login | register
 const username = ref('')
 const password = ref('')
+const captchaToken = ref('')
+const captchaRef = ref(null)
 const busy = shallowRef(false)
 const error = shallowRef('')
 
@@ -34,6 +37,8 @@ watch(
 function switchMode(next) {
   mode.value = next
   error.value = ''
+  // 切到登录时滑块随 v-if 卸载，令牌一并清掉
+  if (next !== 'register') captchaToken.value = ''
 }
 
 /** 与服务端 validateCredentials 相同的规则，先拦一道省一次往返 */
@@ -44,6 +49,7 @@ function validate() {
   }
   if (password.value.length < 8) return '密码至少 8 位'
   if (password.value.length > 72) return '密码最长 72 位'
+  if (mode.value === 'register' && !captchaToken.value) return '请先完成滑块验证'
   return ''
 }
 
@@ -62,11 +68,13 @@ async function submit() {
     const user =
       mode.value === 'login'
         ? await auth.login(username.value.trim(), password.value)
-        : await auth.register(username.value.trim(), password.value)
+        : await auth.register(username.value.trim(), password.value, captchaToken.value)
     toast(mode.value === 'login' ? `欢迎回来，${user.username}` : `注册成功，${user.username}`)
     router.replace({ name: 'editor' })
   } catch (requestError) {
     error.value = requestError.message || '请求失败'
+    // 注册请求会把通过令牌消费掉（无论成败），失败后必须重做滑块验证
+    if (mode.value === 'register') captchaRef.value?.refresh()
   } finally {
     busy.value = false
   }
@@ -129,6 +137,13 @@ async function submit() {
             :disabled="busy"
           />
         </label>
+
+        <SliderCaptcha
+          v-if="mode === 'register'"
+          ref="captchaRef"
+          v-model="captchaToken"
+          :disabled="busy"
+        />
 
         <p v-if="error" class="auth-error" role="alert">{{ error }}</p>
 

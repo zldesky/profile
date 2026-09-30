@@ -23,7 +23,7 @@ const LOCK_MS = 15 * 60 * 1000
  * @param {string} a
  * @param {string} b
  */
-function safeEqual(a, b) {
+export function safeEqual(a, b) {
   const left = crypto.createHash('sha256').update(a).digest()
   const right = crypto.createHash('sha256').update(b).digest()
   return crypto.timingSafeEqual(left, right)

@@ -32,6 +32,7 @@ import {
   validateCredentials,
   verifyPassword,
 } from './auth.js'
+import { createCaptcha } from './captcha.js'
 import { createDatabase } from './db.js'
 import {
   closeBrowser,
@@ -67,6 +68,13 @@ const guard = createPasswordGuard({ password: process.env.PDF_ACCESS_PASSWORD })
 /** 登录失败锁定与注册频率限制（内存态，重启清零；对爆破而言足够） */
 const loginGuard = createLoginGuard()
 const registerLimiter = createSlidingWindowCounter({ max: 5, windowMs: 60 * 60 * 1000 })
+
+/**
+ * 注册用的滑块验证码。密钥缺省时每次启动随机生成：
+ * 挑战与通过令牌本来就只活几分钟，重启作废无碍；
+ * 多实例部署才需要显式传 CAPTCHA_SECRET 保证签名一致。
+ */
+const captcha = createCaptcha({ secret: process.env.CAPTCHA_SECRET })
 
 /** 会话令牌只存服务端，Cookie 里放随机令牌即可 */
 const SESSION_COOKIE = 'rs_session'
@@ -332,19 +340,52 @@ app.get('/api/health', async (req, res) => {
 
 app.use(express.json({ limit: '8mb' }))
 
+/* ---------------- 滑块验证码 ---------------- */
+
+/** 发起挑战。缺口坐标只留在内存里，响应里只有图形与块的纵坐标 */
+app.get('/api/captcha', (req, res) => {
+  res.json({ ok: true, ...captcha.challenge() })
+})
+
+/** 校验拖动结果：落进容差才换发一次性通过令牌 */
+app.post('/api/captcha/verify', (req, res) => {
+  const { id, x } = req.body || {}
+  const result = captcha.verify(id, x)
+
+  if (!result.ok) {
+    const message =
+      result.reason === 'expired' ? '验证已过期，请重新拖动' : '验证未通过，请重新拖动'
+    res.status(400).json({ ok: false, message })
+    return
+  }
+
+  res.json({ ok: true, token: result.token })
+})
+
 /* ---------------- 账号 ---------------- */
 
 /**
  * 注册并直接登录。
- * 开放注册按 IP 限频（每小时 5 次），防脚本批量建号；个人部署如需收紧，
+ * 人机防线两层：滑块验证码（每次注册消耗一个通过令牌）+ 按 IP 限频
+ * （每小时 5 次）。防脚本批量建号；个人部署如需收紧，
  * 可用反代再加一层，或改为注册邀请码。
  */
 app.post('/api/auth/register', (req, res, next) => {
-  const { username, password } = req.body || {}
+  const { username, password, captchaToken } = req.body || {}
 
   const invalid = validateCredentials(username, password)
   if (invalid) {
     res.status(400).json({ ok: false, message: invalid })
+    return
+  }
+
+  // 滑块验证放在限频之前：没通过验证的请求不去占用每小时注册额度
+  if (!captcha.consume(captchaToken)) {
+    res.status(400).json({
+      ok: false,
+      captchaRequired: true,
+      message: '滑块验证未通过或已过期，请重新完成验证',
+    })
     return
   }
 
