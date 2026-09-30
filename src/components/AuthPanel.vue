@@ -6,7 +6,7 @@
  */
 import { ref, shallowRef } from 'vue'
 
-import SliderCaptcha from '@/components/SliderCaptcha.vue'
+import CaptchaDialog from '@/components/CaptchaDialog.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useToast } from '@/composables/useToast'
 
@@ -24,15 +24,15 @@ const mode = shallowRef(props.initialMode === 'register' ? 'register' : 'login')
 const username = ref('')
 const password = ref('')
 const captchaToken = ref('')
-const captchaRef = ref(null)
+/** 滑块验证弹窗：点击「注册并登录」时才拉起，不在表单里常驻 */
+const captchaOpen = shallowRef(false)
 const busy = shallowRef(false)
 const error = shallowRef('')
 
 function switchMode(next) {
   mode.value = next
   error.value = ''
-  // 切到登录时滑块随 v-if 卸载，令牌一并清掉
-  if (next !== 'register') captchaToken.value = ''
+  captchaToken.value = ''
 }
 
 /** 与服务端 validateCredentials 相同的规则，先拦一道省一次往返 */
@@ -43,7 +43,6 @@ function validate() {
   }
   if (password.value.length < 8) return '密码至少 8 位'
   if (password.value.length > 72) return '密码最长 72 位'
-  if (mode.value === 'register' && !captchaToken.value) return '请先完成滑块验证'
   return ''
 }
 
@@ -57,6 +56,12 @@ async function submit() {
     return
   }
 
+  // 注册先过人机验证：此处弹出滑块窗口，通过后 onCaptchaVerified 回到本函数
+  if (mode.value === 'register' && !captchaToken.value) {
+    captchaOpen.value = true
+    return
+  }
+
   busy.value = true
   try {
     const user =
@@ -67,11 +72,18 @@ async function submit() {
     emit('authed', user)
   } catch (requestError) {
     error.value = requestError.message || '请求失败'
-    // 注册请求会把通过令牌消费掉（无论成败），失败后必须重做滑块验证
-    if (mode.value === 'register') captchaRef.value?.refresh()
+    // 注册请求会把通过令牌消费掉（无论成败），重新提交时会再次弹出滑块
+    captchaToken.value = ''
   } finally {
     busy.value = false
   }
+}
+
+/** 滑块验证通过：收下一次性令牌，关弹窗并自动继续注册 */
+function onCaptchaVerified(token) {
+  captchaToken.value = token
+  captchaOpen.value = false
+  submit()
 }
 </script>
 
@@ -126,13 +138,6 @@ async function submit() {
         />
       </label>
 
-      <SliderCaptcha
-        v-if="mode === 'register'"
-        ref="captchaRef"
-        v-model="captchaToken"
-        :disabled="busy"
-      />
-
       <p v-if="error" class="auth-error" role="alert">{{ error }}</p>
 
       <button class="ed-btn ed-btn-primary ed-btn-block" type="submit" :disabled="busy">
@@ -143,6 +148,13 @@ async function submit() {
     <p class="auth-hint">
       登录后简历自动云端同步，可在任何设备继续编辑；不登录也可以直接使用本地编辑与打印导出。
     </p>
+
+    <!-- 验证码弹窗 Teleport 到 body，放在这里只是便于就近阅读 -->
+    <CaptchaDialog
+      :open="captchaOpen"
+      @verified="onCaptchaVerified"
+      @cancel="captchaOpen = false"
+    />
   </div>
 </template>
 
