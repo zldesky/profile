@@ -5,6 +5,8 @@
  * 用单一根容器包裹以便父级用 v-show 切换。
  */
 import ColorSection from '@/components/editor/design/ColorSection.vue'
+import CustomLayoutPanel from '@/components/editor/design/CustomLayoutPanel.vue'
+import ImageTemplatePanel from '@/components/editor/design/ImageTemplatePanel.vue'
 import TemplatePicker from '@/components/editor/design/TemplatePicker.vue'
 import TitleSection from '@/components/editor/design/TitleSection.vue'
 import TypographySection from '@/components/editor/design/TypographySection.vue'
@@ -16,6 +18,8 @@ const store = useResumeStore()
 <template>
   <div class="panel-design">
     <TemplatePicker />
+    <CustomLayoutPanel />
+    <ImageTemplatePanel />
     <ColorSection />
     <TypographySection />
     <TitleSection />

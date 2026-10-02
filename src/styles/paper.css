@@ -634,6 +634,30 @@ textarea {
   height: 45%;
 }
 
+/* ---------------- 纸面模块选中（编辑态视觉，打印时移除） ---------------- */
+
+.r-sec[data-sec-id] {
+  cursor: grab;
+}
+
+.r-sec.is-sec-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.paper.is-sec-dragging {
+  user-select: none;
+}
+
+.paper.is-sec-dragging .r-sec[data-sec-id] {
+  cursor: grabbing;
+}
+
+.paper.is-sec-dragging .r-sec.is-sec-selected {
+  outline-style: dashed;
+  box-shadow: 0 4px 14px rgba(20, 30, 50, 0.16);
+}
+
 /* ---------------- 深色区域反白 ---------------- */
 
 .on-dark .r-title {
@@ -736,6 +760,12 @@ textarea {
 
   .r-avatar {
     cursor: auto;
+    box-shadow: none !important;
+  }
+
+  /* 选中态是编辑期视觉，不应出现在导出结果里 */
+  .r-sec.is-sec-selected {
+    outline: none !important;
     box-shadow: none !important;
   }
 

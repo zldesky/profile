@@ -1,7 +1,7 @@
 <script setup>
 /**
- * 时间轴模板。
- * 单栏结构，经历条目沿左侧竖轴排列，突出职业发展节奏。
+ * 标题左列模板。
+ * 模块标题独立成列居左，正文统一对齐右轴，形成稳定双轴的美式简历排版。
  */
 import { computed } from 'vue'
 
@@ -21,12 +21,8 @@ const selectedSet = computed(() => new Set(props.selectedIds))
 </script>
 
 <template>
-  <div class="tpl-timeline">
+  <div class="tpl-labelcol">
     <header class="head">
-      <div v-if="basics.showAvatar" class="r-avatar">
-        <img v-if="basics.avatar" :src="basics.avatar" alt="头像" />
-        <SvgIcon v-else name="user" />
-      </div>
       <div class="who">
         <h1 class="r-name">{{ basics.name }}</h1>
         <p v-if="basics.jobTitle" class="r-job">{{ basics.jobTitle }}</p>
@@ -39,50 +35,49 @@ const selectedSet = computed(() => new Set(props.selectedIds))
           </div>
         </div>
       </div>
+
+      <div v-if="basics.showAvatar" class="r-avatar">
+        <img v-if="basics.avatar" :src="basics.avatar" alt="头像" />
+        <SvgIcon v-else name="user" />
+      </div>
     </header>
 
     <section
       v-for="section in sections"
       :key="section.id"
-      class="r-sec"
+      class="r-sec row"
       :class="{ 'is-sec-selected': selectedSet.has(section.id) }"
       :data-sec-id="section.id"
       :style="sectionLayoutStyle(section)"
     >
-      <h2 class="r-title">
+      <!-- 标题列宽固定，所有模块的正文从同一竖轴起排；点线延伸在定宽列里没有延伸空间，不渲染 -->
+      <h2 class="r-title row-title">
         <span class="dot"></span>
         <span>{{ section.title }}</span>
-        <span class="r-leader"></span>
       </h2>
-      <SectionBody :section="section" />
+      <div class="row-body">
+        <SectionBody :section="section" />
+      </div>
     </section>
   </div>
 </template>
 
 <style scoped>
-/* 头像为绝对定位，页头需自行撑出与头像等高的空间 */
+/*
+ * 页头同时容纳「姓名 + 职位 + 基本信息」与绝对定位的头像，
+ * 与经典模板一致：min-height 撑出头像高度带，基本信息随 .who 避让头像。
+ */
 .head {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 1.1em;
-  padding-bottom: 0.9em;
-  border-bottom: 2px solid var(--accent);
+  gap: 1.5em;
   min-height: calc(var(--avatar-h, 35mm) + var(--avatar-extra-h, 0mm));
+  padding-bottom: 0.85em;
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.35);
 }
 
-.head .r-avatar {
-  border-width: 1px;
-}
-
-/*
- * 基本信息放进页头，与经典 / 双栏模板一致：
- * 既填满头像 35mm 的高度带（否则这段高度整片空着把内容推远），
- * 也让它随 .who 一起获得头像避让内边距，头像拖到哪边都不会压住它。
- *
- * 本行只剩一个子元素（头像绝对定位），必须显式占满宽度，
- * 否则两列网格会按内容宽度收缩而不是铺满整行。
- */
+/* 头像绝对定位后本行只剩一个子元素，需显式占满宽度，基本信息的两列网格才排得开 */
 .who {
   flex: 1 1 auto;
   min-width: 0;
@@ -90,43 +85,27 @@ const selectedSet = computed(() => new Set(props.selectedIds))
   padding-right: var(--avatar-pad-right, 0);
 }
 
+/* 间距跟随主题的模块间距，换主题时不会显得脱节 */
 .contact {
   margin-top: calc(0.6em * var(--gap, 1));
   /* 列数由正文可用宽度决定：头像挤到中部时可退回单列 */
   grid-template-columns: repeat(var(--contact-cols, 2), minmax(0, 1fr));
 }
 
-/* 经历条目改为沿竖轴排列 */
-.tpl-timeline :deep(.r-entry) {
-  position: relative;
-  margin-top: 0;
-  padding: 0.55em 0 0.55em 1.7em;
-  border-left: 1px solid rgba(var(--accent-rgb), 0.35);
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.2em;
 }
 
-.tpl-timeline :deep(.r-entry:first-child) {
-  padding-top: 0.15em;
+/* 定宽标题列：标题样式（色块/描边等）在列内呈现为等宽标签块 */
+.row-title {
+  flex: 0 0 7.5em;
+  margin-bottom: 0;
 }
 
-.tpl-timeline :deep(.r-entry:last-child) {
-  padding-bottom: 0;
-  border-left-color: transparent;
-}
-
-.tpl-timeline :deep(.r-entry)::before {
-  content: '';
-  position: absolute;
-  top: 0.75em;
-  left: -0.34em;
-  width: 0.68em;
-  height: 0.68em;
-  border: 2px solid #fff;
-  border-radius: 50%;
-  background: var(--accent);
-  box-sizing: content-box;
-}
-
-.tpl-timeline :deep(.r-entry:first-child)::before {
-  top: 0.35em;
+.row-body {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 </style>

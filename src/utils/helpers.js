@@ -120,31 +120,57 @@ export function readImageAsDataUrl(file, maxSize = 420, format = 'jpeg') {
     const reader = new FileReader()
 
     reader.onerror = () => reject(new Error('文件读取失败'))
-    reader.onload = () => {
-      const img = new Image()
-      img.onerror = () => reject(new Error('图片无法解析'))
-      img.onload = () => {
-        const scale = Math.min(1, maxSize / Math.max(img.width, img.height))
-        const canvas = document.createElement('canvas')
-        canvas.width = Math.max(1, Math.round(img.width * scale))
-        canvas.height = Math.max(1, Math.round(img.height * scale))
-
-        const ctx = canvas.getContext('2d')
-        if (format === 'jpeg') {
-          // JPEG 不支持透明通道，先铺白底，避免透明区域发黑
-          ctx.fillStyle = '#ffffff'
-          ctx.fillRect(0, 0, canvas.width, canvas.height)
-        }
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-
-        resolve(
-          format === 'png' ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.9),
-        )
-      }
-      img.src = reader.result
-    }
+    reader.onload = () => compressDataUrl(reader.result, maxSize, format).then(resolve, reject)
 
     reader.readAsDataURL(file)
+  })
+}
+
+/**
+ * 把已加载的 DataURL 图片等比压缩为 DataURL，压缩规则同 readImageAsDataUrl。
+ * 裁剪弹窗裁完的原图、文件直读两条路径共用，保证入库体积一致。
+ * @param {string} dataUrl 图片 DataURL
+ * @param {number} maxSize 最长边像素上限
+ * @param {'jpeg'|'png'} format 输出格式
+ * @returns {Promise<string>}
+ */
+export function compressDataUrl(dataUrl, maxSize = 420, format = 'jpeg') {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onerror = () => reject(new Error('图片无法解析'))
+    img.onload = () => {
+      const scale = Math.min(1, maxSize / Math.max(img.width, img.height))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(img.width * scale))
+      canvas.height = Math.max(1, Math.round(img.height * scale))
+
+      const ctx = canvas.getContext('2d')
+      if (format === 'jpeg') {
+        // JPEG 不支持透明通道，先铺白底，避免透明区域发黑
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+      }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+
+      resolve(
+        format === 'png' ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.9),
+      )
+    }
+    img.src = dataUrl
+  })
+}
+
+/**
+ * 读取图片的原始像素尺寸。
+ * @param {string} src 图片 DataURL 或 Object URL
+ * @returns {Promise<{width: number, height: number}>}
+ */
+export function readImageSize(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight })
+    img.onerror = () => reject(new Error('图片无法解析'))
+    img.src = src
   })
 }
 

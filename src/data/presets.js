@@ -228,6 +228,41 @@ export const AVATAR_SIZE_RANGE = {
 }
 
 /**
+ * 自由定制模板的布局参数。
+ * 存放在 theme.customLayout，normalizeResume 负责补默认值与纠错。
+ */
+export const CUSTOM_MODES = [
+  { value: 'single', label: '单栏' },
+  { value: 'railLeft', label: '左侧栏' },
+  { value: 'railRight', label: '右侧栏' },
+  { value: 'split', label: '双栏' },
+]
+
+/** 窄栏（侧栏 / 双栏窄侧）占版心的宽度比例 */
+export const CUSTOM_RATIOS = [
+  { value: '28', label: '窄' },
+  { value: '34', label: '中' },
+  { value: '40', label: '宽' },
+]
+
+/** 页头形态 */
+export const CUSTOM_HEADERS = [
+  { value: 'left', label: '左对齐' },
+  { value: 'center', label: '居中' },
+  { value: 'banner', label: '通栏色带' },
+]
+
+export const DEFAULT_CUSTOM_LAYOUT = {
+  mode: 'single',
+  ratio: '34',
+  header: 'left',
+  /* 模块装入浅色卡片 */
+  cards: false,
+  /* 双栏时栏间细分隔线 */
+  divider: true,
+}
+
+/**
  * 模板清单。
  * id 需与 templates/index.js 中的注册键一致。
  */
@@ -261,6 +296,48 @@ export const TEMPLATES = [
     name: '极简留白',
     desc: '无装饰色块，适合学术与研究岗位',
     tags: ['学术', '外企'],
+  },
+  {
+    id: 'banner',
+    name: '通栏色带',
+    desc: '顶部满宽色带承载头像与联系方式，正文单栏',
+    tags: ['互联网', '应届生'],
+  },
+  {
+    id: 'business',
+    name: '居中正式',
+    desc: '中轴对称的居中排版，双细线收束页头，庄重正式',
+    tags: ['国企', '事业单位'],
+  },
+  {
+    id: 'cards',
+    name: '卡片分区',
+    desc: '模块装入浅色圆角卡片，分区层次一目了然',
+    tags: ['产品', '运营'],
+  },
+  {
+    id: 'rightbar',
+    name: '右侧色栏',
+    desc: '深色竖栏靠右，正文在左，与左侧色栏互为镜像',
+    tags: ['设计', '外贸'],
+  },
+  {
+    id: 'labelcol',
+    name: '标题左列',
+    desc: '模块标题独立成列，正文对齐右轴，美式简历风格',
+    tags: ['外企', '研究'],
+  },
+  {
+    id: 'flowcols',
+    name: '双栏流式',
+    desc: '模块在左右两栏间自动流动，版面紧凑均衡',
+    tags: ['经验丰富', '紧凑'],
+  },
+  {
+    id: 'custom',
+    name: '自由定制',
+    desc: '栏式、窄栏宽度、页头形态、卡片、分隔线随心组合',
+    tags: ['自定义'],
   },
 ]
 

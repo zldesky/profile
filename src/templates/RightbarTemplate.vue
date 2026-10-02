@@ -1,7 +1,7 @@
 <script setup>
 /**
- * 左侧色栏模板。
- * 左侧深色竖栏承载联系方式与静态信息（键值网格、技能），右侧正文栏承载经历描述。
+ * 右侧色栏模板。
+ * 左侧色栏的镜像：右侧深色竖栏承载联系方式与静态信息（键值网格、技能），左侧正文栏承载经历描述。
  */
 import { computed } from 'vue'
 
@@ -26,7 +26,25 @@ const bodySections = computed(() => sections.value.filter((s) => !railTypes.incl
 </script>
 
 <template>
-  <div class="tpl-sidebar tpl-bleed">
+  <div class="tpl-rightbar tpl-bleed">
+    <main class="body">
+      <section
+        v-for="section in bodySections"
+        :key="section.id"
+        class="r-sec"
+        :class="{ 'is-sec-selected': selectedSet.has(section.id) }"
+        :data-sec-id="section.id"
+        :style="sectionLayoutStyle(section)"
+      >
+        <h2 class="r-title">
+          <span class="dot"></span>
+          <span>{{ section.title }}</span>
+          <span class="r-leader"></span>
+        </h2>
+        <SectionBody :section="section" />
+      </section>
+    </main>
+
     <aside class="rail on-dark">
       <div class="profile">
         <div v-if="basics.showAvatar" class="r-avatar">
@@ -68,29 +86,19 @@ const bodySections = computed(() => sections.value.filter((s) => !railTypes.incl
         <SectionBody :section="section" />
       </section>
     </aside>
-
-    <main class="body">
-      <section
-        v-for="section in bodySections"
-        :key="section.id"
-        class="r-sec"
-        :class="{ 'is-sec-selected': selectedSet.has(section.id) }"
-        :data-sec-id="section.id"
-        :style="sectionLayoutStyle(section)"
-      >
-        <h2 class="r-title">
-          <span class="dot"></span><span>{{ section.title }}</span>
-        </h2>
-        <SectionBody :section="section" />
-      </section>
-    </main>
   </div>
 </template>
 
 <style scoped>
-.tpl-sidebar {
+.tpl-rightbar {
   display: flex;
   align-items: stretch;
+}
+
+.body {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--mv) 1.8em var(--mv) 1.6em;
 }
 
 .rail {
@@ -100,12 +108,6 @@ const bodySections = computed(() => sections.value.filter((s) => !railTypes.incl
   padding: var(--mv) 1.6em;
   background: var(--accent);
   color: #fff;
-}
-
-.body {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: var(--mv) 1.6em var(--mv) 1.8em;
 }
 
 .profile {

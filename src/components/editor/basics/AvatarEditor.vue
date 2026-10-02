@@ -7,17 +7,22 @@
  */
 import { computed, shallowRef, useTemplateRef } from 'vue'
 
+import AvatarCropDialog from '@/components/editor/basics/AvatarCropDialog.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { useToast } from '@/composables/useToast'
 import { AVATAR_SHAPES, AVATAR_SIZE_PRESETS, AVATAR_SIZE_RANGE } from '@/data/presets'
 import { useResumeStore } from '@/stores/resume'
-import { readImageAsDataUrl } from '@/utils/helpers'
+import { aspectMatches } from '@/utils/imageCrop'
+import { compressDataUrl, readImageAsDataUrl, readImageSize } from '@/utils/helpers'
 
 const store = useResumeStore()
 const { toast } = useToast()
 
 const fileInput = useTemplateRef('fileInput')
 const uploading = shallowRef(false)
+/** 待裁剪的照片（DataURL），比例与头像框不一致时弹窗处理 */
+const cropSrc = shallowRef('')
+const showCrop = shallowRef(false)
 
 const isPresetActive = (preset) =>
   store.basics.avatarWidth === preset.width && store.basics.avatarHeight === preset.height
@@ -46,14 +51,42 @@ async function onAvatarChange(event) {
 
   uploading.value = true
   try {
-    const dataUrl = await readImageAsDataUrl(file)
-    store.setBasics({ avatar: dataUrl, showAvatar: true })
-    toast('头像已更新')
+    // 先读一份高分辨率原片：比例一致直接压缩入库，不一致进裁剪弹窗选保留区域
+    const raw = await readImageAsDataUrl(file, 1600, 'png')
+    const { width, height } = await readImageSize(raw)
+    const matches = aspectMatches(
+      width,
+      height,
+      store.basics.avatarWidth,
+      store.basics.avatarHeight,
+    )
+
+    if (matches) {
+      const avatar = await compressDataUrl(raw, 420, 'jpeg')
+      store.setBasics({ avatar, showAvatar: true })
+      toast('头像已更新')
+    } else {
+      cropSrc.value = raw
+      showCrop.value = true
+    }
   } catch (error) {
     toast(`头像处理失败：${error.message}`)
   } finally {
     uploading.value = false
   }
+}
+
+async function onCropConfirm(dataUrl) {
+  showCrop.value = false
+  cropSrc.value = ''
+  store.setBasics({ avatar: dataUrl, showAvatar: true })
+  toast('头像已按选定区域更新')
+}
+
+function onCropCancel() {
+  showCrop.value = false
+  cropSrc.value = ''
+  toast('已取消裁剪，头像未更改')
 }
 </script>
 
@@ -194,8 +227,20 @@ async function onAvatarChange(event) {
       35×49mm。圆形要求宽高相等，否则会被拉成椭圆，可先用「正方形」预设。
     </p>
     <p class="ed-hint">头像会自动压缩至长边 420px 并转为 JPEG，用于控制简历数据体积。</p>
+    <p class="ed-hint">
+      照片比例与当前头像尺寸不一致时会先弹出裁剪窗：拖动选取保留区域、滑杆缩放后再确认；比例一致则直接使用。
+    </p>
 
     <input ref="fileInput" type="file" accept="image/*" hidden @change="onAvatarChange" />
+
+    <AvatarCropDialog
+      :open="showCrop"
+      :src="cropSrc"
+      :frame-width="store.basics.avatarWidth"
+      :frame-height="store.basics.avatarHeight"
+      @confirm="onCropConfirm"
+      @cancel="onCropCancel"
+    />
   </div>
 </template>
 

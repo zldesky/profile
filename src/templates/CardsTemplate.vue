@@ -1,7 +1,7 @@
 <script setup>
 /**
- * 时间轴模板。
- * 单栏结构，经历条目沿左侧竖轴排列，突出职业发展节奏。
+ * 卡片分区模板。
+ * 页头沿用经典布局，正文每个模块装入浅色底纹的圆角卡片，分区一目了然。
  */
 import { computed } from 'vue'
 
@@ -21,12 +21,8 @@ const selectedSet = computed(() => new Set(props.selectedIds))
 </script>
 
 <template>
-  <div class="tpl-timeline">
+  <div class="tpl-cards">
     <header class="head">
-      <div v-if="basics.showAvatar" class="r-avatar">
-        <img v-if="basics.avatar" :src="basics.avatar" alt="头像" />
-        <SvgIcon v-else name="user" />
-      </div>
       <div class="who">
         <h1 class="r-name">{{ basics.name }}</h1>
         <p v-if="basics.jobTitle" class="r-job">{{ basics.jobTitle }}</p>
@@ -38,6 +34,11 @@ const selectedSet = computed(() => new Set(props.selectedIds))
             <span class="r-val">{{ field.value }}</span>
           </div>
         </div>
+      </div>
+
+      <div v-if="basics.showAvatar" class="r-avatar">
+        <img v-if="basics.avatar" :src="basics.avatar" alt="头像" />
+        <SvgIcon v-else name="user" />
       </div>
     </header>
 
@@ -60,29 +61,20 @@ const selectedSet = computed(() => new Set(props.selectedIds))
 </template>
 
 <style scoped>
-/* 头像为绝对定位，页头需自行撑出与头像等高的空间 */
+/*
+ * 页头同时容纳「姓名 + 职位 + 基本信息」与绝对定位的头像，
+ * 与经典模板一致：min-height 撑出头像高度带，基本信息随 .who 避让头像。
+ */
 .head {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 1.1em;
-  padding-bottom: 0.9em;
-  border-bottom: 2px solid var(--accent);
+  gap: 1.5em;
   min-height: calc(var(--avatar-h, 35mm) + var(--avatar-extra-h, 0mm));
+  padding-bottom: 0.5em;
 }
 
-.head .r-avatar {
-  border-width: 1px;
-}
-
-/*
- * 基本信息放进页头，与经典 / 双栏模板一致：
- * 既填满头像 35mm 的高度带（否则这段高度整片空着把内容推远），
- * 也让它随 .who 一起获得头像避让内边距，头像拖到哪边都不会压住它。
- *
- * 本行只剩一个子元素（头像绝对定位），必须显式占满宽度，
- * 否则两列网格会按内容宽度收缩而不是铺满整行。
- */
+/* 头像绝对定位后本行只剩一个子元素，需显式占满宽度，基本信息的两列网格才排得开 */
 .who {
   flex: 1 1 auto;
   min-width: 0;
@@ -90,43 +82,25 @@ const selectedSet = computed(() => new Set(props.selectedIds))
   padding-right: var(--avatar-pad-right, 0);
 }
 
+/* 间距跟随主题的模块间距，换主题时不会显得脱节 */
 .contact {
   margin-top: calc(0.6em * var(--gap, 1));
   /* 列数由正文可用宽度决定：头像挤到中部时可退回单列 */
   grid-template-columns: repeat(var(--contact-cols, 2), minmax(0, 1fr));
 }
 
-/* 经历条目改为沿竖轴排列 */
-.tpl-timeline :deep(.r-entry) {
-  position: relative;
-  margin-top: 0;
-  padding: 0.55em 0 0.55em 1.7em;
-  border-left: 1px solid rgba(var(--accent-rgb), 0.35);
+/*
+ * 卡片即模块：底纹与描边都从主色派生，换配色时整版卡片随之换色。
+ * 模块间距（.r-sec 的 margin-top）直接充当卡片间距，不另造间距变量。
+ */
+.tpl-cards .r-sec {
+  padding: 0.8em 1.1em 0.95em;
+  background: rgba(var(--accent-rgb), 0.045);
+  border: 1px solid rgba(var(--accent-rgb), 0.13);
+  border-radius: 0.5em;
 }
 
-.tpl-timeline :deep(.r-entry:first-child) {
-  padding-top: 0.15em;
-}
-
-.tpl-timeline :deep(.r-entry:last-child) {
-  padding-bottom: 0;
-  border-left-color: transparent;
-}
-
-.tpl-timeline :deep(.r-entry)::before {
-  content: '';
-  position: absolute;
-  top: 0.75em;
-  left: -0.34em;
-  width: 0.68em;
-  height: 0.68em;
-  border: 2px solid #fff;
-  border-radius: 50%;
-  background: var(--accent);
-  box-sizing: content-box;
-}
-
-.tpl-timeline :deep(.r-entry:first-child)::before {
-  top: 0.35em;
+.tpl-cards .r-sec:first-of-type {
+  margin-top: 0.65em;
 }
 </style>

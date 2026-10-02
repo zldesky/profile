@@ -1,8 +1,8 @@
 <script setup>
 /**
  * 预览区。
- * 按当前模板渲染 A4 纸张；缩放、页数估算与头像拖拽分别由 composable 承载，
- * 本组件只负责组合、注入 @page 打印边距与「压缩到一页」。
+ * 按当前模板渲染 A4 纸张；缩放、页数估算、头像拖拽与模块框选/整组拖拽
+ * 分别由 composable 承载，本组件只负责组合、注入 @page 打印边距与「压缩到一页」。
  */
 import {
   computed,
@@ -15,11 +15,14 @@ import {
 } from 'vue'
 
 import PreviewToolbar from '@/components/preview/PreviewToolbar.vue'
+import SelectionToolbar from '@/components/preview/SelectionToolbar.vue'
 import { useAvatarDrag } from '@/composables/useAvatarDrag'
 import { usePageMetrics } from '@/composables/usePageMetrics'
+import { usePaperSelection } from '@/composables/usePaperSelection'
 import { usePaperZoom } from '@/composables/usePaperZoom'
 import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
+import { useSelectionStore } from '@/stores/selection'
 import { resolveTemplate } from '@/templates'
 
 const PRINT_STYLE_ID = 'resume-print-page'
@@ -37,15 +40,77 @@ const compressing = shallowRef(false)
 
 const { zoom, autoFit, resizeTick, fit, zoomBy, resetFit } = usePaperZoom(scrollRef)
 const { pageCount, measure, refresh } = usePageMetrics(paperRef, zoom)
-const { dragging, offset, syncLimits, onPaperPointerDown } = useAvatarDrag(paperRef, zoom)
+const {
+  dragging,
+  offset,
+  syncLimits,
+  onPaperPointerDown: onAvatarPointerDown,
+} = useAvatarDrag(paperRef, zoom)
+const selection = useSelectionStore()
+const {
+  bandRect,
+  secDragging,
+  toolbarAnchor,
+  onPaperPointerDown: onSectionPointerDown,
+  syncToolbar,
+} = usePaperSelection(paperRef, scrollRef, zoom)
 
 const templateComponent = computed(() => resolveTemplate(store.resume.template))
 const paperStyle = computed(() => ({ ...store.pageStyle, '--zoom': zoom.value }))
 
-/** 页数与头像边界都必须在 DOM 稳定后测量 */
+/** 框选 overlay 的视口定位 */
+const bandStyle = computed(() => {
+  const rect = bandRect.value
+  if (!rect) return {}
+  return {
+    left: `${rect.left}px`,
+    top: `${rect.top}px`,
+    width: `${rect.right - rect.left}px`,
+    height: `${rect.bottom - rect.top}px`,
+  }
+})
+
+/**
+ * 纸面按下：头像拖拽与模块框选/整组拖拽各自判断命中目标，互不干扰。
+ */
+function onPaperPointerDown(event) {
+  onSectionPointerDown(event)
+  onAvatarPointerDown(event)
+}
+
+/** 页数、头像边界与多选工具条位置都必须在 DOM 稳定后测量 */
 async function refreshLayout() {
   await refresh()
   syncLimits()
+  syncToolbar()
+}
+
+// 选中集变化后模块高亮随之增减，DOM 稳定后再贴工具条
+watch(
+  () => selection.ids,
+  () => nextTick(syncToolbar),
+)
+
+/** 批量显隐：任一选中模块可见则全部隐藏，否则全部显示 */
+function batchToggleVisible() {
+  const picked = store.sections.filter((s) => selection.has(s.id))
+  if (!picked.length) return
+  const anyVisible = picked.some((s) => s.visible)
+  picked.forEach((s) => store.updateSection(s.id, { visible: !anyVisible }))
+  // 隐藏后纸上已无对应元素，选中集随之清空
+  if (anyVisible) selection.clear()
+}
+
+/** 批量微调左缩进 / 上方间距，步长与范围与编辑面板的滑杆一致 */
+function batchAdjustLayout(field, step) {
+  const range = field === 'indent' ? { min: -24, max: 48 } : { min: -12, max: 48 }
+  store.sections
+    .filter((s) => selection.has(s.id))
+    .forEach((s) => {
+      const current = Number(s.layout?.[field]) || 0
+      const next = Math.min(range.max, Math.max(range.min, current + step))
+      if (next !== current) store.updateSectionLayout(s.id, { [field]: next })
+    })
 }
 
 /** 把 @page 边距写入 head，打印时与预览保持一致 */
@@ -118,7 +183,7 @@ async function compressToOnePage() {
       <div
         ref="paperRef"
         class="paper"
-        :class="{ 'is-avatar-dragging': dragging }"
+        :class="{ 'is-avatar-dragging': dragging, 'is-sec-dragging': secDragging }"
         :style="paperStyle"
         :data-tstyle="store.theme.titleStyle"
         :data-marker="store.theme.titleMarker"
@@ -126,9 +191,21 @@ async function compressToOnePage() {
         :data-shape="store.basics.avatarShape"
         @pointerdown="onPaperPointerDown"
       >
-        <component :is="templateComponent" :resume="store.resume" />
+        <component :is="templateComponent" :resume="store.resume" :selected-ids="selection.ids" />
       </div>
     </div>
+
+    <div v-if="bandRect" class="sel-band no-print" :style="bandStyle"></div>
+
+    <SelectionToolbar
+      v-if="toolbarAnchor"
+      :anchor="toolbarAnchor"
+      :count="selection.count"
+      @toggle-visible="batchToggleVisible"
+      @gap="(step) => batchAdjustLayout('extraGap', step)"
+      @indent="(step) => batchAdjustLayout('indent', step)"
+      @clear="selection.clear()"
+    />
 
     <PreviewToolbar
       :zoom="zoom"
@@ -169,6 +246,16 @@ async function compressToOnePage() {
 .paper {
   flex: 0 0 auto;
   box-shadow: 0 3px 22px rgba(20, 30, 50, 0.14);
+}
+
+/* 框选矩形：视口定位的 overlay，不参与打印（no-print）也不拦截指针 */
+.sel-band {
+  position: fixed;
+  z-index: 50;
+  border: 1px solid rgba(43, 87, 154, 0.65);
+  border-radius: 3px;
+  background: rgba(43, 87, 154, 0.12);
+  pointer-events: none;
 }
 
 @media (max-width: 900px) {

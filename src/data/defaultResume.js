@@ -1,5 +1,7 @@
 import { uid } from '@/utils/helpers'
 
+import { DEFAULT_CUSTOM_LAYOUT } from '@/data/presets'
+
 /**
  * 简历数据结构说明
  *
@@ -49,6 +51,9 @@ export const DEFAULT_THEME = {
   titleBottomThickness: 2, // 线宽（px）
   titleBottomGap: 4, // 底边线与标题文字的垂直间距（px）
   titleBottomAlign: 'left', // 线的起始位置：left / center / right
+
+  /* 自由定制模板的布局参数，可选值见 presets.js 的 CUSTOM_* 选项 */
+  customLayout: { ...DEFAULT_CUSTOM_LAYOUT },
 }
 
 /** 头像默认尺寸（毫米），取国内 1 寸证件照标准 25×35 */

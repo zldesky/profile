@@ -34,6 +34,7 @@ import {
 } from './auth.js'
 import { createCaptcha } from './captcha.js'
 import { createDatabase } from './db.js'
+import { fetchRemoteImage } from './imageProxy.js'
 import {
   closeBrowser,
   ensureBrowser,
@@ -595,6 +596,26 @@ app.post('/api/pdf', requireAuth, async (req, res) => {
     quotaRefund(GLOBAL_SUBJECT)
     console.error('[pdf] 渲染失败：', error)
     res.status(error.statusCode || 500).json({ ok: false, message: error.message || '渲染失败' })
+  }
+})
+
+/**
+ * 远程图片代理：「图片生成模板」需要把网络图片画进 Canvas 读像素，
+ * 前端直取会被 CORS 污染画布，由本机服务代取。
+ * 任意 URL 抓取是高危能力，与导出同为登录后能力，目标校验见 imageProxy.js。
+ */
+app.post('/api/image-proxy', requireAuth, async (req, res) => {
+  const url = typeof req.body?.url === 'string' ? req.body.url.trim() : ''
+  if (!url) {
+    res.status(400).json({ ok: false, message: '缺少图片链接' })
+    return
+  }
+  try {
+    const result = await fetchRemoteImage(url)
+    res.json({ ok: true, ...result })
+  } catch (error) {
+    // 目标校验不通过、下载失败都属于调用方问题，统一 400 并回传原因
+    res.status(400).json({ ok: false, message: error.message || '抓取失败' })
   }
 })
 

@@ -41,6 +41,19 @@ describe('normalizeResume', () => {
     const normalized = normalizeResume({ theme: { fontKey: 'comic-sans' }, sections: [] })
     expect(normalized.theme.fontKey).toBe(normalized.theme.fontKey)
   })
+
+  it('自由定制布局缺省补全，非法枚举值回退默认', () => {
+    const normalized = normalizeResume({
+      theme: { customLayout: { mode: 'banana', header: 'banner', cards: 'yes' } },
+      sections: [],
+    })
+    const layout = normalized.theme.customLayout
+    expect(layout.mode).toBe('single') // 非法枚举回退
+    expect(layout.header).toBe('banner') // 合法值保留
+    expect(layout.ratio).toBe('34') // 缺省补默认
+    expect(layout.cards).toBe(false) // 与 showLogo 同约定：仅明确 true 才开启
+    expect(layout.divider).toBe(true)
+  })
 })
 
 describe('helpers', () => {

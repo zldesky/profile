@@ -1,7 +1,8 @@
 <script setup>
 /**
- * 经典单栏模板。
- * 姓名 + 头像居顶，基本信息两列网格，正文模块自上而下堆叠。
+ * 双栏流式模板。
+ * 正文用 CSS 多栏排布：模块按顺序填入左栏再流入右栏，版面利用率最高，
+ * 适合内容较多、追求紧凑均衡的简历。
  */
 import { computed } from 'vue'
 
@@ -21,7 +22,7 @@ const selectedSet = computed(() => new Set(props.selectedIds))
 </script>
 
 <template>
-  <div class="tpl-classic">
+  <div class="tpl-flowcols">
     <header class="head">
       <div class="who">
         <h1 class="r-name">{{ basics.name }}</h1>
@@ -42,31 +43,30 @@ const selectedSet = computed(() => new Set(props.selectedIds))
       </div>
     </header>
 
-    <section
-      v-for="section in sections"
-      :key="section.id"
-      class="r-sec"
-      :class="{ 'is-sec-selected': selectedSet.has(section.id) }"
-      :data-sec-id="section.id"
-      :style="sectionLayoutStyle(section)"
-    >
-      <h2 class="r-title">
-        <span class="dot"></span>
-        <span>{{ section.title }}</span>
-        <span class="r-leader"></span>
-      </h2>
-      <SectionBody :section="section" />
-    </section>
+    <div class="flow">
+      <section
+        v-for="section in sections"
+        :key="section.id"
+        class="r-sec"
+        :class="{ 'is-sec-selected': selectedSet.has(section.id) }"
+        :data-sec-id="section.id"
+        :style="sectionLayoutStyle(section)"
+      >
+        <h2 class="r-title">
+          <span class="dot"></span>
+          <span>{{ section.title }}</span>
+          <span class="r-leader"></span>
+        </h2>
+        <SectionBody :section="section" />
+      </section>
+    </div>
   </div>
 </template>
 
 <style scoped>
 /*
- * 页头同时容纳「姓名 + 职位 + 基本信息」与绝对定位的头像。
- *
- * 头像高 35mm，若页头里只放姓名，这 35mm 就整片空着把下方内容平白推远；
- * 把基本信息一并放进页头，等于用内容填满头像的高度带，间距自然收拢。
- * 附带好处是基本信息随 .who 一起拿到避让内边距，头像左右拖动时压不到它。
+ * 页头同时容纳「姓名 + 职位 + 基本信息」与绝对定位的头像，
+ * 与经典模板一致：min-height 撑出头像高度带，基本信息随 .who 避让头像。
  */
 .head {
   position: relative;
@@ -75,8 +75,6 @@ const selectedSet = computed(() => new Set(props.selectedIds))
   gap: 1.5em;
   min-height: calc(var(--avatar-h, 35mm) + var(--avatar-extra-h, 0mm));
   padding-bottom: 0.85em;
-  /* 分隔线挂在页头而非基本信息上：页头是唯一保证不低于头像高度的容器，
-     线挂这里才能始终落在头像下方，也不会因头像左右移动而被截断 */
   border-bottom: 1px solid rgba(var(--accent-rgb), 0.35);
 }
 
@@ -93,5 +91,27 @@ const selectedSet = computed(() => new Set(props.selectedIds))
   margin-top: calc(0.6em * var(--gap, 1));
   /* 列数由正文可用宽度决定：头像挤到中部时可退回单列 */
   grid-template-columns: repeat(var(--contact-cols, 2), minmax(0, 1fr));
+}
+
+/*
+ * 多栏容器：模块自左向右流动填满版面。多栏里上下外边距不跨栏折叠，
+ * 因此模块间距改挂在 margin-bottom 上；.r-sec 自带 break-inside: avoid，
+ * 模块不会被从中间拦腰截断到两栏。
+ */
+.flow {
+  columns: 2;
+  column-gap: 2em;
+  /* 栏间细分隔线，给左右两栏一个清晰的分界 */
+  column-rule: 1px solid rgba(var(--accent-rgb), 0.15);
+  margin-top: calc(1.15em * var(--gap));
+}
+
+.flow .r-sec {
+  margin-top: 0;
+  margin-bottom: calc(1.15em * var(--gap));
+}
+
+.flow .r-sec:last-child {
+  margin-bottom: 0;
 }
 </style>

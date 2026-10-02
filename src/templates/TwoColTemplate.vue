@@ -11,10 +11,13 @@ import { sectionLayoutStyle } from '@/utils/sectionStyle'
 
 const props = defineProps({
   resume: { type: Object, required: true },
+  /* 纸面多选时选中的模块 id，仅编辑态用于高亮 */
+  selectedIds: { type: Array, default: () => [] },
 })
 
 const basics = computed(() => props.resume.basics)
 const sections = computed(() => props.resume.sections.filter((s) => s.visible))
+const selectedSet = computed(() => new Set(props.selectedIds))
 
 /** 经历条目信息量大，独占宽栏 */
 const wideTypes = ['entries']
@@ -50,6 +53,8 @@ const sideSections = computed(() => sections.value.filter((s) => !wideTypes.incl
           v-for="section in sideSections"
           :key="section.id"
           class="r-sec"
+          :class="{ 'is-sec-selected': selectedSet.has(section.id) }"
+          :data-sec-id="section.id"
           :style="sectionLayoutStyle(section)"
         >
           <h2 class="r-title">
@@ -65,6 +70,8 @@ const sideSections = computed(() => sections.value.filter((s) => !wideTypes.incl
           v-for="section in wideSections"
           :key="section.id"
           class="r-sec"
+          :class="{ 'is-sec-selected': selectedSet.has(section.id) }"
+          :data-sec-id="section.id"
           :style="sectionLayoutStyle(section)"
         >
           <h2 class="r-title">

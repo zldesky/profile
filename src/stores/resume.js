@@ -350,6 +350,19 @@ export const useResumeStore = defineStore('resume', () => {
     resume.value.sections = moveItem(resume.value.sections, from, to)
   }
 
+  /**
+   * 按给定 id 顺序整体重排模块（纸面框选拖拽排序用）。
+   * 传入顺序必须是现有 id 的一个排列，否则忽略，避免拖出残缺数组。
+   * @param {string[]} orderedIds 重排后的完整 id 顺序
+   */
+  function reorderSectionsByIds(orderedIds) {
+    const sections = resume.value.sections
+    if (!Array.isArray(orderedIds) || orderedIds.length !== sections.length) return
+    const byId = new Map(sections.map((s) => [s.id, s]))
+    if (orderedIds.some((id) => !byId.has(id))) return
+    resume.value.sections = orderedIds.map((id) => byId.get(id))
+  }
+
   /* ---------------- 键值网格 ---------------- */
 
   function addGridItem(sectionId) {
@@ -519,6 +532,7 @@ export const useResumeStore = defineStore('resume', () => {
     updateSection,
     updateSectionLayout,
     moveSection,
+    reorderSectionsByIds,
 
     addGridItem,
     updateGridItem,

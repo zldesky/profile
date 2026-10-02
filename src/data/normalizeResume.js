@@ -6,7 +6,14 @@
  * store 只负责持有状态与暴露动作。
  */
 import { DEFAULT_SECTION_LAYOUT, DEFAULT_THEME, createResume } from '@/data/defaultResume'
-import { FONTS, FONT_KEY_MIGRATION } from '@/data/presets'
+import {
+  CUSTOM_HEADERS,
+  CUSTOM_MODES,
+  CUSTOM_RATIOS,
+  DEFAULT_CUSTOM_LAYOUT,
+  FONTS,
+  FONT_KEY_MIGRATION,
+} from '@/data/presets'
 import { uid } from '@/utils/helpers'
 
 /** 当前数据结构版本 */
@@ -93,7 +100,25 @@ function normalizeTheme(rawTheme) {
   const theme = { ...DEFAULT_THEME, ...(rawTheme || {}) }
   theme.fontKey = FONT_KEY_MIGRATION[theme.fontKey] || theme.fontKey
   if (!FONTS[theme.fontKey]) theme.fontKey = DEFAULT_THEME.fontKey
+  theme.customLayout = normalizeCustomLayout(rawTheme?.customLayout)
   return theme
+}
+
+/**
+ * 迁移自由定制模板的布局参数：
+ * 缺省字段补默认值，枚举字段遇到非法值时回退，避免手改数据把布局打挂。
+ */
+function normalizeCustomLayout(raw) {
+  const layout = { ...DEFAULT_CUSTOM_LAYOUT, ...(raw || {}) }
+  const pick = (options, value, fallback) =>
+    options.some((option) => option.value === value) ? value : fallback
+  layout.mode = pick(CUSTOM_MODES, layout.mode, DEFAULT_CUSTOM_LAYOUT.mode)
+  layout.ratio = pick(CUSTOM_RATIOS, layout.ratio, DEFAULT_CUSTOM_LAYOUT.ratio)
+  layout.header = pick(CUSTOM_HEADERS, layout.header, DEFAULT_CUSTOM_LAYOUT.header)
+  // 与 showLogo / showBars 同一约定：仅在明确为 true 时开启
+  layout.cards = layout.cards === true
+  layout.divider = layout.divider !== false
+  return layout
 }
 
 /** 迁移基本信息，头像位置需要独立对象，避免与示例简历共用引用 */

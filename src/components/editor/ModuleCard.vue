@@ -6,6 +6,7 @@
 import SectionEditor from '@/components/editor/SectionEditor.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { useResumeStore } from '@/stores/resume'
+import { useSelectionStore } from '@/stores/selection'
 
 const props = defineProps({
   section: { type: Object, required: true },
@@ -18,13 +19,18 @@ const props = defineProps({
 const emit = defineEmits(['toggle', 'remove'])
 
 const store = useResumeStore()
+// 纸面上选中模块时，对应卡片同步高亮，方便在两侧之间对照
+const selection = useSelectionStore()
 
 const toggleVisible = () =>
   store.updateSection(props.section.id, { visible: !props.section.visible })
 </script>
 
 <template>
-  <div class="ed-card" :class="{ 'is-hidden': !section.visible }">
+  <div
+    class="ed-card"
+    :class="{ 'is-hidden': !section.visible, 'is-sec-selected': selection.has(section.id) }"
+  >
     <div class="ed-card-head">
       <span class="ed-drag" title="按住拖动可调整模块顺序">
         <SvgIcon name="drag" :size="15" />
@@ -88,6 +94,12 @@ const toggleVisible = () =>
 </template>
 
 <style scoped>
+/* 该模块正在纸面上被选中（可多选），与单卡片 hover 高亮区分 */
+.ed-card.is-sec-selected {
+  border-color: rgba(43, 87, 154, 0.55);
+  box-shadow: 0 0 0 2px rgba(43, 87, 154, 0.14);
+}
+
 .expand :deep(.svg-icon) {
   transition: transform 0.18s;
 }
