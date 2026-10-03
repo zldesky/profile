@@ -5,13 +5,17 @@
  * 弹窗交互由服务端配置 AUTH_POPUP 控制（经 useAuthDialog 读 /api/health），
  * 关闭时调用方回退为跳转独立登录页 /login。
  */
-import { ref, watch } from 'vue'
+import { ref, useTemplateRef, watch } from 'vue'
 
 import AuthPanel from '@/components/AuthPanel.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { useAuthDialog } from '@/composables/useAuthDialog'
+import { useDialogA11y } from '@/composables/useDialogA11y'
 
 const { visible, initialMode, close, notifyAuthed } = useAuthDialog()
+
+const cardRef = useTemplateRef('cardRef')
+useDialogA11y(visible, cardRef, () => close())
 
 /** 每次打开都换 key 重挂表单：拿到新的滑块挑战，输入与错误提示一并清空 */
 const openCount = ref(0)
@@ -24,7 +28,14 @@ watch(visible, (open) => {
 <template>
   <Teleport to="body">
     <div v-if="visible" class="ad-mask" @click.self="close()">
-      <div class="ad-card" role="dialog" aria-modal="true" aria-label="登录或注册">
+      <div
+        ref="cardRef"
+        class="ad-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label="登录或注册"
+        tabindex="-1"
+      >
         <div class="ad-head">
           <h3 class="ad-title">账号</h3>
           <button class="ad-close" title="关闭" aria-label="关闭" @click="close()">
@@ -51,7 +62,7 @@ watch(visible, (open) => {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(15, 23, 42, 0.34);
+  background: rgba(16, 24, 40, 0.42);
 }
 
 .ad-card {
@@ -60,9 +71,9 @@ watch(visible, (open) => {
   max-height: calc(100vh - 40px);
   overflow-y: auto;
   padding: 18px 20px 16px;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.22);
+  border-radius: 16px;
+  background: var(--ed-surface);
+  box-shadow: var(--ed-shadow-lg);
 }
 
 .ad-head {
@@ -74,7 +85,7 @@ watch(visible, (open) => {
 
 .ad-title {
   margin: 0;
-  color: #1f2329;
+  color: var(--ed-ink);
   font-size: 14.5px;
   font-weight: 600;
 }
@@ -89,12 +100,12 @@ watch(visible, (open) => {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: #8b93a1;
+  color: var(--ed-text-4);
   cursor: pointer;
 }
 
 .ad-close:hover {
-  background: #f2f4f7;
-  color: #2b579a;
+  background: var(--ed-fill);
+  color: var(--ed-brand-strong);
 }
 </style>

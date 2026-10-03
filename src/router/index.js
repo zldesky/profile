@@ -17,6 +17,12 @@ const router = createRouter({
       name: 'login',
       component: () => import('@/pages/LoginPage.vue'),
     },
+    {
+      // 分享只读页：拿链接的人无需登录
+      path: '/share/:id',
+      name: 'share',
+      component: () => import('@/pages/SharePage.vue'),
+    },
     // 单页应用没有其他深层链接，未知路径一律回编辑器
     { path: '/:pathMatch(.*)*', redirect: { name: 'editor' } },
   ],

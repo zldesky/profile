@@ -3,9 +3,10 @@
  * 渲染服务访问口令输入弹窗。
  * 口令只用于向本机渲染服务证明身份，不写入简历数据，也不随导出文件带出。
  */
-import { nextTick, ref, watch } from 'vue'
+import { nextTick, ref, useTemplateRef, watch } from 'vue'
 
 import SvgIcon from '@/components/SvgIcon.vue'
+import { useDialogA11y } from '@/composables/useDialogA11y'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -15,6 +16,13 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['submit', 'cancel'])
+
+const cardRef = useTemplateRef('cardRef')
+useDialogA11y(
+  () => props.open,
+  cardRef,
+  () => emit('cancel'),
+)
 
 const value = ref('')
 const visible = ref(false)
@@ -41,7 +49,14 @@ function submit() {
 <template>
   <Teleport to="body">
     <div v-if="open" class="pw-mask" @click.self="emit('cancel')">
-      <div class="pw-card" role="dialog" aria-modal="true" aria-label="渲染服务访问口令">
+      <div
+        ref="cardRef"
+        class="pw-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label="渲染服务访问口令"
+        tabindex="-1"
+      >
         <h3 class="pw-title">
           <SvgIcon name="lock" :size="15" />
           <span>渲染服务需要口令</span>
@@ -100,16 +115,16 @@ function submit() {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(15, 23, 42, 0.34);
+  background: rgba(16, 24, 40, 0.42);
 }
 
 .pw-card {
   width: 100%;
   max-width: 390px;
   padding: 18px 18px 16px;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.22);
+  border-radius: 16px;
+  background: var(--ed-surface);
+  box-shadow: var(--ed-shadow-lg);
 }
 
 .pw-title {
@@ -117,14 +132,14 @@ function submit() {
   align-items: center;
   gap: 7px;
   margin: 0 0 8px;
-  color: #1f2329;
+  color: var(--ed-ink);
   font-size: 14.5px;
   font-weight: 600;
 }
 
 .pw-desc {
   margin: 0 0 12px;
-  color: #5b6472;
+  color: var(--ed-text-2);
   font-size: 12.5px;
   line-height: 1.65;
 }
@@ -154,24 +169,24 @@ function submit() {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: #8b93a1;
+  color: var(--ed-text-4);
   cursor: pointer;
 }
 
 .pw-eye:hover:not(:disabled) {
-  background: #f2f4f7;
-  color: #2b579a;
+  background: var(--ed-fill);
+  color: var(--ed-brand-strong);
 }
 
 .pw-tip {
   margin: 8px 0 0;
-  color: #8b93a1;
+  color: var(--ed-text-4);
   font-size: 12px;
   line-height: 1.6;
 }
 
 .pw-tip.is-error {
-  color: #c0392b;
+  color: var(--ed-danger-strong);
 }
 
 .pw-actions {

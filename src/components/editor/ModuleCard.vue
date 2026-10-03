@@ -29,6 +29,7 @@ const toggleVisible = () =>
 <template>
   <div
     class="ed-card"
+    :data-section-id="section.id"
     :class="{ 'is-hidden': !section.visible, 'is-sec-selected': selection.has(section.id) }"
   >
     <div class="ed-card-head">
@@ -96,8 +97,8 @@ const toggleVisible = () =>
 <style scoped>
 /* 该模块正在纸面上被选中（可多选），与单卡片 hover 高亮区分 */
 .ed-card.is-sec-selected {
-  border-color: rgba(43, 87, 154, 0.55);
-  box-shadow: 0 0 0 2px rgba(43, 87, 154, 0.14);
+  border-color: var(--ed-brand-border);
+  box-shadow: 0 0 0 3px var(--ed-brand-ring);
 }
 
 .expand :deep(.svg-icon) {

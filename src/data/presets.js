@@ -126,6 +126,7 @@ export const FONT_SIZE_TIPS =
 
 /** 主色预设 */
 export const ACCENT_PRESETS = [
+  '#000000',
   '#2b579a',
   '#1f6f5c',
   '#8c2f39',

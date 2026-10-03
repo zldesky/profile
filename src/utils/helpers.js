@@ -20,7 +20,17 @@ export function uid(prefix = 'id') {
  * @param {string} fallback 解析失败时的回退值
  * @returns {string}
  */
-export function hexToRgb(hex, fallback = '43,87,154') {
+export function hexToRgb(hex, fallback = '0,0,0') {
+  const rgb = parseHex(hex)
+  return rgb ? rgb.join(',') : fallback
+}
+
+/**
+ * 解析 #RRGGBB / #RGB 为 [r, g, b]，解析失败返回 null。
+ * @param {string} hex 颜色值
+ * @returns {number[]|null}
+ */
+function parseHex(hex) {
   const value = String(hex || '')
     .replace('#', '')
     .trim()
@@ -32,10 +42,57 @@ export function hexToRgb(hex, fallback = '43,87,154') {
           .join('')
       : value
 
-  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return fallback
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return null
 
   const num = parseInt(normalized, 16)
-  return [(num >> 16) & 255, (num >> 8) & 255, num & 255].join(',')
+  return [(num >> 16) & 255, (num >> 8) & 255, num & 255]
+}
+
+/**
+ * 在两个颜色之间线性插值（ratio=0 返回 from，ratio=1 返回 to）。
+ * @param {string} fromHex 起始色 #RRGGBB
+ * @param {string} toHex   目标色 #RRGGBB
+ * @param {number} ratio   插值比例 0-1
+ * @returns {string} #RRGGBB
+ */
+export function mixHex(fromHex, toHex, ratio) {
+  const from = parseHex(fromHex) || [0, 0, 0]
+  const to = parseHex(toHex) || [0, 0, 0]
+  const k = Math.min(1, Math.max(0, Number(ratio) || 0))
+  return (
+    '#' +
+    from
+      .map((c, i) => Math.round(c + (to[i] - c) * k))
+      .map((c) => c.toString(16).padStart(2, '0'))
+      .join('')
+  )
+}
+
+/**
+ * 把简历主色推导为编辑器外壳的品牌色令牌，内联写到 :root 上。
+ * 设计面板换主色时整个界面（顶栏、按钮、选中态、选中框）随之换主题；
+ * 纸张本身走 .paper 的 --accent，两条线互不影响，打印也不受干扰。
+ * 解析失败时不写任何值，让样式表里的默认松绿继续生效。
+ * @param {string} hex 简历主色 #RRGGBB
+ */
+export function applyChromeAccent(hex) {
+  const rgb = parseHex(hex)
+  if (!rgb) return
+
+  const [r, g, b] = rgb
+  const root = document.documentElement.style
+  const normalized = `#${rgb.map((c) => c.toString(16).padStart(2, '0')).join('')}`
+
+  root.setProperty('--ed-brand', normalized)
+  // 深浅两档：深色做悬停与文字，浅色做选中底与渐变高光，保证任意主色下层次关系一致
+  root.setProperty('--ed-brand-strong', mixHex(normalized, '#000000', 0.14))
+  root.setProperty('--ed-brand-deep', mixHex(normalized, '#000000', 0.3))
+  root.setProperty('--ed-brand-grad-hi', mixHex(normalized, '#ffffff', 0.1))
+  root.setProperty('--ed-brand-grad-lo', mixHex(normalized, '#000000', 0.08))
+  root.setProperty('--ed-brand-tint', mixHex(normalized, '#ffffff', 0.9))
+  root.setProperty('--ed-brand-ring', `rgba(${r}, ${g}, ${b}, 0.16)`)
+  root.setProperty('--ed-brand-border', `rgba(${r}, ${g}, ${b}, 0.45)`)
+  root.setProperty('--ed-brand-glow', `0 1px 2px rgba(${r}, ${g}, ${b}, 0.4)`)
 }
 
 /**

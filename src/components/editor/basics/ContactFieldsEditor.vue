@@ -1,14 +1,27 @@
 <script setup>
 /**
  * 联系方式字段列表：图标、字段名与内容的增删改。
+ * 内容按字段名语义做软校验（邮箱/电话/链接），只在琥珀色提示，不阻止输入。
  */
+import { computed } from 'vue'
+
 import SvgIcon from '@/components/SvgIcon.vue'
 import { ICON_OPTIONS } from '@/data/presets'
 import { useResumeStore } from '@/stores/resume'
+import { contactFieldIssue } from '@/utils/validators'
 
 const store = useResumeStore()
 
 const updateField = (fieldId, patch) => store.updateBasicsField(fieldId, patch)
+
+/** 每个字段的格式警告文案，'' 表示没问题 */
+const fieldIssues = computed(() => {
+  const map = {}
+  store.basics.fields.forEach((field) => {
+    map[field.id] = contactFieldIssue(field.label, field.value)
+  })
+  return map
+})
 </script>
 
 <template>
@@ -49,10 +62,12 @@ const updateField = (fieldId, patch) => store.updateBasicsField(fieldId, patch)
       </div>
       <input
         class="ed-input"
+        :class="{ 'is-warn': fieldIssues[field.id] }"
         :value="field.value"
         placeholder="字段内容"
         @input="updateField(field.id, { value: $event.target.value })"
       />
+      <p v-if="fieldIssues[field.id]" class="ed-warn-hint">{{ fieldIssues[field.id] }}</p>
     </div>
 
     <p class="ed-hint">
@@ -66,7 +81,7 @@ const updateField = (fieldId, patch) => store.updateBasicsField(fieldId, patch)
 .field-item {
   margin-bottom: 10px;
   padding-bottom: 10px;
-  border-bottom: 1px dashed #eef0f4;
+  border-bottom: 1px dashed var(--ed-line-soft);
 }
 
 .field-item:last-of-type {

@@ -224,6 +224,7 @@ async function compressToOnePage() {
 
 <style scoped>
 .editor-stage {
+  position: relative;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -231,30 +232,34 @@ async function compressToOnePage() {
   min-height: 0;
 }
 
+/* 画布：浅灰底 + 极淡点阵，营造设计工具的工作台质感；打印时整块被隐藏 */
 .stage-scroll {
   display: flex;
   flex: 1 1 auto;
   align-items: flex-start;
   justify-content: center;
   min-height: 0;
-  padding: 26px 28px 34px;
+  padding: 26px 28px 64px;
   overflow: auto;
+  background-color: #f3f4f6;
+  background-image: radial-gradient(rgba(16, 24, 40, 0.075) 1px, transparent 1.6px);
+  background-size: 24px 24px;
   /* 滚到底后不要继续带动外层（移动端会触发下拉刷新/橡皮筋） */
   overscroll-behavior: contain;
 }
 
 .paper {
   flex: 0 0 auto;
-  box-shadow: 0 3px 22px rgba(20, 30, 50, 0.14);
+  box-shadow: var(--ed-paper-shadow);
 }
 
 /* 框选矩形：视口定位的 overlay，不参与打印（no-print）也不拦截指针 */
 .sel-band {
   position: fixed;
   z-index: 50;
-  border: 1px solid rgba(43, 87, 154, 0.65);
+  border: 1px solid var(--ed-brand-strong);
   border-radius: 3px;
-  background: rgba(43, 87, 154, 0.12);
+  background: var(--ed-brand-ring);
   pointer-events: none;
 }
 
@@ -262,7 +267,7 @@ async function compressToOnePage() {
   /* 窄屏这一栏独占宽度，把留白收紧换成纸张空间。
      usePaperZoom 的 fit() 直接读实际内边距，改这里不需要同步改常量。 */
   .stage-scroll {
-    padding: 12px 14px 16px;
+    padding: 12px 14px 52px;
   }
 
   .paper {

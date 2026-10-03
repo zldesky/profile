@@ -10,6 +10,8 @@ import { useRouter } from 'vue-router'
 import AuthDialog from '@/components/AuthDialog.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import PasswordDialog from '@/components/PasswordDialog.vue'
+import ResumeManagerDialog from '@/components/ResumeManagerDialog.vue'
+import ShareDialog from '@/components/ShareDialog.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useAuthDialog } from '@/composables/useAuthDialog'
@@ -28,6 +30,11 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['toggle-panel'])
+
+/** 「我的简历」管理弹窗 */
+const managerOpen = shallowRef(false)
+/** 分享弹窗（要求登录，未登录先走登录流程） */
+const shareOpen = shallowRef(false)
 
 /** 宽屏是显隐面板，窄屏是「编辑 / 预览」切换，同一颗按钮两种语义 */
 const toggleLabel = computed(() => {
@@ -55,6 +62,15 @@ const authDialog = useAuthDialog()
 async function openLogin() {
   const opened = await authDialog.open({ mode: 'login' })
   if (!opened) router.push({ name: 'login' })
+}
+
+/** 分享要求登录：未登录先拉起登录，成功后用户再点一次即可 */
+function openShare() {
+  if (auth.status.value !== 'authed') {
+    openLogin()
+    return
+  }
+  shareOpen.value = true
 }
 
 const { exportJSON, importFromFile, resetResume } = useResumeFile()
@@ -131,40 +147,53 @@ function onFileChange(event) {
 
 <template>
   <header class="editor-topbar">
-    <div class="brand">
-      <SvgIcon name="layout" :size="17" />
+    <div class="tb-brand">
+      <span class="tb-logo"><SvgIcon name="layout" :size="16" /></span>
       <span class="brand-name">简历工坊</span>
-      <small>{{ templateName }}</small>
+      <span class="brand-chip">{{ templateName }}</span>
     </div>
 
-    <div class="spacer"></div>
+    <span class="tb-sep" aria-hidden="true"></span>
 
-    <button
-      class="ed-btn is-compact"
-      :disabled="!store.canUndo"
-      title="撤销（Ctrl+Z）"
-      aria-label="撤销"
-      @click="store.undo"
-    >
-      <SvgIcon name="undo" :size="14" />
-    </button>
+    <div class="tb-group">
+      <button
+        class="ed-icon-btn"
+        :disabled="!store.canUndo"
+        title="撤销（Ctrl+Z）"
+        aria-label="撤销"
+        @click="store.undo"
+      >
+        <SvgIcon name="undo" :size="15" />
+      </button>
 
-    <button
-      class="ed-btn is-compact"
-      :disabled="!store.canRedo"
-      title="重做（Ctrl+Shift+Z）"
-      aria-label="重做"
-      @click="store.redo"
-    >
-      <SvgIcon name="redo" :size="14" />
-    </button>
+      <button
+        class="ed-icon-btn"
+        :disabled="!store.canRedo"
+        title="重做（Ctrl+Shift+Z）"
+        aria-label="重做"
+        @click="store.redo"
+      >
+        <SvgIcon name="redo" :size="15" />
+      </button>
+    </div>
 
     <span v-if="store.storageWarning" class="save-state warn">{{ store.storageWarning }}</span>
     <span v-else class="save-state">{{ saveText }}</span>
 
-    <button class="ed-btn" @click="emit('toggle-panel')">
+    <span class="tb-sep" aria-hidden="true"></span>
+
+    <button
+      class="ed-btn tb-collapse-md"
+      title="管理本地保存的多份简历"
+      @click="managerOpen = true"
+    >
+      <SvgIcon name="copy" :size="14" />
+      <span class="btn-label">我的简历</span>
+    </button>
+
+    <button class="ed-btn tb-collapse-md" :title="toggleLabel" @click="emit('toggle-panel')">
       <SvgIcon :name="toggleIcon" :size="14" />
-      <span>{{ toggleLabel }}</span>
+      <span class="btn-label">{{ toggleLabel }}</span>
     </button>
 
     <!-- 下面三个属于次要操作，窄屏收成图标；文字仍在无障碍树里，靠 aria-label 保留语义 -->
@@ -183,13 +212,26 @@ function onFileChange(event) {
       <span class="btn-label">恢复示例</span>
     </button>
 
+    <div class="spacer"></div>
+
     <button
-      class="ed-btn"
+      class="ed-btn is-compact"
+      title="生成公开只读链接，任何人可查看与打印"
+      aria-label="分享"
+      @click="openShare"
+    >
+      <SvgIcon name="link" :size="14" />
+      <span class="btn-label">分享</span>
+    </button>
+
+    <button
+      class="ed-btn is-compact"
       title="在打印窗口另存为 PDF：文本可选、体积最小，需手动勾选「背景图形」"
+      aria-label="打印导出"
       @click="printPdf"
     >
       <SvgIcon name="print" :size="14" />
-      <span>打印导出</span>
+      <span class="btn-label">打印导出</span>
     </button>
 
     <button
@@ -202,6 +244,8 @@ function onFileChange(event) {
       <span>{{ serverExportText }}</span>
       <span v-if="quota && !quotaExhausted" class="quota-badge">{{ quota.remaining }}</span>
     </button>
+
+    <span class="tb-sep" aria-hidden="true"></span>
 
     <!-- 账号区：未登录给入口，已登录只显示身份与退出 -->
     <button v-if="auth.status.value === 'anon'" class="ed-btn" @click="openLogin">
@@ -232,7 +276,9 @@ function onFileChange(event) {
       @change="onFileChange"
     />
 
-    <!-- 三个弹窗组件内部都会 Teleport 到 body，放在这里只是便于就近阅读 -->
+    <!-- 弹窗组件内部都会 Teleport 到 body，放在这里只是便于就近阅读 -->
+    <ResumeManagerDialog :open="managerOpen" @close="managerOpen = false" />
+    <ShareDialog :open="shareOpen" @close="shareOpen = false" />
     <AuthDialog />
     <ConfirmDialog
       :open="logoutConfirmOpen"
@@ -259,29 +305,62 @@ function onFileChange(event) {
   flex: 0 0 auto;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
-  border-bottom: 1px solid #e3e6ec;
-  background: #fff;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--ed-line-soft);
+  background: var(--ed-surface);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
   flex-wrap: wrap;
 }
 
-.brand {
+/* 品牌区：渐变 logo 块 + 产品名 + 当前模板胶囊 */
+.tb-brand {
   display: flex;
   align-items: center;
-  gap: 7px;
-  color: #2b579a;
+  gap: 8px;
+}
+
+.tb-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--ed-brand-grad-hi) 0%, var(--ed-brand-strong) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    var(--ed-brand-glow);
+  color: #fff;
 }
 
 .brand-name {
-  color: #1f2329;
+  color: var(--ed-ink);
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
-.brand small {
-  color: #7b8494;
+.brand-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--ed-fill);
+  color: var(--ed-text-2);
   font-size: 12px;
-  font-weight: 400;
+  white-space: nowrap;
+}
+
+/* 工具条分组之间的竖向分隔线：没有它，一排等权按钮就还是「摆在一起」而不是「分好类」 */
+.tb-sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 2px;
+  background: var(--ed-line-soft);
+}
+
+.tb-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .spacer {
@@ -289,16 +368,32 @@ function onFileChange(event) {
 }
 
 .save-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   max-width: 320px;
-  color: #8b93a1;
+  color: var(--ed-text-4);
   font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* 保存状态指示点：正常为品牌绿，受限时转琥珀色 */
+.save-state::before {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ed-brand);
+}
+
 .save-state.warn {
-  color: #b45309;
+  color: var(--ed-warn);
+}
+
+.save-state.warn::before {
+  background: #f79009;
 }
 
 /* 主按钮内的剩余额度角标 */
@@ -306,7 +401,7 @@ function onFileChange(event) {
   margin-left: 2px;
   padding: 1px 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.24);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -317,7 +412,7 @@ function onFileChange(event) {
   align-items: center;
   gap: 5px;
   padding: 7px 4px;
-  color: #5b6472;
+  color: var(--ed-text-2);
   font-size: 12.5px;
 }
 
@@ -328,14 +423,58 @@ function onFileChange(event) {
   text-overflow: ellipsis;
 }
 
+/*
+     * 三档宽度分级收缩，保证桌面宽度下永远单行：
+     *  ≤1440 次要操作（导入/导出/恢复示例/分享/打印/退出）收成纯图标；
+     *  ≤1280 再收掉模板名胶囊；
+     *  ≤1120 保存状态与「我的简历 / 面板切换」的文字也让位，只剩图标与主 CTA。
+     * 文字全部保留在 title / aria-label 里，语义不丢。
+     */
+@media (max-width: 1440px) {
+  .editor-topbar {
+    gap: 6px;
+  }
+
+  .is-compact {
+    gap: 0;
+    padding: 8px;
+  }
+
+  .is-compact .btn-label {
+    display: none;
+  }
+}
+
+@media (max-width: 1280px) {
+  .brand-chip {
+    display: none;
+  }
+}
+
+@media (max-width: 1120px) {
+  .save-state {
+    display: none;
+  }
+
+  .tb-collapse-md {
+    gap: 0;
+    padding: 8px;
+  }
+
+  .tb-collapse-md .btn-label {
+    display: none;
+  }
+}
+
 @media (max-width: 900px) {
   .editor-topbar {
     gap: 6px;
     padding: 8px 10px;
   }
 
-  /* 模板名属于可省略信息，窄屏把它让给操作按钮 */
-  .brand small {
+  /* 模板名与分隔线属于可省略信息，窄屏把它们让给操作按钮 */
+  .brand-chip,
+  .tb-sep {
     display: none;
   }
 
@@ -358,6 +497,15 @@ function onFileChange(event) {
 
   .is-compact .btn-label {
     display: none;
+  }
+
+  /* 两栏二选一是手机上的高频操作，切换文字恢复显示 */
+  .tb-collapse-md {
+    gap: 6px;
+  }
+
+  .tb-collapse-md .btn-label {
+    display: inline;
   }
 }
 </style>

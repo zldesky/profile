@@ -1,6 +1,7 @@
 /**
  * 编辑器控件统一样式。
  * 各编辑组件只写布局相关的 scoped 样式，按钮、输入框、卡片等复用这里的 .ed-* 类。
+ * 颜色、阴影、圆角一律消费 paper.css :root 里的 --ed-* 设计令牌，保证全套界面同源。
  */
 
 /* ---------------- 按钮 ---------------- */
@@ -9,39 +10,66 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 12px;
-  border: 1px solid #d8dce4;
+  padding: 6px 12px;
+  border: 1px solid var(--ed-line-2);
   border-radius: 8px;
-  background: #fff;
-  color: #2b2f36;
+  background: var(--ed-surface);
+  box-shadow: var(--ed-shadow-xs);
+  color: var(--ed-text);
   font: inherit;
   font-size: 13px;
+  font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
   transition: 0.15s;
 }
 
 .ed-btn:hover {
-  border-color: #c3c9d4;
-  background: #f5f7fa;
+  border-color: #c2cad4;
+  background: var(--ed-fill-2);
+  color: var(--ed-ink);
+}
+
+.ed-btn:active {
+  background: var(--ed-fill);
 }
 
 .ed-btn.is-active {
-  border-color: #2b579a;
-  background: #eaf0fa;
-  color: #24487f;
+  border-color: var(--ed-brand-border);
+  background: var(--ed-brand-tint);
+  box-shadow: none;
+  color: var(--ed-brand-deep);
   font-weight: 600;
 }
 
 .ed-btn-primary {
-  border-color: #2b579a;
-  background: #2b579a;
+  border-color: var(--ed-brand-strong);
+  /* 顶部一点内高光让主按钮有「实心可按」的质感，比纯色更接近商业产品的主 CTA */
+  background: linear-gradient(
+    180deg,
+    var(--ed-brand-grad-hi) 0%,
+    var(--ed-brand) 60%,
+    var(--ed-brand-grad-lo) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    var(--ed-brand-glow);
   color: #fff;
 }
 
 .ed-btn-primary:hover {
-  border-color: #24487f;
-  background: #24487f;
+  border-color: var(--ed-brand-deep);
+  background: linear-gradient(
+    180deg,
+    var(--ed-brand) 0%,
+    var(--ed-brand-strong) 60%,
+    var(--ed-brand-deep) 100%
+  );
+  color: #fff;
+}
+
+.ed-btn-primary:active {
+  background: var(--ed-brand-strong);
 }
 
 .ed-btn-block {
@@ -55,8 +83,18 @@
 }
 
 .ed-btn:disabled:hover {
-  border-color: #d8dce4;
-  background: #fff;
+  border-color: var(--ed-line-2);
+  background: var(--ed-surface);
+}
+
+.ed-btn-primary:disabled:hover {
+  border-color: var(--ed-brand-strong);
+  background: linear-gradient(
+    180deg,
+    var(--ed-brand-grad-hi) 0%,
+    var(--ed-brand) 60%,
+    var(--ed-brand-grad-lo) 100%
+  );
 }
 
 .ed-btn-icon {
@@ -67,27 +105,26 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 7px;
   background: transparent;
-  color: #8b93a1;
+  color: var(--ed-text-3);
   cursor: pointer;
   transition: 0.15s;
 }
 
 .ed-icon-btn:hover {
-  border-color: #e3e6ec;
-  background: #fff;
-  color: #2b579a;
+  border-color: transparent;
+  background: var(--ed-fill);
+  color: var(--ed-brand-strong);
 }
 
 .ed-icon-btn.danger:hover {
-  border-color: #e8c4c4;
-  background: #fdf6f6;
-  color: #a12626;
+  background: var(--ed-danger-tint);
+  color: var(--ed-danger-strong);
 }
 
 /* ---------------- 表单控件 ---------------- */
@@ -97,13 +134,22 @@
 .ed-textarea {
   width: 100%;
   min-width: 0;
-  padding: 6px 8px;
-  border: 1px solid #d8dce4;
-  border-radius: 7px;
-  background: #fff;
-  color: #1f2329;
+  padding: 6px 9px;
+  border: 1px solid var(--ed-line-2);
+  border-radius: 8px;
+  background: var(--ed-surface);
+  box-shadow: var(--ed-shadow-xs);
+  color: var(--ed-ink);
   font: inherit;
   font-size: 13px;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.ed-input::placeholder,
+.ed-textarea::placeholder {
+  color: var(--ed-text-4);
 }
 
 .ed-textarea {
@@ -116,24 +162,54 @@
 .ed-select:focus,
 .ed-textarea:focus {
   outline: none;
-  border-color: #2b579a;
-  box-shadow: 0 0 0 2px rgba(43, 87, 154, 0.13);
+  border-color: var(--ed-brand);
+  box-shadow: 0 0 0 3px var(--ed-brand-ring);
+}
+
+/* 软校验警告态：琥珀色提示，不阻止输入（见 utils/validators.js） */
+.ed-input.is-warn {
+  border-color: #f79009;
+}
+
+.ed-input.is-warn:focus {
+  border-color: #f79009;
+  box-shadow: 0 0 0 3px rgba(247, 144, 9, 0.18);
+}
+
+.ed-warn-hint {
+  margin: 4px 0 0;
+  color: var(--ed-warn);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+/* ---------------- 面板锚点导航 ---------------- */
+
+/* 带锚点标记的卡片：点击锚点条滚动定位时预留 sticky 页签的高度 */
+[data-section-id] {
+  scroll-margin-top: 66px;
+}
+
+/* 锚点跳转后的短暂高亮，超时由 JS 移除 */
+[data-section-id].is-nav-flash {
+  border-color: var(--ed-brand) !important;
+  box-shadow: 0 0 0 3px var(--ed-brand-ring);
 }
 
 .ed-color {
   width: 34px;
   height: 32px;
   padding: 2px;
-  border: 1px solid #d8dce4;
-  border-radius: 7px;
-  background: #fff;
+  border: 1px solid var(--ed-line-2);
+  border-radius: 8px;
+  background: var(--ed-surface);
   cursor: pointer;
 }
 
 .ed-range {
   flex: 1 1 auto;
   min-width: 0;
-  accent-color: #2b579a;
+  accent-color: var(--ed-brand);
 }
 
 /* ---------------- 行与分组 ---------------- */
@@ -152,7 +228,7 @@
 
 .ed-row > .ed-label {
   flex: 0 0 66px;
-  color: #5b6472;
+  color: var(--ed-text-2);
 }
 
 .ed-grow {
@@ -162,7 +238,7 @@
 
 .ed-value {
   flex: 0 0 46px;
-  color: #8b93a1;
+  color: var(--ed-text-4);
   font-size: 12px;
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -170,14 +246,14 @@
 
 .ed-hint {
   margin: 6px 0 0;
-  color: #8b93a1;
+  color: var(--ed-text-4);
   font-size: 11.5px;
   line-height: 1.65;
 }
 
 .ed-group {
-  padding: 14px 0;
-  border-bottom: 1px solid #eef0f4;
+  padding: 16px 0 14px;
+  border-bottom: 1px solid var(--ed-line-soft);
 }
 
 .ed-group:last-child {
@@ -190,10 +266,11 @@
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 10px;
-  color: #5b6472;
+  color: var(--ed-text-3);
   font-size: 11.5px;
   font-weight: 600;
-  letter-spacing: 0.5px;
+  /* 中英文混排下统一加字距，小号标题更像产品里的分组标签 */
+  letter-spacing: 0.08em;
 }
 
 /* ---------------- 分段选择与色板 ---------------- */
@@ -208,25 +285,28 @@
 .ed-seg button {
   flex: 1 1 auto;
   padding: 6px 8px;
-  border: 1px solid #d8dce4;
+  border: 1px solid var(--ed-line-2);
   border-radius: 7px;
-  background: #fff;
+  background: var(--ed-surface);
+  box-shadow: var(--ed-shadow-xs);
   color: inherit;
   font: inherit;
   font-size: 12.5px;
+  font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
   transition: 0.15s;
 }
 
 .ed-seg button:hover {
-  background: #f5f7fa;
+  background: var(--ed-fill-2);
 }
 
 .ed-seg button.is-active {
-  border-color: #2b579a;
-  background: #eaf0fa;
-  color: #24487f;
+  border-color: var(--ed-brand-border);
+  background: var(--ed-brand-tint);
+  box-shadow: none;
+  color: var(--ed-brand-deep);
   font-weight: 600;
 }
 
@@ -240,7 +320,7 @@
 .ed-swatch {
   width: 26px;
   height: 26px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(16, 24, 40, 0.12);
   border-radius: 8px;
   cursor: pointer;
   transition: 0.15s;
@@ -253,17 +333,25 @@
 .ed-swatch.is-active {
   box-shadow:
     0 0 0 2px #fff,
-    0 0 0 3px #2b579a;
+    0 0 0 3px var(--ed-brand);
 }
 
 /* ---------------- 模块卡片 ---------------- */
 
 .ed-card {
   margin-bottom: 9px;
-  border: 1px solid #e3e6ec;
-  border-radius: 10px;
-  background: #fff;
+  border: 1px solid var(--ed-line);
+  border-radius: var(--ed-radius);
+  background: var(--ed-surface);
+  box-shadow: var(--ed-shadow-xs);
   overflow: hidden;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.ed-card:hover {
+  border-color: var(--ed-line-2);
 }
 
 .ed-card.is-dragging {
@@ -271,7 +359,8 @@
 }
 
 .ed-card.is-drop-target {
-  border-color: #2b579a;
+  border-color: var(--ed-brand);
+  box-shadow: 0 0 0 3px var(--ed-brand-ring);
 }
 
 .ed-card-head {
@@ -279,17 +368,17 @@
   align-items: center;
   gap: 5px;
   padding: 7px 9px;
-  background: #fafbfc;
+  background: var(--ed-fill-2);
 }
 
 .ed-card-head:hover {
-  background: #f4f6f9;
+  background: var(--ed-fill);
 }
 
 .ed-drag {
   display: flex;
   align-items: center;
-  color: #c3c9d4;
+  color: #c6ccd6;
   cursor: grab;
 }
 
@@ -304,29 +393,29 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #2b2f36;
+  color: var(--ed-ink);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
 }
 
 .ed-card-title:hover {
-  background: #fff;
+  background: var(--ed-surface);
 }
 
 .ed-card-title:focus {
   outline: none;
-  background: #fff;
-  box-shadow: 0 0 0 2px rgba(43, 87, 154, 0.13);
+  background: var(--ed-surface);
+  box-shadow: 0 0 0 3px var(--ed-brand-ring);
 }
 
 .ed-card.is-hidden .ed-card-title {
-  color: #b6bcc6;
+  color: #b8bfc9;
 }
 
 .ed-card-body {
   padding: 10px;
-  border-top: 1px solid #eef0f4;
+  border-top: 1px solid var(--ed-line-soft);
 }
 
 /* ---------------- 条目与要点 ---------------- */
@@ -334,9 +423,9 @@
 .ed-sub {
   margin-bottom: 9px;
   padding: 9px;
-  border: 1px solid #eceff4;
-  border-radius: 8px;
-  background: #fcfdfe;
+  border: 1px solid var(--ed-line-soft);
+  border-radius: 9px;
+  background: var(--ed-fill-2);
 }
 
 .ed-sub:last-child {
@@ -354,7 +443,7 @@
 .ed-sub-label {
   flex: 1 1 auto;
   min-width: 0;
-  color: #5b6472;
+  color: var(--ed-text-2);
   font-size: 12px;
   font-weight: 600;
 }
@@ -372,9 +461,9 @@
 
 .ed-empty {
   padding: 16px;
-  border: 1px dashed #d8dce4;
+  border: 1px dashed var(--ed-line-2);
   border-radius: 9px;
-  color: #8b93a1;
+  color: var(--ed-text-4);
   font-size: 12.5px;
   text-align: center;
 }
@@ -389,18 +478,18 @@
 .ed-icon-btn:disabled:hover {
   border-color: transparent;
   background: transparent;
-  color: #8b93a1;
+  color: var(--ed-text-3);
 }
 
 .ed-check {
   width: 15px;
   height: 15px;
-  accent-color: #2b579a;
+  accent-color: var(--ed-brand);
   cursor: pointer;
 }
 
 .ed-count {
-  color: #b6bcc6;
+  color: #b8bfc9;
   font-weight: 400;
 }
 
@@ -410,7 +499,7 @@
   gap: 6px;
   margin-bottom: 9px;
   padding-bottom: 9px;
-  border-bottom: 1px dashed #eef0f4;
+  border-bottom: 1px dashed var(--ed-line-soft);
 }
 
 .ed-actions .ed-spacer {
@@ -426,7 +515,7 @@
 .ed-seg-caption,
 .seg-caption {
   margin: 4px 0 6px;
-  color: #5b6472;
+  color: var(--ed-text-2);
   font-size: 12px;
 }
 
@@ -451,10 +540,10 @@
   justify-content: space-between;
   gap: 8px;
   margin: 12px 0 8px;
-  color: #5b6472;
+  color: var(--ed-text-3);
   font-size: 11.5px;
   font-weight: 600;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.08em;
 }
 
 /* 「复选框 + 文字」开关行 */
@@ -463,7 +552,7 @@
   align-items: center;
   gap: 6px;
   margin-bottom: 4px;
-  color: #5b6472;
+  color: var(--ed-text-2);
   font-size: 12.5px;
   font-weight: 400;
   letter-spacing: 0;
@@ -479,16 +568,16 @@
   height: 34px;
   overflow: hidden;
   padding: 0;
-  border: 1px dashed #d8dce4;
+  border: 1px dashed var(--ed-line-2);
   border-radius: 8px;
-  background: #fafbfc;
-  color: #b6bcc6;
+  background: var(--ed-fill-2);
+  color: var(--ed-text-4);
   cursor: pointer;
 }
 
 .ed-logo-picker:hover {
-  border-color: #2b579a;
-  color: #2b579a;
+  border-color: var(--ed-brand);
+  color: var(--ed-brand-strong);
 }
 
 .ed-logo-picker img {
@@ -501,6 +590,40 @@
   margin: 0;
 }
 
+/* ---------------- 面板与画布滚动条 ---------------- */
+/* 细滚动条 + 圆角滑块：默认滚动条在浅色界面里非常显 demo 感 */
+
+.panel-body,
+.stage-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd2db transparent;
+}
+
+.panel-body::-webkit-scrollbar,
+.stage-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.panel-body::-webkit-scrollbar-thumb,
+.stage-scroll::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: #cbd2db;
+  background-clip: padding-box;
+}
+
+.panel-body::-webkit-scrollbar-thumb:hover,
+.stage-scroll::-webkit-scrollbar-thumb:hover {
+  background: #aab3bf;
+  background-clip: padding-box;
+}
+
+.panel-body::-webkit-scrollbar-track,
+.stage-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 /* ---------------- 全局轻提示 ---------------- */
 
 .editor-toast {
@@ -510,8 +633,9 @@
   z-index: 99;
   max-width: 460px;
   padding: 9px 16px;
-  border-radius: 9px;
-  background: #1f2329;
+  border-radius: 10px;
+  background: var(--ed-ink);
+  box-shadow: var(--ed-shadow-lg);
   color: #fff;
   font-size: 13px;
   line-height: 1.5;
@@ -525,6 +649,67 @@
 .editor-toast.is-visible {
   opacity: 1;
   transform: translate(-50%, 0);
+}
+
+/* ---------------- 动效 ---------------- */
+/*
+ * 只动 transform 与 opacity（合成器路径，不触发布局重排），时长都在 0.25s 内。
+ * 系统开启「减弱动态效果」时整段停用，静态界面完全一致。
+ */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes ed-fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes ed-pop-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.97);
+    }
+  }
+
+  @keyframes ed-rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+
+  .ad-mask,
+  .cf-mask,
+  .pw-mask,
+  .cd-mask,
+  .rm-mask,
+  .sc-mask,
+  .ob-mask {
+    animation: ed-fade-in 0.16s ease-out;
+  }
+
+  .ad-card,
+  .cf-card,
+  .pw-card,
+  .cd-card,
+  .rm-card,
+  .sc-card,
+  .ob-card {
+    animation: ed-pop-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* 新增/首次渲染的模块卡片与条目编辑块：轻轻浮起，不抢注意力 */
+  .ed-card,
+  .ed-sub {
+    animation: ed-rise-in 0.2s ease-out;
+  }
+
+  .ed-btn:active {
+    transform: scale(0.98);
+  }
+
+  .ed-icon-btn:active {
+    transform: scale(0.94);
+  }
 }
 
 /* ---------------- 触控适配 ---------------- */
@@ -566,7 +751,7 @@
     font-size: 16px;
   }
 
-  /* 桌面端 26px 的点击目标在手机上很难点准，统一放大 */
+  /* 桌面端 28px 的点击目标在手机上很难点准，统一放大 */
   .ed-icon-btn {
     width: 36px;
     height: 36px;

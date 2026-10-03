@@ -33,6 +33,8 @@ function isPresetActive(color) {
       ></button>
     </div>
 
+    <p class="ed-hint">界面主题会跟随主色一起变化，按钮、选中态与纸面保持同一套配色。</p>
+
     <label class="ed-row">
       <span class="ed-label">主色</span>
       <input
@@ -59,7 +61,7 @@ function isPresetActive(color) {
 
 <style scoped>
 .color-text {
-  color: #8b93a1;
+  color: var(--ed-text-4);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
 }

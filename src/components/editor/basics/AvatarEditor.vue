@@ -261,16 +261,16 @@ function onCropCancel() {
   height: 62px;
   overflow: hidden;
   padding: 0;
-  border: 1px dashed #d8dce4;
+  border: 1px dashed var(--ed-line-2);
   border-radius: 10px;
-  background: #fafbfc;
-  color: #b6bcc6;
+  background: var(--ed-fill-2);
+  color: var(--ed-text-4);
   cursor: pointer;
 }
 
 .avatar-preview:hover {
-  border-color: #2b579a;
-  color: #2b579a;
+  border-color: var(--ed-brand);
+  color: var(--ed-brand-strong);
 }
 
 .avatar-preview img {

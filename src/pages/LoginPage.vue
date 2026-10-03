@@ -27,7 +27,7 @@ watch(
   <div class="auth-page">
     <div class="auth-card">
       <div class="auth-brand">
-        <SvgIcon name="layout" :size="20" />
+        <span class="auth-logo"><SvgIcon name="layout" :size="18" /></span>
         <span>简历工坊</span>
       </div>
 
@@ -48,27 +48,44 @@ watch(
   justify-content: center;
   min-height: 100vh;
   padding: 24px;
-  background: #f3f5f8;
+  /* 顶部一抹品牌色晕光 + 向下过渡的浅灰，比纯色背景更有产品落地页的完成度 */
+  background:
+    radial-gradient(900px 420px at 50% -120px, var(--ed-brand-ring), transparent 70%),
+    linear-gradient(180deg, #f7f8fa 0%, #eef1f4 100%);
 }
 
 .auth-card {
   width: 100%;
   max-width: 380px;
-  padding: 26px 24px 20px;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.1);
+  padding: 28px 26px 22px;
+  border-radius: 16px;
+  background: var(--ed-surface);
+  box-shadow: var(--ed-shadow-lg);
 }
 
 .auth-brand {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  margin-bottom: 20px;
-  color: #2b579a;
+  gap: 10px;
+  margin-bottom: 22px;
+  color: var(--ed-ink);
   font-size: 17px;
-  font-weight: 600;
+  font-weight: 700;
+}
+
+.auth-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--ed-brand-grad-hi) 0%, var(--ed-brand-strong) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    var(--ed-brand-glow);
+  color: #fff;
 }
 
 .auth-back {
@@ -77,12 +94,12 @@ watch(
   justify-content: center;
   gap: 4px;
   margin-top: 14px;
-  color: #8b93a1;
+  color: var(--ed-text-4);
   font-size: 12.5px;
   text-decoration: none;
 }
 
 .auth-back:hover {
-  color: #2b579a;
+  color: var(--ed-brand-strong);
 }
 </style>

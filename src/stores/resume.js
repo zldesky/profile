@@ -14,13 +14,30 @@ import {
   createSkill,
 } from '@/data/defaultResume'
 import { normalizeResume } from '@/data/normalizeResume'
-import { FONTS, PAGE } from '@/data/presets'
+import {
+  AVATAR_REF_PREFIX,
+  isAvailable as isAvatarStoreAvailable,
+  loadAvatar,
+  pruneAvatars,
+  storeAvatar,
+} from '@/utils/avatarStore'
 import { createHistory } from '@/utils/history'
-import { clamp, clone, debounce, hexToRgb, moveItem, uid } from '@/utils/helpers'
+import { clamp, clone, debounce, moveItem, uid } from '@/utils/helpers'
+import { computePageStyle, computePrintCss } from '@/utils/resumeStyle'
 
 const STORAGE_KEY = 'resume-studio-v1'
 /** localStorage 单域名容量约 5MB，预留安全余量 */
 const STORAGE_LIMIT = 4.5 * 1024 * 1024
+/** 多文档登记表：[{ id, name, pinned, updatedAt }] */
+const REGISTRY_KEY = 'resume-studio-registry-v1'
+const DOC_KEY_PREFIX = 'resume-studio-doc-'
+/** 历史版本快照：[{ id, name, updatedAt, data }]，跨文档的时间线备份 */
+const SNAPSHOTS_KEY = 'resume-studio-snapshots-v1'
+/** 快照采样间隔与保留上限：约覆盖最近一小时内的关键时点 */
+const SNAPSHOT_INTERVAL = 5 * 60 * 1000
+const SNAPSHOT_MAX = 12
+
+const docKey = (id) => `${DOC_KEY_PREFIX}${id}`
 
 export const useResumeStore = defineStore('resume', () => {
   // 简历对象整体会被替换（重置、导入），因此用 ref 保持深层响应
@@ -29,6 +46,12 @@ export const useResumeStore = defineStore('resume', () => {
   const savedAt = shallowRef(0)
   const storageWarning = shallowRef('')
   const restored = shallowRef(false)
+  /** 当前打开文档的 id；内容本体始终存在主文档键 resume-studio-v1 */
+  const activeDocId = shallowRef('main')
+  /** 本地简历登记表：[{ id, name, pinned, updatedAt }] */
+  const docList = ref([])
+  /** 历史版本快照（LRU），供误操作后回退 */
+  const snapshots = ref([])
 
   /* ---------------- 派生数据 ---------------- */
 
@@ -37,102 +60,31 @@ export const useResumeStore = defineStore('resume', () => {
   const sections = computed(() => resume.value.sections)
   const visibleSections = computed(() => resume.value.sections.filter((s) => s.visible))
 
-  /** 纸张内容区宽度（毫米），用于换算头像的避让内边距 */
-  const contentWidthMm = computed(() => PAGE.width - resume.value.theme.mh * 2)
-
-  /**
-   * 头像当前偏在哪一侧，决定正文从哪边避让。
-   * 头像默认贴右，其左边缘越过纸张中线即视为已移到左侧。
-   */
-  const avatarSide = computed(() => {
-    const width = Number(resume.value.basics.avatarWidth) || 0
-    const dx = Number(resume.value.basics.avatarPos?.dx) || 0
-    const containerWidth = contentWidthMm.value
-    const left = containerWidth - width + dx
-    return left >= containerWidth / 2 ? 'right' : 'left'
-  })
-
-  /**
-   * 头像被拖离原位后，正文与联系方式需要避让的内边距。
-   * 头像绝对定位、不占横向空间，因此这里的值就是它占据的宽度，
-   * 正文可用宽度 = 纸张内容宽 - 该内边距。
-   */
-  const avatarPad = computed(() => {
-    const width = Number(resume.value.basics.avatarWidth) || 0
-    const dx = Number(resume.value.basics.avatarPos?.dx) || 0
-    const containerWidth = contentWidthMm.value
-    const gap = 4
-    const left = containerWidth - width + dx
-
-    if (avatarSide.value === 'right') {
-      return { left: 0, right: Math.max(0, containerWidth - left + gap) }
-    }
-    return { left: Math.max(0, left + width + gap), right: 0 }
-  })
-
-  /**
-   * 正文实际可用宽度（毫米）= 纸张内容宽 - 头像占位。
-   * 头像被拖到页面中部时占位最大，正文会被压到 60mm 上下，
-   * 联系方式的两列网格在那时会互相压住，需要据此退回单列。
-   */
-  const bodyWidthMm = computed(
-    () => contentWidthMm.value - avatarPad.value.left - avatarPad.value.right,
-  )
-
-  /** 纸张与主题相关的 CSS 变量 */
-  const pageStyle = computed(() => {
-    const t = resume.value.theme
-
-    // 底边线按百分比长度换算起始偏移：居中和右对齐时需扣除自身长度
-    const lineWidth = clamp(Number(t.titleBottomWidth) || 0, 10, 100)
-    const lineLeft =
-      t.titleBottomAlign === 'center'
-        ? `${(100 - lineWidth) / 2}%`
-        : t.titleBottomAlign === 'right'
-          ? `${100 - lineWidth}%`
-          : '0%'
-
-    return {
-      '--accent': t.accent,
-      '--accent-rgb': hexToRgb(t.accent),
-      '--text': t.text,
-      '--font': FONTS[t.fontKey]?.stack || FONTS.yahei.stack,
-      '--fs': t.fs,
-      '--lh': t.lh,
-      '--gap': t.gap,
-      '--mv': `${t.mv}mm`,
-      '--mh': `${t.mh}mm`,
-      '--avatar-w': `${resume.value.basics.avatarWidth}mm`,
-      '--avatar-h': `${resume.value.basics.avatarHeight}mm`,
-      '--avatar-dx': `${Number(resume.value.basics.avatarPos?.dx) || 0}mm`,
-      '--avatar-dy': `${Number(resume.value.basics.avatarPos?.dy) || 0}mm`,
-      // 向下拖拽时撑开页头高度，避免压到下方模块
-      '--avatar-extra-h': `${Math.max(0, Number(resume.value.basics.avatarPos?.dy) || 0)}mm`,
-      '--avatar-pad-left': `${avatarPad.value.left}mm`,
-      '--avatar-pad-right': `${avatarPad.value.right}mm`,
-      // 正文被头像挤到不足 120mm 时，联系方式退回单列而不是两列硬挤
-      '--contact-cols': bodyWidthMm.value < 120 ? '1' : '2',
-
-      '--title-gap': `${t.titleGap}em`,
-      '--title-margin': `${t.titleMargin}em`,
-      '--title-line-w': `${lineWidth}%`,
-      '--title-line-left': lineLeft,
-      '--title-line-size': `${t.titleBottomThickness}px`,
-      '--title-line-gap': `${t.titleBottomGap}px`,
-    }
-  })
+  /** 纸张与主题相关的 CSS 变量（几何计算抽在 utils/resumeStyle.js，分享页共用） */
+  const pageStyle = computed(() => computePageStyle(resume.value))
 
   /** 打印页边距，注入到 document 的 @page 规则 */
-  const printCss = computed(() => {
-    const t = resume.value.theme
-    return `@page{size:A4;margin:${t.mv}mm ${t.mh}mm;}`
-  })
+  const printCss = computed(() => computePrintCss(resume.value))
 
   /* ---------------- 持久化 ---------------- */
 
+  /**
+   * 本地持久化形态：头像 dataURL 换成 IndexedDB 引用，主文档只留轻量 JSON。
+   * 内存态（store.resume）始终是完整 dataURL，模板、云同步、导出全部无感；
+   * IndexedDB 不可用时回退为内联，宁可慢也不丢头像。
+   */
+  function serializeCompact() {
+    const data = clone(resume.value)
+    const avatar = data.basics?.avatar
+    if (isAvatarStoreAvailable() && typeof avatar === 'string' && avatar.startsWith('data:image')) {
+      data.basics.avatar = storeAvatar(avatar)
+    }
+    return JSON.stringify(data)
+  }
+
   function save() {
     try {
-      const serialized = JSON.stringify(resume.value)
+      const serialized = serializeCompact()
       if (serialized.length > STORAGE_LIMIT) {
         storageWarning.value = '内容体积过大，可能无法自动保存，建议压缩头像图片或导出 JSON 备份'
         return
@@ -140,12 +92,107 @@ export const useResumeStore = defineStore('resume', () => {
       localStorage.setItem(STORAGE_KEY, serialized)
       savedAt.value = Date.now()
       storageWarning.value = ''
+      maybeSnapshot()
+      schedulePrune()
     } catch (error) {
       storageWarning.value = `自动保存失败：${error.message}`
     }
   }
 
+  /* ---------------- 历史版本快照 ---------------- */
+
+  function readSnapshots() {
+    try {
+      const list = JSON.parse(localStorage.getItem(SNAPSHOTS_KEY) || 'null')
+      if (Array.isArray(list)) {
+        return list.filter((s) => s && typeof s.id === 'string' && typeof s.data === 'string')
+      }
+    } catch {
+      /* 损坏的快照库按空处理 */
+    }
+    return []
+  }
+
+  function writeSnapshots(list) {
+    try {
+      localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(list))
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * 保存时采样历史版本：与上一份间隔超过阈值才采，超出上限从最旧丢弃。
+   * 快照是跨文档的时间线备份，data 为紧凑序列化（头像走 IndexedDB 引用）。
+   * @param {boolean} force 跳过间隔检查（会话开始时采一份「起点」）
+   */
+  function maybeSnapshot(force = false) {
+    const list = snapshots.value
+    const now = Date.now()
+    const last = list[list.length - 1]
+    if (!force && last && now - last.updatedAt < SNAPSHOT_INTERVAL) return
+
+    list.push({ id: uid('snap'), name: deriveDocName(), updatedAt: now, data: serializeCompact() })
+    while (list.length > SNAPSHOT_MAX) list.shift()
+
+    if (!writeSnapshots(list)) {
+      // 写入失败大概率是超容量：砍半重试一次，再失败就放弃本轮采样
+      list.splice(0, Math.ceil(list.length / 2))
+      writeSnapshots(list)
+    }
+  }
+
+  /**
+   * 回退到某份历史版本。恢复前先把当前状态强制采样一份，反悔还能再回来。
+   * @param {string} id 快照 id
+   * @returns {boolean} 是否恢复成功
+   */
+  function restoreSnapshot(id) {
+    const snap = snapshots.value.find((s) => s.id === id)
+    if (!snap) return false
+    let data
+    try {
+      data = JSON.parse(snap.data)
+    } catch {
+      return false
+    }
+    maybeSnapshot(true)
+    adoptResume(data)
+    history.reset(serializeForHistory())
+    syncHistoryFlags()
+    save()
+    return true
+  }
+
   const scheduleSave = debounce(save, 400)
+
+  /** 清掉已不被任何文档或快照引用的头像 blob（换过头像后会残留旧文件） */
+  function pruneOrphanAvatars() {
+    const keep = []
+    try {
+      const main = localStorage.getItem(STORAGE_KEY)
+      if (main) keep.push(...collectAvatarRefs(main))
+      docList.value.forEach((doc) => {
+        if (doc.id === activeDocId.value) return
+        const raw = localStorage.getItem(docKey(doc.id))
+        if (raw) keep.push(...collectAvatarRefs(raw))
+      })
+      const snapsRaw = localStorage.getItem(SNAPSHOTS_KEY)
+      if (snapsRaw) keep.push(...collectAvatarRefs(snapsRaw))
+    } catch {
+      return
+    }
+    pruneAvatars(keep)
+  }
+
+  const schedulePrune = debounce(pruneOrphanAvatars, 6000)
+
+  const AVATAR_REF_RE = /idb-avatar:[0-9a-z]+/g
+
+  function collectAvatarRefs(text) {
+    return text.match(AVATAR_REF_RE) || []
+  }
 
   // 关页/切后台前把防抖窗口里的改动立即落盘，最后的输入不丢
   const flushSave = () => {
@@ -156,6 +203,210 @@ export const useResumeStore = defineStore('resume', () => {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushSave()
   })
+
+  /* ---------------- 多份简历 ---------------- */
+
+  function readRegistry() {
+    try {
+      const list = JSON.parse(localStorage.getItem(REGISTRY_KEY) || 'null')
+      if (Array.isArray(list) && list.length && list.every((d) => d && typeof d.id === 'string')) {
+        return list
+      }
+    } catch {
+      /* 损坏的登记表按首次使用处理 */
+    }
+    return null
+  }
+
+  function writeRegistry() {
+    try {
+      localStorage.setItem(REGISTRY_KEY, JSON.stringify(docList.value))
+    } catch {
+      /* 登记表极小，写失败只影响列表展示，不打断编辑 */
+    }
+  }
+
+  /** 文档显示名：默认跟随简历里的姓名，手动重命名（pinned）后固定 */
+  const deriveDocName = (data = resume.value) =>
+    String(data?.basics?.name || '').trim() || '未命名简历'
+
+  /**
+   * 载入一份简历数据：头像若是 IndexedDB 引用，先置空渲染，
+   * 异步取回 dataURL 后回填，避免模板渲染到非法 src。
+   */
+  function adoptResume(data) {
+    const normalized = normalizeResume(data)
+    const avatarRef = normalized.basics?.avatar
+    if (typeof avatarRef === 'string' && avatarRef.startsWith(AVATAR_REF_PREFIX)) {
+      normalized.basics.avatar = ''
+      loadAvatar(avatarRef).then((dataUrl) => {
+        if (!dataUrl) {
+          storageWarning.value = '头像的本地缓存读取失败，请重新上传头像'
+          return
+        }
+        // 等待期间用户可能已经上传了新头像，仅在仍为空时回填
+        if (!resume.value.basics.avatar) resume.value.basics.avatar = dataUrl
+        // 回填属于「恢复本来状态」而不是一次编辑，历史基线随之重立
+        history.reset(serializeForHistory())
+        syncHistoryFlags()
+      })
+    }
+    resume.value = normalized
+  }
+
+  /** 把当前文档写回自己的槽位（切换走之前调用），并刷新登记表 */
+  function parkCurrentDoc() {
+    const entry = docList.value.find((d) => d.id === activeDocId.value)
+    if (!entry) return
+    if (!entry.pinned) entry.name = deriveDocName()
+    entry.updatedAt = Date.now()
+    try {
+      localStorage.setItem(docKey(entry.id), serializeCompact())
+    } catch (error) {
+      storageWarning.value = `简历副本保存失败：${error.message}`
+    }
+    writeRegistry()
+  }
+
+  /** 切换到另一份简历：当前内容存回槽位，目标槽位载入主文档 */
+  function switchDoc(id) {
+    if (id === activeDocId.value) return
+    const entry = docList.value.find((d) => d.id === id)
+    if (!entry) return
+
+    let data = null
+    try {
+      const raw = localStorage.getItem(docKey(id))
+      if (raw) data = JSON.parse(raw)
+    } catch {
+      data = null
+    }
+    // 槽位损坏时宁可不动，避免把当前文档切丢
+    if (!data) return
+
+    parkCurrentDoc()
+    localStorage.removeItem(docKey(id))
+    activeDocId.value = id
+    adoptResume(data)
+    history.reset(serializeForHistory())
+    syncHistoryFlags()
+    save()
+  }
+
+  /** 新建一份空白简历并切换过去 */
+  function createDoc() {
+    parkCurrentDoc()
+    const id = uid('doc')
+    docList.value.push({ id, name: '未命名简历', pinned: false, updatedAt: Date.now() })
+    activeDocId.value = id
+    const blank = createResume()
+    blank.basics.name = ''
+    blank.basics.jobTitle = ''
+    blank.basics.fields = []
+    blank.sections = []
+    resume.value = blank
+    history.reset(serializeForHistory())
+    syncHistoryFlags()
+    writeRegistry()
+    save()
+    return id
+  }
+
+  /** 把一份简历数据（导入文件、分享页带入）存为新文档并切换过去 */
+  function importAsDoc(data) {
+    parkCurrentDoc()
+    const id = uid('doc')
+    docList.value.push({ id, name: '未命名简历', pinned: false, updatedAt: Date.now() })
+    activeDocId.value = id
+    adoptResume(data)
+    history.reset(serializeForHistory())
+    syncHistoryFlags()
+    writeRegistry()
+    save()
+    return id
+  }
+
+  /** 复制一份简历（活跃文档取内存态，其余读槽位），放到登记表末尾 */
+  function duplicateDoc(id) {
+    const entry = docList.value.find((d) => d.id === id)
+    if (!entry) return
+
+    let data
+    if (id === activeDocId.value) {
+      data = clone(resume.value)
+    } else {
+      try {
+        data = JSON.parse(localStorage.getItem(docKey(id)) || 'null')
+      } catch {
+        data = null
+      }
+    }
+    if (!data) return
+
+    const newId = uid('doc')
+    try {
+      localStorage.setItem(docKey(newId), JSON.stringify(normalizeResume(data)))
+      docList.value.push({
+        id: newId,
+        name: `${entry.pinned ? entry.name : deriveDocName(data)} 副本`,
+        pinned: false,
+        updatedAt: Date.now(),
+      })
+      writeRegistry()
+    } catch (error) {
+      storageWarning.value = `复制简历失败：${error.message}`
+    }
+  }
+
+  /** 手动重命名后固定，不再跟随简历姓名 */
+  function renameDoc(id, name) {
+    const entry = docList.value.find((d) => d.id === id)
+    if (!entry) return
+    entry.name = String(name || '').trim() || entry.name
+    entry.pinned = true
+    writeRegistry()
+  }
+
+  /**
+   * 删除一份简历。至少保留一份；删除当前文档时自动切到列表里的第一份。
+   * @returns {boolean} 是否删除成功
+   */
+  function removeDoc(id) {
+    if (docList.value.length <= 1) return false
+    const index = docList.value.findIndex((d) => d.id === id)
+    if (index === -1) return false
+
+    docList.value.splice(index, 1)
+
+    if (id !== activeDocId.value) {
+      localStorage.removeItem(docKey(id))
+      writeRegistry()
+      return true
+    }
+
+    // 删除的是当前文档：载入第一份其它简历顶上，被删内容不留残余
+    const next = docList.value[0]
+    let data = null
+    try {
+      const raw = localStorage.getItem(docKey(next.id))
+      if (raw) data = JSON.parse(raw)
+    } catch {
+      data = null
+    }
+    localStorage.removeItem(docKey(id))
+    activeDocId.value = next.id
+    if (data) {
+      adoptResume(data)
+      localStorage.removeItem(docKey(next.id))
+    } else {
+      resume.value = createResume()
+    }
+    history.reset(serializeForHistory())
+    syncHistoryFlags()
+    writeRegistry()
+    save()
+    return true
+  }
 
   /* ---------------- 撤销 / 重做 ---------------- */
 
@@ -197,15 +448,34 @@ export const useResumeStore = defineStore('resume', () => {
   }
 
   function load() {
+    let loaded = false
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
-      if (!raw) return false
-      resume.value = normalizeResume(JSON.parse(raw))
-      restored.value = true
-      return true
+      if (raw) {
+        adoptResume(JSON.parse(raw))
+        restored.value = true
+        loaded = true
+      }
     } catch {
-      return false
+      loaded = false
     }
+
+    snapshots.value = readSnapshots()
+
+    // 登记表：老用户只有一份主文档，就地补一条登记，无感升级到多文档
+    const existing = readRegistry()
+    if (existing) {
+      docList.value = existing
+      if (!existing.some((d) => d.id === activeDocId.value)) {
+        activeDocId.value = existing[0].id
+      }
+    } else {
+      docList.value = [
+        { id: activeDocId.value, name: deriveDocName(), pinned: false, updatedAt: Date.now() },
+      ]
+      writeRegistry()
+    }
+    return loaded
   }
 
   watch(resume, scheduleSave, { deep: true })
@@ -476,7 +746,7 @@ export const useResumeStore = defineStore('resume', () => {
   }
 
   function replaceResume(data) {
-    resume.value = normalizeResume(data)
+    adoptResume(data)
     history.reset(serializeForHistory())
     syncHistoryFlags()
   }
@@ -491,12 +761,14 @@ export const useResumeStore = defineStore('resume', () => {
   // 否则页面刚打开撤销按钮就是亮的。基线必须在 load() 之后建立。
   history.init(serializeForHistory())
 
+  // 会话起点强制采一份快照：至少每次打开都有一个可回退的时点
+  maybeSnapshot(true)
+
   return {
     resume,
     theme,
     basics,
     sections,
-    contentWidthMm,
     avatarLimits,
     visibleSections,
     pageStyle,
@@ -513,6 +785,18 @@ export const useResumeStore = defineStore('resume', () => {
     resetAll,
     replaceResume,
     toJSON,
+
+    activeDocId,
+    docList,
+    switchDoc,
+    createDoc,
+    importAsDoc,
+    duplicateDoc,
+    renameDoc,
+    removeDoc,
+
+    snapshots,
+    restoreSnapshot,
 
     setTheme,
     resetTheme,

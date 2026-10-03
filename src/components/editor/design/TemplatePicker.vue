@@ -121,20 +121,20 @@ function selectTemplate(id) {
 }
 
 .tpl-card:hover {
-  border-color: #b9c3d4;
+  border-color: #c2cad4;
   box-shadow: 0 2px 10px rgba(20, 30, 50, 0.07);
 }
 
 .tpl-card.is-active {
-  border-color: #2b579a;
-  box-shadow: 0 0 0 2px rgba(43, 87, 154, 0.16);
+  border-color: var(--ed-brand);
+  box-shadow: 0 0 0 3px var(--ed-brand-ring);
 }
 
 .tpl-check {
   position: absolute;
   top: 6px;
   right: 6px;
-  color: #2b579a;
+  color: var(--ed-brand-strong);
 }
 
 .tpl-meta strong {

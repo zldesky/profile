@@ -202,7 +202,7 @@ function sanitizeSections(rawSections) {
 function sanitizeTheme(rawTheme) {
   const theme = rawTheme && typeof rawTheme === 'object' ? rawTheme : {}
   return {
-    accent: cleanColor(theme.accent, '#2b579a'),
+    accent: cleanColor(theme.accent, '#000000'),
     text: cleanColor(theme.text, '#2b2f36'),
     fontKey: pickEnum(theme.fontKey, ALLOW.fontKey, 'yahei'),
     fs: clampNumber(theme.fs, 0.6, 1.6, 1),

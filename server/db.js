@@ -1,11 +1,12 @@
 /**
  * SQLite 数据层（node:sqlite，Node 22.13+ 内置，无原生编译依赖）。
  *
- * 存四类数据：
+ * 存五类数据：
  *  1. users    —— 账号。密码只存 scrypt 摘要（见 auth.js），绝不落明文；
  *  2. sessions —— 服务端会话。令牌只存库，Cookie 里那份丢了可随时吊销；
  *  3. resumes  —— 每用户一份简历快照（JSON 文本），云端同步的权威源；
- *  4. export_quota —— 按主体（用户 / 匿名脚本）与自然日计的导出次数。
+ *  4. export_quota —— 按主体（用户 / 匿名脚本）与自然日计的导出次数；
+ *  5. shares   —— 简历分享快照（公开只读，带过期时间，本人可撤销）。
  *
  * 所有语句走 prepared statement，参数永远绑定、绝不拼字符串，
  * 用户名这类可控文本也就没有注入面。
@@ -60,6 +61,13 @@ export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.d
       day     TEXT    NOT NULL,
       used    INTEGER NOT NULL,
       PRIMARY KEY (subject, day)
+    );
+    CREATE TABLE IF NOT EXISTS shares (
+      id         TEXT PRIMARY KEY,
+      user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      data       TEXT    NOT NULL,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
     );
   `)
 
@@ -195,6 +203,59 @@ export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.d
     return Number(sumQuotaByDay.get(day).total)
   }
 
+  /* ---------------- 简历分享 ---------------- */
+
+  const insertShare = db.prepare(
+    'INSERT INTO shares (id, user_id, data, created_at, expires_at) VALUES (?, ?, ?, ?, ?)',
+  )
+  const selectShare = db.prepare(
+    'SELECT id, user_id, data, created_at, expires_at FROM shares WHERE id = ?',
+  )
+  const deleteOwnedShare = db.prepare('DELETE FROM shares WHERE id = ? AND user_id = ?')
+  const deleteExpiredShares = db.prepare('DELETE FROM shares WHERE expires_at < ?')
+
+  /**
+   * 保存一份分享快照。id 冲突（极小概率）由调用方换号重试。
+   * @returns {{ id: string, createdAt: number, expiresAt: number }}
+   */
+  function createShare(id, userId, resumeObject, ttlMs) {
+    const now = Date.now()
+    insertShare.run(String(id), userId, JSON.stringify(resumeObject), now, now + ttlMs)
+    return { id: String(id), createdAt: now, expiresAt: now + ttlMs }
+  }
+
+  /** 公开读取。过期行视为不存在（顺带删除） */
+  function getShare(id) {
+    const row = selectShare.get(String(id || ''))
+    if (!row) return null
+    if (row.expires_at <= Date.now()) {
+      deleteExpiredShares.run(Date.now())
+      return null
+    }
+    try {
+      return {
+        id: row.id,
+        userId: row.user_id,
+        resume: JSON.parse(row.data),
+        createdAt: row.created_at,
+        expiresAt: row.expires_at,
+      }
+    } catch {
+      return null
+    }
+  }
+
+  /** 只允许分享者本人撤销；返回是否删到了行 */
+  function deleteShare(id, userId) {
+    if (!userId) return false
+    return Number(deleteOwnedShare.run(String(id), userId).changes) > 0
+  }
+
+  /** 清理过期分享，挂在创建分享的调用路径上惰性执行 */
+  function purgeExpiredShares() {
+    return Number(deleteExpiredShares.run(Date.now()).changes)
+  }
+
   function close() {
     db.close()
   }
@@ -209,6 +270,10 @@ export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.d
     purgeExpiredSessions,
     getResume,
     saveResume,
+    createShare,
+    getShare,
+    deleteShare,
+    purgeExpiredShares,
     quotaUsed,
     quotaConsume,
     quotaRefund,

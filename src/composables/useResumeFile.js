@@ -18,7 +18,7 @@ export function useResumeFile() {
 
   /**
    * 从用户选中的文件导入。
-   * 结构不合法时直接放弃，不覆盖当前简历。
+   * 结构不合法时直接放弃，不覆盖当前简历；合法时先确认再覆盖。
    * @param {File|undefined} file
    */
   function importFromFile(file) {
@@ -31,6 +31,8 @@ export function useResumeFile() {
         if (!data || typeof data !== 'object' || !Array.isArray(data.sections)) {
           throw new Error('缺少 sections 字段')
         }
+        const currentName = store.basics.name || '未命名简历'
+        if (!window.confirm(`导入将覆盖当前简历「${currentName}」，确定继续？`)) return
         store.replaceResume(data)
         toast('已导入简历数据')
       } catch (error) {

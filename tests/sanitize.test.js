@@ -66,7 +66,7 @@ describe('sanitizeResume：注入面', () => {
       theme: { accent: 'javascript:alert(1)', text: '#abc' },
       sections: [],
     })
-    expect(value.theme.accent).toBe('#2b579a')
+    expect(value.theme.accent).toBe('#000000')
     expect(value.theme.text).toBe('#2b2f36')
   })
 })

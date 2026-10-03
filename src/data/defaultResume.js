@@ -27,7 +27,7 @@ export const SECTION_TYPES = [
 ]
 
 export const DEFAULT_THEME = {
-  accent: '#2b579a',
+  accent: '#000000',
   text: '#2b2f36',
   fontKey: 'yahei',
   fs: 1,

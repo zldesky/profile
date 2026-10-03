@@ -13,6 +13,51 @@
 
 :root {
   color-scheme: light;
+
+  /*
+   * 编辑器界面设计令牌：品牌色、中性灰阶、阴影与圆角。
+   * 只作用于编辑器外壳（.ed-* 与各面板类），简历纸张的配色走 .paper 内的
+   * --accent 变量，两者互不影响，打印导出不受这里任何值的影响。
+   * 默认品牌色为黑色（纯色、克制、商务）；运行时 applyChromeAccent
+   * （helpers.js）会把这套品牌令牌按简历主色整体重算并内联到 :root，
+   * 实现界面主题与简历配色联动。
+   */
+  --ed-brand: #000000;
+  --ed-brand-strong: #000000;
+  --ed-brand-deep: #000000;
+  --ed-brand-tint: #e6e6e6;
+  --ed-brand-ring: rgba(0, 0, 0, 0.16);
+  --ed-brand-border: rgba(0, 0, 0, 0.45);
+  /* 品牌色投影：主按钮与 logo 块的彩色阴影 */
+  --ed-brand-glow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  /* 主按钮渐变端点：主色向白/黑各偏一档，换主题时按同一公式重算 */
+  --ed-brand-grad-hi: #1a1a1a;
+  --ed-brand-grad-lo: #000000;
+  --ed-ink: #101828;
+  --ed-text: #344054;
+  --ed-text-2: #475467;
+  --ed-text-3: #667085;
+  --ed-text-4: #98a2b3;
+  --ed-line: #e4e7ec;
+  --ed-line-2: #d0d5dd;
+  --ed-line-soft: #eaecf0;
+  --ed-fill: #f2f4f7;
+  --ed-fill-2: #f9fafb;
+  --ed-surface: #fff;
+  --ed-danger: #d92d20;
+  --ed-danger-strong: #b42318;
+  --ed-danger-tint: #fef3f2;
+  --ed-warn: #b54708;
+  --ed-warn-tint: #fef4e6;
+  --ed-shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --ed-shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.1), 0 1px 2px rgba(16, 24, 40, 0.06);
+  --ed-shadow-md: 0 4px 8px -2px rgba(16, 24, 40, 0.12), 0 2px 4px -2px rgba(16, 24, 40, 0.06);
+  --ed-shadow-lg: 0 20px 24px -4px rgba(16, 24, 40, 0.1), 0 8px 8px -4px rgba(16, 24, 40, 0.05);
+  --ed-paper-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 12px 32px -8px rgba(16, 24, 40, 0.16);
+  --ed-radius: 10px;
+  --ed-font:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'HarmonyOS Sans SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
 }
 
 *,
@@ -28,9 +73,9 @@ body {
 }
 
 body {
-  background: #eef0f4;
-  color: #1f2329;
-  font-family: -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  background: #f2f4f7;
+  color: var(--ed-ink);
+  font-family: var(--ed-font);
   font-size: 14px;
   line-height: 1.6;
   -webkit-print-color-adjust: exact;
@@ -51,8 +96,8 @@ textarea {
 /* ---------------- 纸张 ---------------- */
 
 .paper {
-  --accent: #2b579a;
-  --accent-rgb: 43, 87, 154;
+  --accent: #000000;
+  --accent-rgb: 0, 0, 0;
   --text: #2b2f36;
   --font: 'Microsoft YaHei', sans-serif;
   --fs: 1;

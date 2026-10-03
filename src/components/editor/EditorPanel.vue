@@ -13,15 +13,17 @@ const tab = shallowRef('content')
 
 <template>
   <aside class="editor-panel">
-    <nav class="panel-tabs">
-      <button :class="{ 'is-active': tab === 'content' }" @click="tab = 'content'">
-        <SvgIcon name="text" :size="14" />
-        <span>内容</span>
-      </button>
-      <button :class="{ 'is-active': tab === 'design' }" @click="tab = 'design'">
-        <SvgIcon name="palette" :size="14" />
-        <span>设计</span>
-      </button>
+    <nav class="panel-tabs-wrap">
+      <div class="panel-tabs">
+        <button :class="{ 'is-active': tab === 'content' }" @click="tab = 'content'">
+          <SvgIcon name="text" :size="14" />
+          <span>内容</span>
+        </button>
+        <button :class="{ 'is-active': tab === 'design' }" @click="tab = 'design'">
+          <SvgIcon name="palette" :size="14" />
+          <span>设计</span>
+        </button>
+      </div>
     </nav>
 
     <!-- 两个页签用 v-show：切换时保留模块展开状态与面板滚动位置 -->
@@ -38,16 +40,24 @@ const tab = shallowRef('content')
   flex: 0 0 340px;
   flex-direction: column;
   min-height: 0;
-  border-left: 1px solid #e3e6ec;
-  background: #fff;
+  border-left: 1px solid var(--ed-line-soft);
+  background: var(--ed-surface);
+}
+
+/* 页签外层负责留白与吸附，内层才是分段控制器的浅灰轨道 */
+.panel-tabs-wrap {
+  flex: 0 0 auto;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--ed-line-soft);
 }
 
 .panel-tabs {
   display: flex;
-  flex: 0 0 auto;
-  gap: 6px;
-  padding: 10px 14px;
-  border-bottom: 1px solid #e3e6ec;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--ed-line-soft);
+  border-radius: 9px;
+  background: var(--ed-fill);
 }
 
 .panel-tabs button {
@@ -57,24 +67,28 @@ const tab = shallowRef('content')
   justify-content: center;
   gap: 6px;
   padding: 7px 0;
-  border: 1px solid #d8dce4;
-  border-radius: 8px;
-  background: #fff;
-  color: #5b6472;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ed-text-2);
   font: inherit;
   font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
   transition: 0.15s;
 }
 
 .panel-tabs button:hover {
-  background: #f5f7fa;
+  color: var(--ed-ink);
 }
 
+/* 选中页签 = 白色浮起滑块，与浅灰轨道形成层次 */
 .panel-tabs button.is-active {
-  border-color: #2b579a;
-  background: #eaf0fa;
-  color: #24487f;
+  background: var(--ed-surface);
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.12),
+    0 0 1px rgba(16, 24, 40, 0.1);
+  color: var(--ed-brand-deep);
   font-weight: 600;
 }
 
@@ -93,12 +107,12 @@ const tab = shallowRef('content')
     border-left: 0;
   }
 
-  .panel-tabs {
+  .panel-tabs-wrap {
     /* 页签常驻可见，长面板滚动时仍能换页签 */
     position: sticky;
     top: 0;
     z-index: 2;
-    background: #fff;
+    background: var(--ed-surface);
   }
 
   .panel-body {

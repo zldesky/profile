@@ -5,15 +5,23 @@
  * 表单里不再常驻验证码。独立 Teleport 弹层，层级高于登录弹窗，
  * 在独立登录页与账号弹窗里都能正常浮起。
  */
-import { ref, watch } from 'vue'
+import { ref, useTemplateRef, watch } from 'vue'
 
 import SliderCaptcha from '@/components/SliderCaptcha.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
+import { useDialogA11y } from '@/composables/useDialogA11y'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
 })
 const emit = defineEmits(['verified', 'cancel', 'exhausted'])
+
+const cardRef = useTemplateRef('cardRef')
+useDialogA11y(
+  () => props.open,
+  cardRef,
+  () => emit('cancel'),
+)
 
 /** 连续失败上限：达到后向宿主报 exhausted，由宿主关闭窗口并提示 */
 const MAX_FAILURES = 3
@@ -47,7 +55,14 @@ function onFailed() {
 <template>
   <Teleport to="body">
     <div v-if="open" class="cd-mask" @click.self="emit('cancel')">
-      <div class="cd-card" role="dialog" aria-modal="true" aria-label="安全验证">
+      <div
+        ref="cardRef"
+        class="cd-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label="安全验证"
+        tabindex="-1"
+      >
         <div class="cd-head">
           <h3 class="cd-title">安全验证</h3>
           <button class="cd-close" title="关闭" aria-label="关闭" @click="emit('cancel')">
@@ -73,16 +88,16 @@ function onFailed() {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(15, 23, 42, 0.34);
+  background: rgba(16, 24, 40, 0.42);
 }
 
 .cd-card {
   width: 100%;
   max-width: 348px;
   padding: 16px 18px 18px;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.22);
+  border-radius: 16px;
+  background: var(--ed-surface);
+  box-shadow: var(--ed-shadow-lg);
 }
 
 .cd-head {
@@ -94,7 +109,7 @@ function onFailed() {
 
 .cd-title {
   margin: 0;
-  color: #1f2329;
+  color: var(--ed-ink);
   font-size: 14.5px;
   font-weight: 600;
 }
@@ -109,18 +124,18 @@ function onFailed() {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: #8b93a1;
+  color: var(--ed-text-4);
   cursor: pointer;
 }
 
 .cd-close:hover {
-  background: #f2f4f7;
-  color: #2b579a;
+  background: var(--ed-fill);
+  color: var(--ed-brand-strong);
 }
 
 .cd-desc {
   margin: 0 0 12px;
-  color: #8b93a1;
+  color: var(--ed-text-4);
   font-size: 12px;
   line-height: 1.6;
 }

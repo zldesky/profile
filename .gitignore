@@ -49,3 +49,6 @@ server/.data/
 
 # nginx 入口的证书与私钥（nginx/default.conf 是配置模板，要入库）
 nginx/certs/
+
+# 本地 GUI 测试截图
+gui-test-screenshots

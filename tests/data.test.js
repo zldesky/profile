@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { normalizeResume } from '@/data/normalizeResume'
-import { clamp, hexToRgb, moveItem } from '@/utils/helpers'
+import { clamp, hexToRgb, mixHex, moveItem } from '@/utils/helpers'
 
 describe('normalizeResume', () => {
   it('非对象输入回退到示例简历', () => {
@@ -66,7 +66,16 @@ describe('helpers', () => {
   it('hexToRgb 支持 3 位与 6 位，非法回退', () => {
     expect(hexToRgb('#2b579a')).toBe('43,87,154')
     expect(hexToRgb('#fff')).toBe('255,255,255')
-    expect(hexToRgb('javascript:')).toBe('43,87,154')
+    expect(hexToRgb('javascript:')).toBe('0,0,0')
+  })
+
+  it('mixHex 在两色间线性插值，ratio 越界被夹住', () => {
+    expect(mixHex('#000000', '#ffffff', 0.5)).toBe('#808080')
+    expect(mixHex('#059669', '#000000', 0.5)).toBe('#034b35')
+    expect(mixHex('#059669', '#ffffff', 0)).toBe('#059669')
+    expect(mixHex('#059669', '#ffffff', 1)).toBe('#ffffff')
+    expect(mixHex('#059669', '#ffffff', 2)).toBe('#ffffff')
+    expect(mixHex('javascript:', '#ffffff', 0.5)).toBe('#808080')
   })
 
   it('moveItem 越界时原样返回', () => {

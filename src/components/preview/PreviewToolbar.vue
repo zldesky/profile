@@ -56,20 +56,51 @@ const emit = defineEmits(['zoom-in', 'zoom-out', 'fit', 'compress'])
 </template>
 
 <style scoped>
+/*
+ * 悬浮工具条：不再占一条底栏，而是浮在画布下沿的胶囊。
+ * 半透明白 + backdrop blur，按钮全部去边框变幽灵态，是画布类产品的通用做法。
+ */
 .editor-tools {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 10;
   display: flex;
-  flex: 0 0 auto;
+  transform: translateX(-50%);
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-top: 1px solid #e3e6ec;
-  background: #fafbfc;
+  gap: 6px;
+  max-width: calc(100% - 24px);
+  padding: 6px 8px;
+  border: 1px solid var(--ed-line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--ed-shadow-lg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* 胶囊内按钮去掉描边和投影，只留悬停底色，避免整条工具条显得零件堆叠 */
+.editor-tools .ed-btn {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.editor-tools .ed-btn:hover {
+  background: var(--ed-fill);
+}
+
+.editor-tools .ed-btn:disabled:hover {
+  background: transparent;
+}
+
+.editor-tools .ed-btn.is-active {
+  background: var(--ed-brand-tint);
 }
 
 .zoom-value {
   min-width: 44px;
-  color: #5b6472;
+  color: var(--ed-text-2);
   font-size: 12.5px;
   text-align: center;
   font-variant-numeric: tabular-nums;
@@ -77,32 +108,32 @@ const emit = defineEmits(['zoom-in', 'zoom-out', 'fit', 'compress'])
 
 .divider {
   width: 1px;
-  height: 20px;
+  height: 18px;
   margin: 0 4px;
-  background: #e3e6ec;
+  background: var(--ed-line-soft);
 }
 
 .page-badge {
   padding: 4px 10px;
   border-radius: 999px;
-  background: #eef1f5;
-  color: #5b6472;
+  background: var(--ed-fill);
+  color: var(--ed-text-2);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .page-badge.is-over {
-  background: #fdf1e3;
-  color: #b45309;
+  background: var(--ed-warn-tint);
+  color: var(--ed-warn);
 }
 
 .drag-readout {
   margin-right: 4px;
   padding: 4px 10px;
   border-radius: 999px;
-  background: #eaf0fa;
-  color: #24487f;
+  background: var(--ed-brand-tint);
+  color: var(--ed-brand-deep);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -112,8 +143,9 @@ const emit = defineEmits(['zoom-in', 'zoom-out', 'fit', 'compress'])
   .editor-tools {
     /* 空间不够时换行而不是把按钮压扁；拖动读数出现时尤其需要 */
     flex-wrap: wrap;
+    justify-content: center;
     gap: 6px;
-    padding: 8px 10px;
+    bottom: 10px;
   }
 
   .ed-btn {

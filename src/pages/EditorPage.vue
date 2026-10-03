@@ -10,13 +10,17 @@
  */
 import { computed, onBeforeUnmount, onMounted, shallowRef } from 'vue'
 
+import OnboardingDialog from '@/components/OnboardingDialog.vue'
+import ShortcutsDialog from '@/components/ShortcutsDialog.vue'
 import EditorPanel from '@/components/editor/EditorPanel.vue'
 import PreviewPane from '@/components/PreviewPane.vue'
 import TopBar from '@/components/TopBar.vue'
 import { MOBILE_QUERY, useMediaQuery } from '@/composables/useMediaQuery'
 import { useCloudSync } from '@/composables/useCloudSync'
 import { useToast } from '@/composables/useToast'
+import { useResumeFile } from '@/composables/useResumeFile'
 import { useResumeStore } from '@/stores/resume'
+import { useSelectionStore } from '@/stores/selection'
 
 const store = useResumeStore()
 const { toast } = useToast()
@@ -44,6 +48,48 @@ function togglePanel() {
   panelVisible.value = !panelVisible.value
 }
 
+/* ---------------- 快捷键 ---------------- */
+
+const selection = useSelectionStore()
+const { exportJSON } = useResumeFile()
+const shortcutsOpen = shallowRef(false)
+
+/** 首次访问弹新手引导，完成或跳过后不再出现 */
+const ONBOARDING_FLAG = 'resume-studio-onboarded-v1'
+const onboardingOpen = shallowRef(false)
+try {
+  onboardingOpen.value = !localStorage.getItem(ONBOARDING_FLAG)
+} catch {
+  onboardingOpen.value = false
+}
+
+function finishOnboarding() {
+  onboardingOpen.value = false
+  try {
+    localStorage.setItem(ONBOARDING_FLAG, String(Date.now()))
+  } catch {
+    /* 存不进也不影响使用，下次再引导一次而已 */
+  }
+}
+
+/** 焦点在输入控件里时不劫持字符与删除键，只放行组合键 */
+function isTypingTarget(event) {
+  const target = event.target
+  return (
+    target instanceof HTMLElement &&
+    target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]')
+  )
+}
+
+/** 隐藏纸面选中的模块，与框选工具条的批量隐藏保持同一行为 */
+function hideSelected() {
+  const picked = store.sections.filter((s) => selection.has(s.id))
+  if (!picked.length) return
+  picked.forEach((s) => store.updateSection(s.id, { visible: false }))
+  selection.clear()
+  toast(`已隐藏 ${picked.length} 个模块，Ctrl+Z 可恢复`)
+}
+
 onMounted(() => {
   if (store.storageWarning) {
     toast(store.storageWarning, 4000)
@@ -60,19 +106,36 @@ onBeforeUnmount(() => {
 })
 
 function onKeydown(event) {
-  if (event.isComposing || !(event.ctrlKey || event.metaKey)) return
+  if (event.isComposing) return
 
-  const key = event.key.toLowerCase()
-  if (key === 'z') {
-    event.preventDefault()
-    if (event.shiftKey) {
+  if (event.ctrlKey || event.metaKey) {
+    const key = event.key.toLowerCase()
+    if (key === 'z') {
+      event.preventDefault()
+      if (event.shiftKey) {
+        store.redo()
+      } else {
+        store.undo()
+      }
+    } else if (key === 'y') {
+      event.preventDefault()
       store.redo()
-    } else {
-      store.undo()
+    } else if (key === 's') {
+      // 接管浏览器「保存网页」，改为导出简历 JSON 备份
+      event.preventDefault()
+      exportJSON()
     }
-  } else if (key === 'y') {
+    return
+  }
+
+  if (isTypingTarget(event)) return
+
+  if ((event.key === 'Delete' || event.key === 'Backspace') && selection.count) {
     event.preventDefault()
-    store.redo()
+    hideSelected()
+  } else if (event.key === '?') {
+    event.preventDefault()
+    shortcutsOpen.value = true
   }
 }
 </script>
@@ -86,6 +149,9 @@ function onKeydown(event) {
       <PreviewPane v-show="showPreview" />
       <EditorPanel v-show="showEditor" />
     </main>
+
+    <ShortcutsDialog :open="shortcutsOpen" @close="shortcutsOpen = false" />
+    <OnboardingDialog v-if="onboardingOpen" @done="finishOnboarding" />
   </div>
 </template>
 

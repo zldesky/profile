@@ -2,9 +2,11 @@
 /**
  * 单段经历编辑：时间、单位、职位、机构图标、补充字段与要点。
  * 由 EntriesSectionEditor 按段渲染，自身只负责一段。
+ * 要点行的 ✦ 按钮走 AI 润色（用户自带 Key，确认后才应用）。
  */
 import { shallowRef, useTemplateRef } from 'vue'
 
+import AIPolishDialog from '@/components/AIPolishDialog.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
@@ -26,6 +28,16 @@ const uploadingLogo = shallowRef(false)
 const updateEntry = (patch) => store.updateEntry(props.section.id, props.entry.id, patch)
 const updateMeta = (metaId, patch) =>
   store.updateEntryMeta(props.section.id, props.entry.id, metaId, patch)
+
+/** 当前正在润色的要点：{ id, text }，null 表示弹窗关闭 */
+const polishTarget = shallowRef(null)
+
+function applyPolish(text) {
+  if (!polishTarget.value) return
+  store.updateBullet(props.section.id, props.entry.id, polishTarget.value.id, text)
+  toast('已应用润色结果，Ctrl+Z 可撤销')
+  polishTarget.value = null
+}
 
 function pickLogo() {
   logoInput.value.value = ''
@@ -168,8 +180,17 @@ async function onLogoChange(event) {
         @input="store.updateBullet(section.id, entry.id, bullet.id, $event.target.value)"
       ></textarea>
       <button
+        class="ed-icon-btn"
+        title="AI 润色这条要点"
+        aria-label="AI 润色这条要点"
+        @click="polishTarget = { id: bullet.id, text: bullet.text }"
+      >
+        <SvgIcon name="sparkles" :size="14" />
+      </button>
+      <button
         class="ed-icon-btn danger"
         title="删除该要点"
+        aria-label="删除该要点"
         @click="store.removeBullet(section.id, entry.id, bullet.id)"
       >
         <SvgIcon name="trash" :size="14" />
@@ -187,6 +208,15 @@ async function onLogoChange(event) {
       accept="image/png,image/jpeg,image/svg+xml,image/webp,image/*"
       hidden
       @change="onLogoChange"
+    />
+
+    <AIPolishDialog
+      :open="!!polishTarget"
+      kind="bullet"
+      title="AI 润色要点"
+      :text="polishTarget?.text || ''"
+      @apply="applyPolish"
+      @close="polishTarget = null"
     />
   </div>
 </template>

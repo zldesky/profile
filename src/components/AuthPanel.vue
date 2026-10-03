@@ -169,10 +169,10 @@ function onCaptchaExhausted() {
 .auth-tabs {
   display: flex;
   margin-bottom: 18px;
-  border: 1px solid #e3e6ec;
-  border-radius: 9px;
   padding: 3px;
-  background: #f5f7fa;
+  border: 1px solid var(--ed-line-soft);
+  border-radius: 9px;
+  background: var(--ed-fill);
 }
 
 .auth-tab {
@@ -181,18 +181,21 @@ function onCaptchaExhausted() {
   border: none;
   border-radius: 7px;
   background: transparent;
-  color: #5b6472;
+  color: var(--ed-text-2);
   font: inherit;
   font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
   transition: 0.15s;
 }
 
 .auth-tab.is-active {
-  background: #fff;
-  color: #2b579a;
+  background: var(--ed-surface);
+  color: var(--ed-brand-deep);
   font-weight: 600;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.12),
+    0 0 1px rgba(16, 24, 40, 0.1);
 }
 
 .auth-form {
@@ -208,20 +211,20 @@ function onCaptchaExhausted() {
 }
 
 .auth-field > span {
-  color: #5b6472;
+  color: var(--ed-text-2);
   font-size: 12.5px;
 }
 
 .auth-error {
   margin: 0;
-  color: #c0392b;
+  color: var(--ed-danger-strong);
   font-size: 12.5px;
   line-height: 1.5;
 }
 
 .auth-hint {
   margin: 16px 0 0;
-  color: #8b93a1;
+  color: var(--ed-text-4);
   font-size: 12px;
   line-height: 1.65;
 }

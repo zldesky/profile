@@ -15,11 +15,12 @@
  * 开发模式下 Vite 跑在 5173，启动与本服务都会自动探测该地址。
  */
 import path from 'node:path'
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
 import express from 'express'
 
+import { resolveAiEndpoint } from './aiGuard.js'
 import {
   createLoginGuard,
   createPasswordGuard,
@@ -57,6 +58,12 @@ const GLOBAL_DAILY_LIMIT = Number(process.env.PDF_DAILY_LIMIT) || 100
 const BEARER_SUBJECT = 'bearer'
 /** 全站配额在配额表里的主体键 */
 const GLOBAL_SUBJECT = '__global__'
+
+/** 分享链接有效期（天）与创建频率限制：防滥用刷库 */
+const SHARE_TTL_DAYS = Number(process.env.SHARE_TTL_DAYS) || 30
+const shareLimiter = createSlidingWindowCounter({ max: 20, windowMs: 60 * 60 * 1000 })
+/** AI 转发按主体限频：Key 是用户自己的，限频保护的是上游服务与本机带宽 */
+const aiLimiter = createSlidingWindowCounter({ max: 60, windowMs: 60 * 60 * 1000 })
 
 /** 库文件路径可用环境变量覆盖；测试与多实例部署时用得上 */
 const db = createDatabase({
@@ -616,6 +623,169 @@ app.post('/api/image-proxy', requireAuth, async (req, res) => {
   } catch (error) {
     // 目标校验不通过、下载失败都属于调用方问题，统一 400 并回传原因
     res.status(400).json({ ok: false, message: error.message || '抓取失败' })
+  }
+})
+
+/* ---------------- 简历分享（创建要求登录，查看公开） ---------------- */
+
+/** 分享短 id：10 位 hex（40bit），千万级分享内碰撞概率可忽略 */
+function newShareId() {
+  return randomBytes(5).toString('hex')
+}
+
+app.post('/api/share', requireAuth, (req, res) => {
+  if (req.auth.kind !== 'session') {
+    res.status(403).json({ ok: false, message: '脚本口令通道不提供分享能力' })
+    return
+  }
+
+  // 与导出/云端共用同一套清洗：公开出去的数据按「不可信输入」对待
+  const sanitized = sanitizeResume(req.body?.resume)
+  if (!sanitized.ok) {
+    res.status(400).json({ ok: false, message: sanitized.error })
+    return
+  }
+
+  if (!shareLimiter.tryTake(`share:${req.auth.subject}`)) {
+    res.status(429).json({ ok: false, message: '分享过于频繁，请一小时后再试' })
+    return
+  }
+
+  // 过期分享在此惰性清理，不安排后台任务
+  db.purgeExpiredShares()
+
+  let result = null
+  for (let attempt = 0; attempt < 3 && !result; attempt += 1) {
+    try {
+      result = db.createShare(
+        newShareId(),
+        req.auth.userId,
+        sanitized.value,
+        SHARE_TTL_DAYS * 24 * 60 * 60 * 1000,
+      )
+    } catch (error) {
+      // 主键碰撞（极小概率）换号重试；其它错误上抛
+      if (!String(error?.code || '').includes('SQLITE_CONSTRAINT')) throw error
+    }
+  }
+
+  if (!result) {
+    res.status(500).json({ ok: false, message: '分享创建失败，请重试' })
+    return
+  }
+
+  res.json({ ok: true, id: result.id, expiresAt: result.expiresAt })
+})
+
+app.get('/api/share/:id', (req, res) => {
+  const share = db.getShare(req.params.id)
+  if (!share) {
+    res.status(404).json({ ok: false, message: '分享不存在或已过期' })
+    return
+  }
+  res.json({
+    ok: true,
+    resume: share.resume,
+    createdAt: share.createdAt,
+    expiresAt: share.expiresAt,
+  })
+})
+
+app.delete('/api/share/:id', requireAuth, (req, res) => {
+  if (req.auth.kind !== 'session') {
+    res.status(403).json({ ok: false, message: '脚本口令通道不提供分享能力' })
+    return
+  }
+  const deleted = db.deleteShare(req.params.id, req.auth.userId)
+  if (!deleted) {
+    res.status(404).json({ ok: false, message: '分享不存在，或不是你创建的' })
+    return
+  }
+  res.json({ ok: true })
+})
+
+/* ---------------- AI 转发（要求登录；Key 只过内存，不落盘不写日志） ---------------- */
+
+/**
+ * 浏览器直连各家 AI 服务会被 CORS 与混合内容拦住，由本机服务代为转发。
+ * Key 由前端每次随请求带来：转发即用即弃，不写库、不打日志；
+ * base URL 的协议与内网校验见 aiGuard.js。
+ */
+app.post('/api/ai/chat', requireAuth, async (req, res) => {
+  const { baseUrl, apiKey, model, messages, temperature } = req.body || {}
+
+  const endpoint = await resolveAiEndpoint(baseUrl)
+  if (!endpoint.ok) {
+    res.status(400).json({ ok: false, message: endpoint.message })
+    return
+  }
+  if (!apiKey || typeof apiKey !== 'string') {
+    res.status(400).json({ ok: false, message: '缺少 API Key' })
+    return
+  }
+  if (!model || typeof model !== 'string') {
+    res.status(400).json({ ok: false, message: '缺少模型名称' })
+    return
+  }
+  if (
+    !Array.isArray(messages) ||
+    !messages.length ||
+    messages.length > 20 ||
+    messages.some(
+      (m) => !m || typeof m.content !== 'string' || !m.content.trim() || m.content.length > 8000,
+    )
+  ) {
+    res.status(400).json({ ok: false, message: '对话内容格式不正确' })
+    return
+  }
+
+  const subject = req.auth.subject
+  if (!aiLimiter.tryTake(`ai:${subject}`)) {
+    res.status(429).json({ ok: false, message: 'AI 调用过于频繁，请一小时后再试' })
+    return
+  }
+
+  try {
+    const upstream = await fetch(`${endpoint.url}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: Number.isFinite(Number(temperature))
+          ? Math.min(2, Math.max(0, Number(temperature)))
+          : 0.7,
+        max_tokens: 1000,
+        stream: false,
+      }),
+      signal: AbortSignal.timeout(60000),
+      // OpenAI 兼容接口不该有重定向；跟随重定向会绕过上面的地址校验，直接拒绝
+      redirect: 'error',
+    })
+
+    const data = await upstream.json().catch(() => ({}))
+    if (!upstream.ok) {
+      const message =
+        data?.error?.message || data?.message || `AI 服务返回了 ${upstream.status} 状态码`
+      res.status(502).json({ ok: false, message })
+      return
+    }
+
+    const content = data?.choices?.[0]?.message?.content
+    if (typeof content !== 'string' || !content.trim()) {
+      res.status(502).json({ ok: false, message: 'AI 服务没有返回有效内容' })
+      return
+    }
+    res.json({ ok: true, content })
+  } catch (error) {
+    if (error?.name === 'TimeoutError') {
+      res.status(504).json({ ok: false, message: 'AI 服务响应超时，请稍后再试' })
+      return
+    }
+    res.status(502).json({ ok: false, message: `AI 服务连接失败：${error.message}` })
   }
 })
 

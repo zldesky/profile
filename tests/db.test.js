@@ -82,6 +82,44 @@ describe('简历快照', () => {
   })
 })
 
+describe('简历分享', () => {
+  it('创建后公开可读，带创建与过期时间', () => {
+    const user = db.createUser('zhangsan', 'hash-x')
+    const resume = { basics: { name: '张三' }, sections: [] }
+
+    const { id, createdAt, expiresAt } = db.createShare('abc123', user.id, resume, 86_400_000)
+    expect(id).toBe('abc123')
+
+    const share = db.getShare('abc123')
+    expect(share.resume).toEqual(resume)
+    expect(share.userId).toBe(user.id)
+    expect(share.createdAt).toBe(createdAt)
+    expect(share.expiresAt).toBe(expiresAt)
+  })
+
+  it('过期的分享视为不存在，且被顺带清理', () => {
+    const user = db.createUser('zhangsan', 'hash-x')
+    db.createShare('dead', user.id, { v: 1 }, -1)
+    db.createShare('live', user.id, { v: 1 }, 86_400_000)
+
+    expect(db.getShare('dead')).toBeNull()
+    expect(db.getShare('live')).not.toBeNull()
+  })
+
+  it('只有创建者本人能撤销', () => {
+    const owner = db.createUser('owner', 'hash-x')
+    const other = db.createUser('other', 'hash-x')
+    db.createShare('share-1', owner.id, { v: 1 }, 86_400_000)
+
+    expect(db.deleteShare('share-1', other.id)).toBe(false)
+    expect(db.deleteShare('share-1', null)).toBe(false)
+    expect(db.getShare('share-1')).not.toBeNull()
+
+    expect(db.deleteShare('share-1', owner.id)).toBe(true)
+    expect(db.getShare('share-1')).toBeNull()
+  })
+})
+
 describe('导出配额', () => {
   it('计数递增、退款递减、不透支到负数', () => {
     expect(db.quotaUsed('user:1', '2026-09-29')).toBe(0)

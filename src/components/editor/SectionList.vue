@@ -123,7 +123,7 @@ function addSection() {
 }
 
 .ed-chosen {
-  border-color: #2b579a;
+  border-color: var(--ed-brand);
   box-shadow: 0 6px 18px rgba(20, 30, 50, 0.16);
 }
 </style>
