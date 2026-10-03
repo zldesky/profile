@@ -7,7 +7,15 @@
  * 复用 paper.css 的画布约定类名（.editor-app/.editor-topbar/.editor-stage），
  * 打印时顶栏自动隐藏，纸张原样输出。
  */
-import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue'
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  shallowRef,
+  useTemplateRef,
+  watch,
+} from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import SvgIcon from '@/components/SvgIcon.vue'
@@ -58,20 +66,32 @@ function applyPrintCss() {
   printStyleEl.textContent = shared.value ? computePrintCss(shared.value.resume) : ''
 }
 
+/** 请求序号：快速切换分享 id 时，慢返回的旧响应不得覆盖新响应 */
+let loadSeq = 0
+
 async function load() {
+  const seq = ++loadSeq
   state.value = 'loading'
   try {
-    shared.value = await fetchShare(route.params.id)
+    const data = await fetchShare(route.params.id)
+    if (seq !== loadSeq) return
+    shared.value = data
     state.value = 'ready'
-    applyChromeAccent(shared.value.resume.theme?.accent)
+    applyChromeAccent(data.resume.theme?.accent)
     applyPrintCss()
   } catch (error) {
+    if (seq !== loadSeq) return
     state.value = 'error'
     errorMessage.value = error.message || '分享读取失败'
   }
 }
 
 watch(() => route.params.id, load, { immediate: true })
+
+/** 纸张要等 state 变 ready 才渲染进 DOM：就绪后补算一次缩放，否则窄屏首开溢出 */
+watch(state, (value) => {
+  if (value === 'ready') nextTick(fit)
+})
 
 /** 主题变化时同步界面品牌色 */
 watch(
@@ -98,6 +118,9 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('resize', fit)
   printStyleEl?.remove()
+  // 品牌色写在 :root 上是全局的：离开分享页时交还给本地简历的主题，
+  // 否则「回编辑器看看」后外壳仍停留在分享简历的配色
+  applyChromeAccent(store.resume.theme?.accent)
 })
 
 const expiryText = computed(() => {

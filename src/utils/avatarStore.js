@@ -19,6 +19,8 @@ export const AVATAR_REF_PREFIX = 'idb-avatar:'
 let dbPromise = null
 /** 首次成功 open 后置 true；后续 put/get 失败会回退 false */
 let available = typeof indexedDB !== 'undefined'
+/** 尚未提交的 put 事务；关页前 flushSave 会尽力等它们落库 */
+const pendingWrites = new Set()
 
 function openDb() {
   if (!dbPromise) {
@@ -67,7 +69,7 @@ export function storeAvatar(dataUrl) {
   const key = hashContent(dataUrl)
   const ref = `${AVATAR_REF_PREFIX}${key}`
 
-  openDb()
+  const pending = openDb()
     .then(
       (db) =>
         new Promise((resolve, reject) => {
@@ -82,8 +84,22 @@ export function storeAvatar(dataUrl) {
       available = false
       console.error(`头像资产写入失败，已回退内联存储：${error}`)
     })
+  pending.then(
+    () => pendingWrites.delete(pending),
+    () => pendingWrites.delete(pending),
+  )
+  pendingWrites.add(pending)
 
   return ref
+}
+
+/**
+ * 等待所有未完成的头像写入提交。IndexedDB 事务由浏览器数据库进程持有，
+ * 这里的等待只是给 pagehide 尽力而为争取时间，不保证一定完成。
+ * @returns {Promise<void>}
+ */
+export function flushAvatarWrites() {
+  return Promise.all([...pendingWrites]).then(() => {})
 }
 
 /**

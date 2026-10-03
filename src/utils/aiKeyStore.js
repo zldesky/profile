@@ -37,13 +37,15 @@ export const AI_PRESETS = [
 ]
 
 /**
- * 读取配置。记住的优先，其次当前会话的；都没有返回 null。
+ * 读取配置。记住的优先，其次当前会话的；都没有（或 Key 已丢失）返回 null。
+ * apiKey 必须同时在：只配了地址没有 Key 的残缺配置不能算已配置，
+ * 否则润色弹窗不再引导去设置，用户只会撞到一条生硬的服务端报错。
  * @returns {{ baseUrl: string, model: string, apiKey: string, remember: boolean } | null}
  */
 export function loadAISettings() {
   try {
     const saved = JSON.parse(localStorage.getItem(PERSIST_KEY) || 'null')
-    if (saved && saved.baseUrl && saved.model) {
+    if (saved && saved.baseUrl && saved.model && saved.apiKey) {
       return { ...saved, remember: true }
     }
   } catch {
@@ -51,7 +53,7 @@ export function loadAISettings() {
   }
   try {
     const session = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null')
-    if (session && session.baseUrl && session.model) {
+    if (session && session.baseUrl && session.model && session.apiKey) {
       return { ...session, remember: false }
     }
   } catch {

@@ -16,6 +16,7 @@ import {
 import { normalizeResume } from '@/data/normalizeResume'
 import {
   AVATAR_REF_PREFIX,
+  flushAvatarWrites,
   isAvailable as isAvatarStoreAvailable,
   loadAvatar,
   pruneAvatars,
@@ -30,6 +31,8 @@ const STORAGE_KEY = 'resume-studio-v1'
 const STORAGE_LIMIT = 4.5 * 1024 * 1024
 /** 多文档登记表：[{ id, name, pinned, updatedAt }] */
 const REGISTRY_KEY = 'resume-studio-registry-v1'
+/** 上次活跃文档 id：活跃文档内容存主键，刷新后要靠它恢复「正在编辑哪份」 */
+const ACTIVE_DOC_KEY = 'resume-studio-active-v1'
 const DOC_KEY_PREFIX = 'resume-studio-doc-'
 /** 历史版本快照：[{ id, name, updatedAt, data }]，跨文档的时间线备份 */
 const SNAPSHOTS_KEY = 'resume-studio-snapshots-v1'
@@ -52,6 +55,15 @@ export const useResumeStore = defineStore('resume', () => {
   const docList = ref([])
   /** 历史版本快照（LRU），供误操作后回退 */
   const snapshots = ref([])
+
+  // 活跃文档 id 一变就落盘：刷新/崩溃后才能恢复到同一份，而不是错把别的文档当主文档
+  watch(activeDocId, (id) => {
+    try {
+      localStorage.setItem(ACTIVE_DOC_KEY, JSON.stringify(id))
+    } catch {
+      /* 写不进去只影响刷新后的定位，不影响当前编辑 */
+    }
+  })
 
   /* ---------------- 派生数据 ---------------- */
 
@@ -133,7 +145,11 @@ export const useResumeStore = defineStore('resume', () => {
     const last = list[list.length - 1]
     if (!force && last && now - last.updatedAt < SNAPSHOT_INTERVAL) return
 
-    list.push({ id: uid('snap'), name: deriveDocName(), updatedAt: now, data: serializeCompact() })
+    const data = serializeCompact()
+    // 与上一份内容一致就跳过：频繁刷新不该用重复快照把真正有价值的旧版本挤出 LRU
+    if (last && last.data === data) return
+
+    list.push({ id: uid('snap'), name: deriveDocName(), updatedAt: now, data })
     while (list.length > SNAPSHOT_MAX) list.shift()
 
     if (!writeSnapshots(list)) {
@@ -198,6 +214,8 @@ export const useResumeStore = defineStore('resume', () => {
   const flushSave = () => {
     scheduleSave.cancel()
     save()
+    // 头像二进制落 IndexedDB 是异步的：这里尽力等它提交，避免「引用已存、blob 未落库」
+    flushAvatarWrites()
   }
   window.addEventListener('pagehide', flushSave)
   document.addEventListener('visibilitychange', () => {
@@ -230,16 +248,22 @@ export const useResumeStore = defineStore('resume', () => {
   const deriveDocName = (data = resume.value) =>
     String(data?.basics?.name || '').trim() || '未命名简历'
 
+  /** 头像异步回填的代次：每次载入新数据递增，慢返回的旧回填直接作废 */
+  let adoptGeneration = 0
+
   /**
    * 载入一份简历数据：头像若是 IndexedDB 引用，先置空渲染，
    * 异步取回 dataURL 后回填，避免模板渲染到非法 src。
    */
   function adoptResume(data) {
+    const generation = ++adoptGeneration
     const normalized = normalizeResume(data)
     const avatarRef = normalized.basics?.avatar
     if (typeof avatarRef === 'string' && avatarRef.startsWith(AVATAR_REF_PREFIX)) {
       normalized.basics.avatar = ''
       loadAvatar(avatarRef).then((dataUrl) => {
+        // 等待期间可能已切换/导入过别的文档，过期回填会把 A 的头像写进 B
+        if (generation !== adoptGeneration) return
         if (!dataUrl) {
           storageWarning.value = '头像的本地缓存读取失败，请重新上传头像'
           return
@@ -285,12 +309,13 @@ export const useResumeStore = defineStore('resume', () => {
     if (!data) return
 
     parkCurrentDoc()
-    localStorage.removeItem(docKey(id))
     activeDocId.value = id
     adoptResume(data)
     history.reset(serializeForHistory())
     syncHistoryFlags()
     save()
+    // 新内容已落主键后再清目标槽位：中途崩溃最多留下一个重复槽位，不会丢文档
+    localStorage.removeItem(docKey(id))
   }
 
   /** 新建一份空白简历并切换过去 */
@@ -397,7 +422,6 @@ export const useResumeStore = defineStore('resume', () => {
     activeDocId.value = next.id
     if (data) {
       adoptResume(data)
-      localStorage.removeItem(docKey(next.id))
     } else {
       resume.value = createResume()
     }
@@ -405,6 +429,8 @@ export const useResumeStore = defineStore('resume', () => {
     syncHistoryFlags()
     writeRegistry()
     save()
+    // 新内容已落主键后再清原槽位：中途崩溃最多留下一个重复槽位，不会丢文档
+    if (data) localStorage.removeItem(docKey(next.id))
     return true
   }
 
@@ -466,7 +492,20 @@ export const useResumeStore = defineStore('resume', () => {
     const existing = readRegistry()
     if (existing) {
       docList.value = existing
-      if (!existing.some((d) => d.id === activeDocId.value)) {
+      // 恢复上次正在编辑的文档：活跃内容存主键、其余存各自槽位，认错了就会张冠李戴
+      let savedActiveId = null
+      try {
+        savedActiveId = JSON.parse(localStorage.getItem(ACTIVE_DOC_KEY) || 'null')
+      } catch {
+        savedActiveId = null
+      }
+      if (
+        typeof savedActiveId === 'string' &&
+        savedActiveId &&
+        existing.some((d) => d.id === savedActiveId)
+      ) {
+        activeDocId.value = savedActiveId
+      } else if (!existing.some((d) => d.id === activeDocId.value)) {
         activeDocId.value = existing[0].id
       }
     } else {
