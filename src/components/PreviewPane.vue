@@ -265,9 +265,10 @@ async function compressToOnePage() {
 
 @media (max-width: 900px) {
   /* 窄屏这一栏独占宽度，把留白收紧换成纸张空间。
-     usePaperZoom 的 fit() 直接读实际内边距，改这里不需要同步改常量。 */
+     usePaperZoom 的 fit() 直接读实际内边距，改这里不需要同步改常量。
+     底部给悬浮工具条留位置，并叠加 iPhone 手势条的安全区。 */
   .stage-scroll {
-    padding: 12px 14px 52px;
+    padding: 12px 14px calc(52px + env(safe-area-inset-bottom, 0px));
   }
 
   .paper {

@@ -4,11 +4,13 @@
  * 数据导入导出与 PDF 导出逻辑分别在 useResumeFile / usePdfExport，
  * 本组件只负责按钮编排与状态展示。
  */
-import { computed, shallowRef, useTemplateRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef } from 'vue'
 import { useRouter } from 'vue-router'
 
 import AuthDialog from '@/components/AuthDialog.vue'
+import CompletenessDialog from '@/components/CompletenessDialog.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import JdMatchDialog from '@/components/JdMatchDialog.vue'
 import PasswordDialog from '@/components/PasswordDialog.vue'
 import ResumeManagerDialog from '@/components/ResumeManagerDialog.vue'
 import ShareDialog from '@/components/ShareDialog.vue'
@@ -35,6 +37,11 @@ const emit = defineEmits(['toggle-panel'])
 const managerOpen = shallowRef(false)
 /** 分享弹窗（要求登录，未登录先走登录流程） */
 const shareOpen = shallowRef(false)
+/** 简历体检 / JD 匹配弹窗 */
+const checkOpen = shallowRef(false)
+const jdOpen = shallowRef(false)
+/** 导出菜单：JSON / Markdown / 纯文本 / 整包备份 */
+const exportMenuOpen = shallowRef(false)
 
 /** 宽屏是显隐面板，窄屏是「编辑 / 预览」切换，同一颗按钮两种语义 */
 const toggleLabel = computed(() => {
@@ -73,7 +80,8 @@ function openShare() {
   shareOpen.value = true
 }
 
-const { exportJSON, importFromFile, resetResume } = useResumeFile()
+const { exportJSON, exportMarkdown, exportPlainText, exportBackup, importFromFile, resetResume } =
+  useResumeFile()
 const {
   exporting,
   quota,
@@ -143,6 +151,20 @@ function pickFile() {
 function onFileChange(event) {
   importFromFile(event.target.files?.[0])
 }
+
+/** 点菜单外面收起导出菜单 */
+function onDocPointerDown(event) {
+  if (!event.target.closest?.('.menu-wrap')) exportMenuOpen.value = false
+}
+
+onMounted(() => document.addEventListener('pointerdown', onDocPointerDown))
+onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocPointerDown))
+
+/** 从导出菜单触发一项导出后收起菜单 */
+function runExport(action) {
+  exportMenuOpen.value = false
+  action()
+}
 </script>
 
 <template>
@@ -196,20 +218,73 @@ function onFileChange(event) {
       <span class="btn-label">{{ toggleLabel }}</span>
     </button>
 
-    <!-- 下面三个属于次要操作，窄屏收成图标；文字仍在无障碍树里，靠 aria-label 保留语义 -->
-    <button class="ed-btn is-compact" title="导入数据" aria-label="导入数据" @click="pickFile">
+    <!-- 下面几个属于次要操作，窄屏收成图标；文字仍在无障碍树里，靠 aria-label 保留语义 -->
+    <button
+      class="ed-btn is-compact"
+      title="导入数据：单份简历 JSON 或整包备份"
+      aria-label="导入数据"
+      @click="pickFile"
+    >
       <SvgIcon name="upload" :size="14" />
       <span class="btn-label">导入数据</span>
     </button>
 
-    <button class="ed-btn is-compact" title="导出数据" aria-label="导出数据" @click="exportJSON">
-      <SvgIcon name="download" :size="14" />
-      <span class="btn-label">导出数据</span>
-    </button>
+    <div class="menu-wrap">
+      <button
+        class="ed-btn is-compact"
+        :class="{ 'is-active': exportMenuOpen }"
+        title="导出"
+        aria-label="导出"
+        aria-haspopup="menu"
+        :aria-expanded="exportMenuOpen"
+        @click="exportMenuOpen = !exportMenuOpen"
+      >
+        <SvgIcon name="download" :size="14" />
+        <span class="btn-label">导出数据</span>
+      </button>
+      <div v-if="exportMenuOpen" class="export-menu" role="menu">
+        <button role="menuitem" @click="runExport(exportJSON)">
+          <span class="menu-name">JSON 数据备份</span>
+          <span class="menu-desc">可再次导入</span>
+        </button>
+        <button role="menuitem" @click="runExport(exportMarkdown)">
+          <span class="menu-name">Markdown 文档</span>
+          <span class="menu-desc">在线文档</span>
+        </button>
+        <button role="menuitem" @click="runExport(exportPlainText)">
+          <span class="menu-name">纯文本</span>
+          <span class="menu-desc">ATS / 表单粘贴</span>
+        </button>
+        <button role="menuitem" @click="runExport(exportBackup)">
+          <span class="menu-name">整包备份</span>
+          <span class="menu-desc">全部简历 + 历史版本</span>
+        </button>
+      </div>
+    </div>
 
     <button class="ed-btn is-compact" title="恢复示例" aria-label="恢复示例" @click="resetResume">
       <SvgIcon name="refresh" :size="14" />
       <span class="btn-label">恢复示例</span>
+    </button>
+
+    <button
+      class="ed-btn is-compact"
+      title="简历体检：检查完成度与常见问题"
+      aria-label="简历体检"
+      @click="checkOpen = true"
+    >
+      <SvgIcon name="check" :size="14" />
+      <span class="btn-label">简历体检</span>
+    </button>
+
+    <button
+      class="ed-btn is-compact"
+      title="JD 匹配：AI 比对简历与目标岗位的差距"
+      aria-label="JD 匹配"
+      @click="jdOpen = true"
+    >
+      <SvgIcon name="sparkles" :size="14" />
+      <span class="btn-label">JD 匹配</span>
     </button>
 
     <div class="spacer"></div>
@@ -248,14 +323,20 @@ function onFileChange(event) {
     <span class="tb-sep" aria-hidden="true"></span>
 
     <!-- 账号区：未登录给入口，已登录只显示身份与退出 -->
-    <button v-if="auth.status.value === 'anon'" class="ed-btn" @click="openLogin">
+    <button
+      v-if="auth.status.value === 'anon'"
+      class="ed-btn tb-collapse-sm"
+      title="登录 / 注册"
+      aria-label="登录 / 注册"
+      @click="openLogin"
+    >
       <SvgIcon name="user" :size="14" />
-      <span>登录 / 注册</span>
+      <span class="btn-label">登录 / 注册</span>
     </button>
     <template v-else-if="auth.status.value === 'authed'">
-      <span class="user-chip" :title="`已登录：${auth.user.value?.username}`">
+      <span class="user-chip tb-collapse-sm" :title="`已登录：${auth.user.value?.username}`">
         <SvgIcon name="user" :size="14" />
-        <span class="user-chip-name">{{ auth.user.value?.username }}</span>
+        <span class="btn-label user-chip-name">{{ auth.user.value?.username }}</span>
       </span>
       <button
         class="ed-btn is-compact"
@@ -279,6 +360,8 @@ function onFileChange(event) {
     <!-- 弹窗组件内部都会 Teleport 到 body，放在这里只是便于就近阅读 -->
     <ResumeManagerDialog :open="managerOpen" @close="managerOpen = false" />
     <ShareDialog :open="shareOpen" @close="shareOpen = false" />
+    <CompletenessDialog :open="checkOpen" @close="checkOpen = false" />
+    <JdMatchDialog :open="jdOpen" @close="jdOpen = false" />
     <AuthDialog />
     <ConfirmDialog
       :open="logoutConfirmOpen"
@@ -365,6 +448,57 @@ function onFileChange(event) {
 
 .spacer {
   flex: 1 1 auto;
+}
+
+/* 导出下拉菜单：锚定按钮下方，点外面由全局 pointerdown 收起 */
+.menu-wrap {
+  position: relative;
+}
+
+.export-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 70;
+  min-width: 210px;
+  padding: 6px;
+  border: 1px solid var(--ed-line-soft);
+  border-radius: 10px;
+  background: var(--ed-surface);
+  box-shadow: var(--ed-shadow-lg);
+}
+
+.export-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ed-ink);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.export-menu button:hover {
+  background: var(--ed-fill-2);
+}
+
+.menu-name {
+  flex: 0 0 auto;
+  font-weight: 500;
+}
+
+.menu-desc {
+  margin-left: auto;
+  padding-left: 12px;
+  color: var(--ed-text-4);
+  font-size: 11px;
 }
 
 .save-state {
@@ -506,6 +640,34 @@ function onFileChange(event) {
 
   .tb-collapse-md .btn-label {
     display: inline;
+  }
+}
+
+@media (max-width: 600px) {
+  /*
+   * 手机宽度：账号入口也收成纯图标，间距再收一档，
+   * 顶栏从三行并回两行（360px 设备第二行刚好放下）。
+   * 320px 的老设备仍会折三行，由下一档再收品牌名。
+   */
+  .editor-topbar {
+    gap: 4px;
+    padding: 8px;
+  }
+
+  .tb-collapse-sm {
+    gap: 0;
+    padding: 8px;
+  }
+
+  .tb-collapse-sm .btn-label {
+    display: none;
+  }
+}
+
+@media (max-width: 360px) {
+  /* 320px 设备：只留 logo 块，产品名让位给操作按钮 */
+  .brand-name {
+    display: none;
   }
 }
 </style>

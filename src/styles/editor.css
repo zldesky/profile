@@ -780,10 +780,11 @@
     height: 40px;
   }
 
-  /* 窄屏没有横向空间，提示条改成通栏，避免长文案被挤出屏幕 */
+  /* 窄屏没有横向空间，提示条改成通栏，避免长文案被挤出屏幕；
+     底部抬高到悬浮工具条之上，两者不再叠压 */
   .editor-toast {
     right: 12px;
-    bottom: 16px;
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
     left: 12px;
     max-width: none;
     transform: translateY(16px);

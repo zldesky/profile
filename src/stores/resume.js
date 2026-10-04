@@ -14,6 +14,7 @@ import {
   createSkill,
 } from '@/data/defaultResume'
 import { normalizeResume } from '@/data/normalizeResume'
+import { buildBackup, inlineAvatarRefs, parseBackup } from '@/utils/backup'
 import {
   AVATAR_REF_PREFIX,
   flushAvatarWrites,
@@ -81,17 +82,20 @@ export const useResumeStore = defineStore('resume', () => {
   /* ---------------- 持久化 ---------------- */
 
   /**
-   * 本地持久化形态：头像 dataURL 换成 IndexedDB 引用，主文档只留轻量 JSON。
-   * 内存态（store.resume）始终是完整 dataURL，模板、云同步、导出全部无感；
-   * IndexedDB 不可用时回退为内联，宁可慢也不丢头像。
+   * 任意一份简历数据的紧凑序列化：头像 dataURL 换成 IndexedDB 引用。
+   * 主文档落盘（serializeCompact）、整包恢复写槽位/快照共用这一条路径。
    */
-  function serializeCompact() {
-    const data = clone(resume.value)
-    const avatar = data.basics?.avatar
+  function compactForStorage(data) {
+    const copy = clone(data)
+    const avatar = copy.basics?.avatar
     if (isAvatarStoreAvailable() && typeof avatar === 'string' && avatar.startsWith('data:image')) {
-      data.basics.avatar = storeAvatar(avatar)
+      copy.basics.avatar = storeAvatar(avatar)
     }
-    return JSON.stringify(data)
+    return JSON.stringify(copy)
+  }
+
+  function serializeCompact() {
+    return compactForStorage(resume.value)
   }
 
   function save() {
@@ -432,6 +436,107 @@ export const useResumeStore = defineStore('resume', () => {
     // 新内容已落主键后再清原槽位：中途崩溃最多留下一个重复槽位，不会丢文档
     if (data) localStorage.removeItem(docKey(next.id))
     return true
+  }
+
+  /* ---------------- 整包备份 ---------------- */
+
+  /**
+   * 汇出本机全部简历与历史版本。头像引用在导出前内联回 dataURL，
+   * 这样备份文件拷到任何设备都能完整恢复。
+   * @returns {Promise<object>} 整包备份数据（交给调用方下载）
+   */
+  async function exportAllData() {
+    const docs = []
+    for (const entry of docList.value) {
+      let data = null
+      if (entry.id === activeDocId.value) {
+        data = clone(resume.value)
+      } else {
+        try {
+          data = JSON.parse(localStorage.getItem(docKey(entry.id)) || 'null')
+        } catch {
+          /* 槽位损坏按缺失处理，data 保持 null，这份简历跳过 */
+        }
+      }
+      // 槽位损坏的单份简历跳过，不阻断整包备份
+      if (!data) continue
+      docs.push({
+        id: entry.id,
+        name: entry.pinned ? entry.name : deriveDocName(data),
+        pinned: Boolean(entry.pinned),
+        updatedAt: entry.updatedAt,
+        data: await inlineAvatarRefs(data, loadAvatar),
+      })
+    }
+    if (!docs.length) throw new Error('没有可备份的简历')
+
+    const snaps = []
+    for (const snap of snapshots.value) {
+      try {
+        snaps.push({
+          id: snap.id,
+          name: snap.name,
+          updatedAt: snap.updatedAt,
+          data: await inlineAvatarRefs(JSON.parse(snap.data), loadAvatar),
+        })
+      } catch {
+        /* 单份快照损坏只影响它自己 */
+      }
+    }
+
+    return buildBackup({ activeId: activeDocId.value, docs, snapshots: snaps })
+  }
+
+  /**
+   * 用整包备份覆盖本机全部数据：登记表、槽位、快照、当前文档。
+   * 结构校验在 parseBackup 里完成，不合法直接抛错，本机数据一个字节都不动。
+   * @param {string|object} raw 备份文件内容
+   * @returns {number} 恢复的简历份数
+   */
+  function importAllData(raw) {
+    const parsed = parseBackup(raw)
+
+    // 先清掉全部旧槽位，避免 id 不相交时留下孤儿文档占空间
+    docList.value.forEach((doc) => {
+      if (doc.id !== activeDocId.value) localStorage.removeItem(docKey(doc.id))
+    })
+
+    const target = parsed.docs.find((doc) => doc.id === parsed.activeId)
+    docList.value = parsed.docs.map((doc) => ({
+      id: doc.id,
+      name: doc.name,
+      pinned: doc.pinned,
+      updatedAt: doc.updatedAt,
+    }))
+
+    let failed = 0
+    parsed.docs.forEach((doc) => {
+      if (doc.id === target.id) return
+      try {
+        localStorage.setItem(docKey(doc.id), compactForStorage(doc.data))
+      } catch {
+        failed += 1
+      }
+    })
+    if (failed) {
+      storageWarning.value = `整包恢复：${failed} 份简历因本机空间不足未写入，其余已恢复`
+    }
+
+    snapshots.value = parsed.snapshots.map((snap) => ({
+      id: snap.id,
+      name: snap.name,
+      updatedAt: snap.updatedAt,
+      data: compactForStorage(snap.data),
+    }))
+    writeSnapshots(snapshots.value)
+
+    activeDocId.value = target.id
+    adoptResume(target.data)
+    history.reset(serializeForHistory())
+    syncHistoryFlags()
+    writeRegistry()
+    save()
+    return parsed.docs.length
   }
 
   /* ---------------- 撤销 / 重做 ---------------- */
@@ -836,6 +941,8 @@ export const useResumeStore = defineStore('resume', () => {
 
     snapshots,
     restoreSnapshot,
+    exportAllData,
+    importAllData,
 
     setTheme,
     resetTheme,

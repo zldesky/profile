@@ -116,7 +116,8 @@ const tab = shallowRef('content')
   }
 
   .panel-body {
-    padding: 0 12px 48px;
+    /* 底部余量叠加 iPhone 手势条安全区，最后一项不被边缘手势遮住 */
+    padding: 0 12px calc(48px + env(safe-area-inset-bottom, 0px));
   }
 }
 </style>

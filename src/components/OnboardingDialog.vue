@@ -110,6 +110,9 @@ function next() {
 .ob-card {
   width: 100%;
   max-width: 380px;
+  /* 横屏矮屏（如手机横过来）内容不超出一屏，超出可滚 */
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
   padding: 22px 24px 18px;
   border-radius: 16px;
   background: var(--ed-surface);

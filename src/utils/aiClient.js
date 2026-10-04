@@ -67,3 +67,126 @@ export function stripMarkdown(text) {
     .replace(/^[「"'『]|[」"'』]$/g, '')
     .trim()
 }
+
+/* ---------------- JD 匹配 ---------------- */
+
+/** 服务端限制单条消息 8000 字符：给简历摘要与 JD 各留出安全预算 */
+const SUMMARY_BUDGET = 3600
+const JD_BUDGET = 2600
+
+const str = (value) => String(value ?? '').trim()
+
+/**
+ * 把简历压缩成给模型看的纯文本摘要：只留内容字段，主题 / 模板 / 布局全部剔除，
+ * 超预算时截断并标注省略，保证整体消息不超服务端限额。
+ * @param {object} resume 简历数据
+ * @param {number} [budget] 摘要字符上限
+ * @returns {string}
+ */
+export function summarizeResumeForAI(resume, budget = SUMMARY_BUDGET) {
+  const basics = resume?.basics || {}
+  const lines = []
+  if (str(basics.name)) lines.push(`姓名：${str(basics.name)}`)
+  if (str(basics.jobTitle)) lines.push(`求职职位：${str(basics.jobTitle)}`)
+  ;(Array.isArray(basics.fields) ? basics.fields : [])
+    .filter((f) => str(f?.value))
+    .forEach((f) => lines.push(`${str(f.label) || '联系方式'}：${str(f.value)}`))
+
+  ;(Array.isArray(resume?.sections) ? resume.sections : [])
+    .filter((s) => s && s.visible !== false)
+    .forEach((section) => {
+      lines.push(`【${str(section.title) || '未命名模块'}】`)
+      if (section.type === 'entries') {
+        ;(Array.isArray(section.items) ? section.items : []).forEach((entry) => {
+          const head = [str(entry?.org), str(entry?.role), str(entry?.time)]
+            .filter(Boolean)
+            .join('｜')
+          if (head) lines.push(head)
+          ;(Array.isArray(entry?.meta) ? entry.meta : [])
+            .filter((m) => str(m?.value))
+            .forEach((m) => lines.push(`${str(m.label) || '补充'}：${str(m.value)}`))
+          ;(Array.isArray(entry?.bullets) ? entry.bullets : [])
+            .filter((b) => str(b?.text))
+            .forEach((b) => lines.push(`- ${str(b.text)}`))
+        })
+      } else if (section.type === 'grid') {
+        ;(Array.isArray(section.items) ? section.items : [])
+          .filter((item) => str(item?.value))
+          .forEach((item) => lines.push(`${str(item.label) || '信息'}：${str(item.value)}`))
+      } else if (section.type === 'skills') {
+        ;(Array.isArray(section.fields) ? section.fields : [])
+          .filter((f) => str(f?.value))
+          .forEach((f) => lines.push(`${str(f.label) || '技能'}：${str(f.value)}`))
+        ;(Array.isArray(section.items) ? section.items : [])
+          .filter((s) => str(s?.name))
+          .forEach((s) => lines.push(`- ${str(s.name)}`))
+      } else if (section.type === 'text') {
+        if (str(section.content)) lines.push(str(section.content))
+      }
+    })
+
+  const text = lines.join('\n')
+  if (text.length <= budget) return text
+  return `${text.slice(0, budget)}\n（简历后文已省略）`
+}
+
+/**
+ * 构造 JD 匹配请求：让模型只输出严格 JSON，前端解析后渲染。
+ * 与润色同一原则——不编造，matched 必须能在简历里找到对应内容。
+ */
+export function buildJdMatchMessages(resumeSummary, jdText, jobTitle = '') {
+  const system = [
+    '你是资深招聘顾问。对比用户的简历与目标岗位 JD，只输出一个 JSON 对象（不要 markdown 代码块、不要任何多余文字），结构：',
+    '{"matched":[{"kw":"简历已覆盖的关键词","evidence":"简历对应内容，20字内"}],',
+    '"missing":[{"kw":"JD要求但简历缺失的关键词","why":"为什么重要，30字内"}],',
+    '"suggestions":["给简历的具体修改建议，每条50字内"]}',
+    '规则：关键词从 JD 提取，优先硬技能、工具与任职要求；matched 最多 8 条、missing 最多 6 条、suggestions 最多 3 条；matched 必须在简历内容里有依据，绝不编造。',
+  ].join('\n')
+
+  const job = jobTitle ? `目标岗位：${jobTitle}\n\n` : ''
+  const user = `${job}【简历内容】\n${resumeSummary}\n\n【岗位 JD】\n${String(jdText || '').slice(0, JD_BUDGET)}`
+  return [
+    { role: 'system', content: system },
+    { role: 'user', content: user },
+  ]
+}
+
+/**
+ * 解析 JD 匹配结果：容忍模型带出 markdown 代码块或前后缀文字。
+ * @param {string} text 模型返回的文本
+ * @returns {{ matched: {kw, note}[], missing: {kw, note}[], suggestions: string[] }}
+ * @throws {Error} 完全解析不出有效结果时抛错（带中文信息）
+ */
+export function parseJdMatchResult(text) {
+  const cleaned = String(text || '').replace(/```(?:json)?/gi, '')
+  const start = cleaned.indexOf('{')
+  const end = cleaned.lastIndexOf('}')
+  if (start === -1 || end <= start) {
+    throw new Error('AI 返回的内容里没有结果，请重试')
+  }
+
+  let parsed
+  try {
+    parsed = JSON.parse(cleaned.slice(start, end + 1))
+  } catch {
+    throw new Error('AI 返回的 JSON 格式有误，请重试')
+  }
+
+  const toKeywordList = (list) =>
+    (Array.isArray(list) ? list : [])
+      .filter((item) => item && str(item.kw))
+      .map((item) => ({ kw: str(item.kw), note: str(item.evidence ?? item.why ?? '') }))
+      .slice(0, 8)
+
+  const suggestions = (Array.isArray(parsed?.suggestions) ? parsed.suggestions : [])
+    .filter((s) => typeof s === 'string' && str(s))
+    .map((s) => str(s))
+    .slice(0, 3)
+
+  const matched = toKeywordList(parsed?.matched)
+  const missing = toKeywordList(parsed?.missing)
+  if (!matched.length && !missing.length && !suggestions.length) {
+    throw new Error('AI 没有给出有效的匹配结果，请重试')
+  }
+  return { matched, missing, suggestions }
+}

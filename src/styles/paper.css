@@ -159,6 +159,12 @@ textarea {
   margin-top: calc(1.15em * var(--gap));
   text-align: var(--sec-align, inherit);
   break-inside: avoid;
+  /*
+   * 触屏上手指按住模块滑动 = 滚动纸面（pan-y 放行纵向滚动手势）。
+   * 模块拖拽排序在手机上交给编辑面板的模块列表，纸面拖拽保留给鼠标；
+   * 没有这条声明，拖拽与滚动会互相打架，浏览器直接 pointercancel。
+   */
+  touch-action: pan-y;
 }
 
 /* 模块正文容器，缩进在此统一施加，避免内部块重复偏移 */

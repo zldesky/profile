@@ -141,11 +141,12 @@ const emit = defineEmits(['zoom-in', 'zoom-out', 'fit', 'compress'])
 
 @media (max-width: 900px) {
   .editor-tools {
-    /* 空间不够时换行而不是把按钮压扁；拖动读数出现时尤其需要 */
+    /* 空间不够时换行而不是把按钮压扁；拖动读数出现时尤其需要。
+       叠加 iPhone 手势条安全区，按钮不被系统边缘手势压住 */
     flex-wrap: wrap;
     justify-content: center;
     gap: 6px;
-    bottom: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   }
 
   .ed-btn {

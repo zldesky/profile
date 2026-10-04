@@ -295,7 +295,7 @@ const expiryText = computed(() => {
 
 @media (max-width: 900px) {
   .stage-scroll {
-    padding: 12px 14px 16px;
+    padding: 12px 14px calc(16px + env(safe-area-inset-bottom, 0px));
   }
 
   .sp-expiry {
