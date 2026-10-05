@@ -128,9 +128,11 @@ export async function resolveAiEndpoint(rawBaseUrl, { lookup = dns.lookup } = {}
   }
 
   const host = url.hostname
-  const literal = HOSTNAME_IPV6_RE.test(host)
+  const isIpv6Literal = HOSTNAME_IPV6_RE.test(host)
+  const isIpv4Literal = !isIpv6Literal && HOSTNAME_IPV4_RE.test(host)
+  const literal = isIpv6Literal
     ? addressBlockReason(host.slice(1, -1))
-    : HOSTNAME_IPV4_RE.test(host)
+    : isIpv4Literal
       ? addressBlockReason(host)
       : /^localhost$|\.localhost$/i.test(host)
         ? '环回地址'
@@ -140,8 +142,10 @@ export async function resolveAiEndpoint(rawBaseUrl, { lookup = dns.lookup } = {}
     return { ok: false, message: `不允许访问内网或环回地址（${literal}）` }
   }
 
-  if (!HOSTNAME_IPV4_RE.test(host)) {
-    // 域名形态：解析出全部地址逐一校验，任何一个落到内网都拒绝
+  if (!isIpv4Literal && !isIpv6Literal) {
+    // 域名形态：解析出全部地址逐一校验，任何一个落到内网都拒绝。
+    // IP 字面量已按位判完，绝不能落到这里——IPv6 字面量带方括号，
+    // getaddrinfo 在 Linux 下会解析失败，导致公网地址被误拒。
     let addrs
     try {
       addrs = await lookup(host, { all: true })
