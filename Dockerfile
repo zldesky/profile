@@ -5,7 +5,15 @@ FROM node:24-bookworm-slim
 
 # Chromium 渲染内核 + Noto CJK 中文字体。
 # 缺中文字体的后果是导出 PDF 里中文全部变成方框，所以字体和浏览器同样必需。
-RUN apt-get update \
+# 国内网络可选加速：--build-arg APT_MIRROR=mirrors.aliyun.com 把官方源换成国内镜像站
+# （tuna/ustc 同理），不传时行为不变。bookworm 的源在 deb822 格式的
+# /etc/apt/sources.list.d/debian.sources 里，且 aliyun/tuna/ustc 的 /debian
+# 与 /debian-security 路径与官方一致，替换主机名即可。
+ARG APT_MIRROR=
+RUN if [ -n "$APT_MIRROR" ]; then \
+      sed -i "s|deb.debian.org|$APT_MIRROR|g" /etc/apt/sources.list.d/debian.sources; \
+    fi \
+    && apt-get update \
     && apt-get install -y --no-install-recommends chromium fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 

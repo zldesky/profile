@@ -30,6 +30,8 @@ services:
       args:
         # 国内 npm 拉包加速；默认空 = 与不带 build args 时行为完全一致
         NPM_REGISTRY: ${NPM_REGISTRY:-}
+        # 国内 apt 源加速（装 Chromium + 中文字体那层）；默认空 = 走官方源
+        APT_MIRROR: ${APT_MIRROR:-}
     container_name: resume-studio
     restart: unless-stopped
 

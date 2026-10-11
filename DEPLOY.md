@@ -166,6 +166,15 @@ docker compose ps
 docker compose logs -f resume
 ```
 
+国内网络构建慢（apt 装 Chromium、npm 拉包都走官方源）时，给构建换国内源：
+
+```sh
+# compose 方式：环境变量传入即可，不改任何文件
+APT_MIRROR=mirrors.aliyun.com NPM_REGISTRY=https://registry.npmmirror.com docker compose up -d --build
+```
+
+一键脚本等价写法是加 `--apt-mirror --npm-mirror`（都不带 URL 时分别用 aliyun 与 npmmirror）。换源只影响首次构建/依赖变动后的那几层，日常 `git pull` 后重建会命中层缓存，不会每次全量下载。
+
 `docker-compose.yml` 已按安全默认配置好：
 
 - 端口只绑宿主机回环（`127.0.0.1:3001`），供反代使用；直接 `IP:3001` 访问需自行改映射（不推荐公网裸跑）；
@@ -211,7 +220,7 @@ docker compose -p resume -f docker-compose.yml -f docker-compose.shared-nginx.ym
 不跑 compose 的纯 `docker build` + `docker run` 等价形态：
 
 ```sh
-docker build -t resume-studio .   # 国内网络慢可加 --build-arg NPM_REGISTRY=https://registry.npmmirror.com
+docker build -t resume-studio .   # 国内网络慢加：--build-arg APT_MIRROR=mirrors.aliyun.com --build-arg NPM_REGISTRY=https://registry.npmmirror.com
 docker run -d --name resume-studio --restart unless-stopped \
   -p 127.0.0.1:3001:3001 -p 172.17.0.1:3001:3001 \
   -v resume-data:/app/server/.data --shm-size 256m \

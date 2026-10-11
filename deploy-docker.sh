@@ -30,6 +30,7 @@ ORIGIN_OVERRIDE=""      # 直接指定 ALLOWED_ORIGINS，优先级最高
 DOCKER_MIRROR="official" # docker-ce 安装源：official | aliyun | tuna
 REGISTRY_MIRROR=""      # Docker Hub 加速地址，逗号分隔
 NPM_MIRROR=""           # 构建期 npm 源，空 = 用官方源
+APT_MIRROR=""           # 构建期 apt 源（装 Chromium + 字体那层），空 = 用官方源
 DO_PULL=1               # 是否 git pull
 DO_BUILD=1              # 是否重建镜像
 NO_NGINX=0              # 1 = 不起 compose 自带的 nginx，只部署应用容器
@@ -50,6 +51,7 @@ usage() {
   --domain a.com,b.com   访问域名（不要带 http://），用于放行 ALLOWED_ORIGINS
   --origin URL[,URL]     直接指定 ALLOWED_ORIGINS，优先级高于 --domain
   --npm-mirror [URL]     构建期 npm 加速，不带 URL 时用 https://registry.npmmirror.com
+  --apt-mirror [URL]     构建期 apt 加速（装 Chromium + 字体那层），不带 URL 时用 mirrors.aliyun.com
   --registry-mirror URL  Docker Hub 加速（拉基础镜像慢时用，逗号分隔可给多个）
   --docker-mirror M      docker-ce 安装源：official | aliyun | tuna，默认 official
   --with-swap            内存不足时直接创建 swap，不再询问
@@ -72,6 +74,9 @@ while [ $# -gt 0 ]; do
     --npm-mirror)
       if [ $# -ge 2 ] && [ "${2#--}" = "$2" ]; then NPM_MIRROR="$2"; shift 2
       else NPM_MIRROR="https://registry.npmmirror.com"; shift; fi ;;
+    --apt-mirror)
+      if [ $# -ge 2 ] && [ "${2#--}" = "$2" ]; then APT_MIRROR="$2"; shift 2
+      else APT_MIRROR="mirrors.aliyun.com"; shift; fi ;;
     --registry-mirror) [ $# -ge 2 ] || die "--registry-mirror 需要参数"; REGISTRY_MIRROR="$2"; shift 2 ;;
     --docker-mirror)   [ $# -ge 2 ] || die "--docker-mirror 需要参数"; DOCKER_MIRROR="$2"; shift 2 ;;
     --with-swap)   SWAP_MODE="yes"; shift ;;
@@ -358,6 +363,10 @@ COMPOSE_ENV=(
 if [ -n "$NPM_MIRROR" ]; then
   COMPOSE_ENV+=("NPM_REGISTRY=$NPM_MIRROR")
   log "构建期 npm 源：$NPM_MIRROR"
+fi
+if [ -n "$APT_MIRROR" ]; then
+  COMPOSE_ENV+=("APT_MIRROR=$APT_MIRROR")
+  log "构建期 apt 源：$APT_MIRROR"
 fi
 
 # 统一入口：环境变量齐全地执行 docker compose
