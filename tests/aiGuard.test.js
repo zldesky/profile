@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { addressBlockReason, resolveAiEndpoint } from '../server/aiGuard.js'
+import {
+  AI_RESPONSE_MAX_BYTES,
+  addressBlockReason,
+  readJsonWithCap,
+  resolveAiEndpoint,
+} from '../server/aiGuard.js'
 
 describe('resolveAiEndpoint：AI 转发端点守卫', () => {
   it('合法的 https 地址返回规范化的端点（去尾斜杠）', async () => {
@@ -127,5 +132,31 @@ describe('addressBlockReason：地址位级判断', () => {
     expect(addressBlockReason('::1')).toBe('环回地址')
     expect(addressBlockReason('::ffff:192.168.0.1')).toBe('私网地址')
     expect(addressBlockReason('garbage')).toBe('无法识别的地址')
+  })
+})
+
+describe('readJsonWithCap：AI 上游响应体封顶', () => {
+  it('正常 JSON 原样解析', async () => {
+    const response = new Response(JSON.stringify({ choices: [{ message: { content: 'hi' } }] }))
+    await expect(readJsonWithCap(response)).resolves.toMatchObject({
+      choices: [{ message: { content: 'hi' } }],
+    })
+  })
+
+  it('超过上限立即报错断流，超大 body 不进内存', async () => {
+    const oversized = 'x'.repeat(AI_RESPONSE_MAX_BYTES + 1)
+    await expect(readJsonWithCap(new Response(oversized))).rejects.toThrow(/上限/)
+  })
+
+  it('非法 JSON（上游错误页）原样上抛，由调用方按空对象兜底', async () => {
+    await expect(
+      readJsonWithCap(new Response('<html>502 Bad Gateway</html>')),
+    ).rejects.toBeInstanceOf(SyntaxError)
+  })
+
+  it('自定义上限生效：贴线放行、超线拒绝', async () => {
+    const body = '"0123456789"' // 恰好 12 字节
+    await expect(readJsonWithCap(new Response(body), 12)).resolves.toBe('0123456789')
+    await expect(readJsonWithCap(new Response(body), 11)).rejects.toThrow(/上限/)
   })
 })

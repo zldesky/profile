@@ -11,6 +11,13 @@
  *     WHATWG URL 会把 0x7f.1、2130706433 这类变体规范化成点分十进制，
  *     所以这里只需要处理规范形态，但解析失败一律按拒绝处理（fail-closed）。
  *  4. 规范化路径：去掉尾部斜杠，调用方统一拼 /chat/completions。
+ *
+ * 残余风险（有意的取舍）：上面做的是「校验时解析 DNS」，实际 fetch 会再解析一次，
+ * 理论上存在 DNS rebinding 的 TOCTOU 窗口。完整修复需要把连接钉在已校验的 IP 上
+ * （undici Agent 级别的接线），与「服务端零依赖」的约定冲突。实际可利用性被三道
+ * 阑栏压得很低：仅 https（证书校验拦掉多数内网目标）、redirect: 'error'（重定向
+ * 不能绕过本模块）、响应只回传 OpenAI 形状的 content 字段；响应体另有
+ * readJsonWithCap 封顶，超大 body 打不爆内存。
  */
 
 import dns from 'node:dns/promises'
@@ -163,4 +170,35 @@ export async function resolveAiEndpoint(rawBaseUrl, { lookup = dns.lookup } = {}
 
   const path = url.pathname.replace(/\/+$/, '')
   return { ok: true, url: `${url.origin}${path}` }
+}
+
+/** AI 上游响应体默认上限：max_tokens 封顶 1000 的回复通常不到 100KB，1MB 是十倍余量 */
+export const AI_RESPONSE_MAX_BYTES = 1024 * 1024
+
+/**
+ * 流式读取上游响应并解析 JSON，超过上限立即断开连接。
+ *
+ * 上游地址来自用户输入，响应体绝不能无上限地读进内存——把 baseUrl 指向一个
+ * 返回超大 body 的服务器，就能把服务进程的内存打爆。套路与 imageProxy 的
+ * readBodyWithCap 一致：边读边计数，超限即 cancel 断流。
+ *
+ * @param {Response} response fetch 的响应对象
+ * @param {number} [maxBytes] 响应体上限
+ * @returns {Promise<unknown>} 解析出的 JSON（非法 JSON 上抛，由调用方兜底）
+ */
+export async function readJsonWithCap(response, maxBytes = AI_RESPONSE_MAX_BYTES) {
+  const reader = response.body.getReader()
+  const chunks = []
+  let received = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    received += value.byteLength
+    if (received > maxBytes) {
+      reader.cancel().catch(() => {})
+      throw new Error('上游响应体超过大小上限')
+    }
+    chunks.push(value)
+  }
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'))
 }

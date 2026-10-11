@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url'
 
 import express from 'express'
 
-import { resolveAiEndpoint } from './aiGuard.js'
+import { readJsonWithCap, resolveAiEndpoint } from './aiGuard.js'
 import {
   createLoginGuard,
   createPasswordGuard,
@@ -64,6 +64,8 @@ const SHARE_TTL_DAYS = Number(process.env.SHARE_TTL_DAYS) || 30
 const shareLimiter = createSlidingWindowCounter({ max: 20, windowMs: 60 * 60 * 1000 })
 /** AI 转发按主体限频：Key 是用户自己的，限频保护的是上游服务与本机带宽 */
 const aiLimiter = createSlidingWindowCounter({ max: 60, windowMs: 60 * 60 * 1000 })
+/** 图片代抓同频限频：它是另一个重出网端点，不能成为唯一没有闸门的出口 */
+const imageLimiter = createSlidingWindowCounter({ max: 60, windowMs: 60 * 60 * 1000 })
 
 /** 库文件路径可用环境变量覆盖；测试与多实例部署时用得上 */
 const db = createDatabase({
@@ -617,6 +619,10 @@ app.post('/api/image-proxy', requireAuth, async (req, res) => {
     res.status(400).json({ ok: false, message: '缺少图片链接' })
     return
   }
+  if (!imageLimiter.tryTake(`img:${req.auth.subject}`)) {
+    res.status(429).json({ ok: false, message: '图片抓取过于频繁，请一小时后再试' })
+    return
+  }
   try {
     const result = await fetchRemoteImage(url)
     res.json({ ok: true, ...result })
@@ -727,6 +733,10 @@ app.post('/api/ai/chat', requireAuth, async (req, res) => {
     res.status(400).json({ ok: false, message: '缺少模型名称' })
     return
   }
+  if (model.length > 200) {
+    res.status(400).json({ ok: false, message: '模型名称过长' })
+    return
+  }
   if (
     !Array.isArray(messages) ||
     !messages.length ||
@@ -766,7 +776,15 @@ app.post('/api/ai/chat', requireAuth, async (req, res) => {
       redirect: 'error',
     })
 
-    const data = await upstream.json().catch(() => ({}))
+    // 上游错误页常是 HTML、恶意上游可能是超大 body：读不出合法 JSON 就按
+    // 空对象处理，与下方「AI 服务返回了 X 状态码」的兜底提示衔接。
+    // readJsonWithCap 边读边计数，超大响应体在读入内存前就被断开。
+    let data = {}
+    try {
+      data = await readJsonWithCap(upstream)
+    } catch {
+      /* 按空对象处理 */
+    }
     if (!upstream.ok) {
       const message =
         data?.error?.message || data?.message || `AI 服务返回了 ${upstream.status} 状态码`

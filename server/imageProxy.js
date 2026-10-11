@@ -9,6 +9,11 @@
  *  3. 重定向手动跟进（≤3 跳），每一跳都重新做协议与 IP 校验；
  *  4. 仅接受 image/* 响应，正文超 5MB 报错，单次请求 8 秒超时。
  * 依赖（fetch、dns.lookup）都可注入，便于在 Node 下直测。
+ *
+ * 残余风险：DNS 校验在连接前完成，fetch 会再次解析主机名，理论上存在
+ * DNS rebinding 的 TOCTOU 窗口。完整修复需要连接级钉扎（undici Agent），
+ * 与「零依赖」约定冲突；泄漏面已被压到「image/* 且 ≤5MB 的响应体」，
+ * 且 /api/image-proxy 有登录门槛与限频，按此风险接受。
  */
 
 import dns from 'node:dns/promises'
