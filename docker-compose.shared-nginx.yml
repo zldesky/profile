@@ -1,0 +1,24 @@
+# 共用已有 nginx 的部署形态（deploy-docker.sh --no-nginx 会自动带上本文件）：
+# 服务器 80/443 已被你自己的 nginx（常见是常驻反代容器）占用，compose 里那个
+# nginx 不能也不该再起；只跑应用容器，并把 3001 发布到宿主机上给已有 nginx 反代。
+#
+# 手动执行（与脚本做的事等价；-p 与两个 -f 都不能省）：
+#   docker compose -p resume -f docker-compose.yml -f docker-compose.shared-nginx.yml up -d --build resume
+# 服务名 resume 必须带上：不带它 compose 会把 nginx 也拉起来，然后撞死在 80 端口上。
+#
+# 端口发布的两个地址都不对公网开放（云安全组只放 80/443）：
+#   127.0.0.1:3001   宿主机本地 curl/调试、脚本健康检查用；
+#   172.17.0.1:3001  docker0 网关。已有 nginx 容器从这里反代到应用，与旧版宿主机
+#                    部署的访问路径一致，nginx 配置无需改动。
+#                    docker0 网段被自定义过的话，换成 `ip addr show docker0` 里的网关 IP。
+#
+# 已有 nginx 的 server 块需要的最低配置（模板见 nginx/default.conf，缺了的后果）：
+#   client_max_body_size 8m;            缺了 → 保存带图片的简历被 413 拦下
+#   proxy_read_timeout 300s;            缺了 → 导出 PDF 排队稍久就 504
+#   X-Forwarded-For / X-Forwarded-Proto 缺了 → 登录锁定按 nginx 的 IP 计数，误锁全站
+#   入口 HTML 与 /api 不缓存            缺了 → 发版后旧 index.html 引用已删 chunk，白屏
+services:
+  resume:
+    ports:
+      - "127.0.0.1:3001:3001"
+      - "172.17.0.1:3001:3001"

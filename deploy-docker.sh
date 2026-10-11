@@ -12,7 +12,10 @@
 #   3. 写 /etc/docker/daemon.json（日志轮转，可选镜像加速）并启动 docker；
 #   4. 探测公网 IP 或取你传的域名，算好 ALLOWED_ORIGINS（不设则登录与导出全 403）；
 #   5. docker compose up -d --build 起 nginx + resume，等健康检查通过；
-#   6. 从宿主机端口打一次 /api/health，端到端验证 nginx → 应用这条链路。
+#      （--no-nginx 模式：宿主机 80/443 已被你自己的 nginx 占用时，不起自带 nginx，
+#       只起 resume，并把 3001 发布到 127.0.0.1 与 172.17.0.1（docker0 网关）供其反代）
+#   6. 从宿主机端口打一次 /api/health，端到端验证 nginx → 应用这条链路
+#      （--no-nginx 模式验证的是 127.0.0.1:3001 直达应用容器）。
 #
 set -euo pipefail
 
@@ -29,6 +32,7 @@ REGISTRY_MIRROR=""      # Docker Hub 加速地址，逗号分隔
 NPM_MIRROR=""           # 构建期 npm 源，空 = 用官方源
 DO_PULL=1               # 是否 git pull
 DO_BUILD=1              # 是否重建镜像
+NO_NGINX=0              # 1 = 不起 compose 自带的 nginx，只部署应用容器
 SWAP_MODE="auto"        # auto | yes | no
 SKIP_DOCKER_INSTALL=0
 FIX_EOL_REPOS=0
@@ -52,6 +56,8 @@ usage() {
   --without-swap         完全不碰 swap
   --fix-eol-repos        CentOS 7 已 EOL 时把 yum 源切到 vault.centos.org（自动备份原文件）
   --skip-docker-install  跳过 Docker 安装（已装好，或不是 RHEL 系）
+  --no-nginx             不启动 compose 自带的 nginx（宿主机 80/443 已被你自己的
+                         nginx 占用时）；3001 发布到 127.0.0.1 与 172.17.0.1
   --no-build             只重启容器，不重新构建镜像
   --no-pull              不执行 git pull
   -h, --help             显示本帮助
@@ -74,6 +80,7 @@ while [ $# -gt 0 ]; do
     --skip-docker-install) SKIP_DOCKER_INSTALL=1; shift ;;
     --no-build) DO_BUILD=0; shift ;;
     --no-pull)  DO_PULL=0; shift ;;
+    --no-nginx) NO_NGINX=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "未知参数：$1（-h 查看用法）" ;;
   esac
@@ -369,9 +376,18 @@ else
   warn "  部署能起来，但用公网地址登录与导出会 403。补一次：bash deploy-docker.sh --domain 你的域名"
 fi
 
-# 宿主机端口占用检查：nginx 容器起不来时给个人话，而不是让 compose 抛一堆端口冲突
-if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]${PORT}$"; then
-  warn "宿主机 $PORT 端口已被占用，nginx 容器会启动失败；可加 --port 8080 换端口"
+# 宿主机端口占用检查：给个人话，而不是让 compose 抛一堆端口冲突
+if [ "$NO_NGINX" -eq 1 ]; then
+  # 应用容器的 3001 要发布到宿主机。本项目容器自己在跑（更新部署）不算冲突。
+  if command -v ss >/dev/null 2>&1 \
+     && ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE '[:.]3001$' \
+     && [ -z "$(dk ps -q --filter name=resume-studio 2>/dev/null)" ]; then
+    warn "宿主机 3001 已被别的进程占用（多半是旧的宿主机部署在跑），先停掉再重跑，否则端口映射冲突："
+    warn "  $SUDO systemctl disable --now resume   # deploy.sh 装的 systemd 服务，名以实际为准"
+  fi
+elif command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]${PORT}$"; then
+  warn "宿主机 $PORT 端口已被占用，nginx 容器会启动失败；可加 --port 8080 换端口，"
+  warn "若占 80 的正是你要复用的 nginx：加 --no-nginx 只部署应用容器"
 fi
 
 # ---------------- 6. 拉代码 → 构建 → 起容器 ----------------
@@ -381,11 +397,23 @@ if [ "$DO_PULL" -eq 1 ] && [ -d .git ]; then
   git pull --ff-only || warn "git pull 失败（本地有改动？仓库属主不是当前用户？），继续用当前代码部署"
 fi
 
-log "构建并启动容器（nginx + resume，首次构建要装两轮 npm 依赖，慢是正常的）"
-if [ "$DO_BUILD" -eq 1 ]; then
-  dkc up -d --build
+COMPOSE_FILE_ARGS="-f docker-compose.yml"
+UP_TARGET=""
+if [ "$NO_NGINX" -eq 1 ]; then
+  COMPOSE_FILE_ARGS="$COMPOSE_FILE_ARGS -f docker-compose.shared-nginx.yml"
+  UP_TARGET="resume"
+fi
+
+if [ "$NO_NGINX" -eq 1 ]; then
+  log "构建并启动应用容器（--no-nginx：不起自带 nginx，首次构建要装两轮 npm 依赖，慢是正常的）"
 else
-  dkc up -d
+  log "构建并启动容器（nginx + resume，首次构建要装两轮 npm 依赖，慢是正常的）"
+fi
+# shellcheck disable=SC2086  # COMPOSE_FILE_ARGS/UP_TARGET 有意按空白拆分
+if [ "$DO_BUILD" -eq 1 ]; then
+  dkc $COMPOSE_FILE_ARGS up -d --build $UP_TARGET
+else
+  dkc $COMPOSE_FILE_ARGS up -d $UP_TARGET
 fi
 
 wait_healthy() {
@@ -407,19 +435,28 @@ if ! wait_healthy resume-studio 90; then
   die "启动失败，请按上面日志定位"
 fi
 
-log "等待 nginx 容器就绪"
-if ! wait_healthy resume-nginx 30; then
-  warn "resume-nginx 未进入 healthy，最近日志："
-  dk logs --tail 50 resume-nginx || true
-  die "nginx 启动失败，多为配置语法问题，先用这条看具体行号：
-  ${DOCKER_SUDO:+$DOCKER_SUDO }docker exec resume-nginx nginx -t"
+if [ "$NO_NGINX" -eq 1 ]; then
+  log "--no-nginx：自带 nginx 不参与部署，对外由你已有的 nginx 反代 http://172.17.0.1:3001"
+else
+  log "等待 nginx 容器就绪"
+  if ! wait_healthy resume-nginx 30; then
+    warn "resume-nginx 未进入 healthy，最近日志："
+    dk logs --tail 50 resume-nginx || true
+    die "nginx 启动失败，多为配置语法问题，先用这条看具体行号：
+    ${DOCKER_SUDO:+$DOCKER_SUDO }docker exec resume-nginx nginx -t"
+  fi
 fi
 
 # ---------------- 7. 端到端验证与收尾 ----------------
 
-# 从宿主机端口打一次：宿主机 → nginx → 应用容器，这条通了才算真的部署成功。
+# 从宿主机端口打一次，部署成功才算数：默认形态验证 宿主机 → nginx → 应用 这条链路；
+# --no-nginx 模式打 127.0.0.1:3001，验证端口映射 → 应用容器这一段。
 # 重试几轮是为了吸收 nginx 重新解析上游的最长 10s 有效期（刚重建过容器时可能短暂 502）。
-HEALTH_URL="http://127.0.0.1:${PORT}/api/health"
+if [ "$NO_NGINX" -eq 1 ]; then
+  HEALTH_URL="http://127.0.0.1:3001/api/health"
+else
+  HEALTH_URL="http://127.0.0.1:${PORT}/api/health"
+fi
 SMOKE_OK=0
 for _ in $(seq 1 10); do
   if curl -fsS --max-time 15 "$HEALTH_URL" >/dev/null 2>&1; then
@@ -429,10 +466,15 @@ for _ in $(seq 1 10); do
   sleep 2
 done
 if [ "$SMOKE_OK" -eq 1 ]; then
-  log "端到端检查通过（宿主机 → nginx → 应用）：$HEALTH_URL"
+  log "端到端检查通过：$HEALTH_URL"
 else
   warn "从宿主机访问 $HEALTH_URL 未通过，但容器可能已在运行；排查："
-  warn "  ${DOCKER_SUDO:+$DOCKER_SUDO }docker compose -p $COMPOSE_PROJECT_NAME_VALUE logs --tail 50 nginx resume"
+  if [ "$NO_NGINX" -eq 1 ]; then
+    warn "  ${DOCKER_SUDO:+$DOCKER_SUDO }docker compose -p $COMPOSE_PROJECT_NAME_VALUE logs --tail 50 resume"
+    warn "  ${DOCKER_SUDO:+$DOCKER_SUDO }docker port resume-studio   # 确认 3001 映射是否成功"
+  else
+    warn "  ${DOCKER_SUDO:+$DOCKER_SUDO }docker compose -p $COMPOSE_PROJECT_NAME_VALUE logs --tail 50 nginx resume"
+  fi
 fi
 
 PUBLIC_IP="$(detect_public_ip)"
@@ -441,24 +483,40 @@ VISIT="http://${PUBLIC_IP:-服务器IP}"
 
 printf '\n'
 log "部署完成 ✔"
-log "访问地址：$VISIT"
+if [ "$NO_NGINX" -eq 1 ]; then
+  log "应用容器：http://127.0.0.1:3001（宿主机）｜http://172.17.0.1:3001（给已有 nginx 反代）"
+  log "对外地址由你已有的 nginx 决定（proxy_pass 到 172.17.0.1:3001，配置要求见 nginx/default.conf）"
+else
+  log "访问地址：$VISIT"
+fi
 log "数据卷：${COMPOSE_PROJECT_NAME_VALUE}_resume-data（SQLite：账号、简历、配额；删容器不丢数据）"
 log "常用命令（在本目录执行，-p 不能省：项目名被固定成 resume，不按目录名算）："
 log "  查看状态   ${DOCKER_SUDO:+$DOCKER_SUDO }docker compose -p $COMPOSE_PROJECT_NAME_VALUE ps"
-log "  跟随日志   ${DOCKER_SUDO:+$DOCKER_SUDO }docker compose -p $COMPOSE_PROJECT_NAME_VALUE logs -f nginx resume"
+if [ "$NO_NGINX" -eq 1 ]; then
+  log "  跟随日志   ${DOCKER_SUDO:+$DOCKER_SUDO }docker compose -p $COMPOSE_PROJECT_NAME_VALUE logs -f resume"
+else
+  log "  跟随日志   ${DOCKER_SUDO:+$DOCKER_SUDO }docker compose -p $COMPOSE_PROJECT_NAME_VALUE logs -f nginx resume"
+fi
 log "  更新部署   重跑本脚本"
 printf '\n'
 
 if [ -n "$ALLOWED_ORIGINS_VALUE" ]; then
   log "已放行的浏览器来源：$ALLOWED_ORIGINS_VALUE"
 else
-  warn "登录/导出仍会 403：用 --domain 你的域名 或 --origin http://地址 重跑一次"
+  warn "登录/导出仍会 403：用 --origin http://地址（或 https://你的域名）重跑一次"
 fi
 
-warn "当前只有 HTTP：账号口令与会话 Cookie 都是明文，公网务必按 nginx/default.conf 末尾"
-warn "  的四步启用 HTTPS，并用 --origin https://你的域名 重新部署（Origin 不一致仍会 403）"
+if [ "$NO_NGINX" -eq 1 ]; then
+  warn "已有 nginx 的 server 块请核对四项（模板见 nginx/default.conf）："
+  warn "  client_max_body_size 8m（缺了带图简历保存被 413）｜ proxy_read_timeout 300s（缺了导出 PDF 504）"
+  warn "  X-Forwarded-For / X-Forwarded-Proto（缺了登录锁定按 nginx 的 IP 计数，会误锁全站）"
+  warn "  入口 HTML 与 /api 不缓存（缺了发版后旧 index.html 引用已删 chunk，白屏）"
+else
+  warn "当前只有 HTTP：账号口令与会话 Cookie 都是明文，公网务必按 nginx/default.conf 末尾"
+  warn "  的四步启用 HTTPS，并用 --origin https://你的域名 重新部署（Origin 不一致仍会 403）"
+fi
 
-if command -v firewall-cmd >/dev/null 2>&1 && $SUDO firewall-cmd --state >/dev/null 2>&1; then
+if [ "$NO_NGINX" -eq 0 ] && command -v firewall-cmd >/dev/null 2>&1 && $SUDO firewall-cmd --state >/dev/null 2>&1; then
   warn "检测到 firewalld 正在运行：Docker 发布的端口走 nat/FORWARD 链，默认绕过 firewalld 规则，"
   warn "  也就是说 $PORT 端口现在是对外开放的。要主动放行/查看，用："
   warn "    $SUDO firewall-cmd --add-port=${PORT}/tcp --permanent && $SUDO firewall-cmd --reload"

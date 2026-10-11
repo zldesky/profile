@@ -191,6 +191,47 @@ docker run -d --name resume \
   resume-studio
 ```
 
+### 服务器上已有自己的 nginx（80/443 已被占用）
+
+常驻反代容器已经占着宿主机 80/443 时，compose 自带的 nginx 起不来，也不该起。加 `--no-nginx`：
+
+```sh
+# TLS 在你自己的 nginx 上终止，Origin 必须与实际访问地址逐字一致，用 --origin 而不是 --domain
+bash deploy-docker.sh --no-nginx --origin https://你的域名
+```
+
+脚本只构建并启动 `resume` 应用容器，把 3001 发布到宿主机的 `127.0.0.1` 与 `172.17.0.1`（docker0 网关）——`172.17.0.1:3001` 与旧版宿主机部署的访问路径一致，已有 nginx 的 `proxy_pass` 不用改。等价手动命令：
+
+```sh
+docker compose -p resume -f docker-compose.yml -f docker-compose.shared-nginx.yml up -d --build resume
+```
+
+（服务名 `resume` 必须带上，否则 compose 会把自带 nginx 也拉起来撞死在 80 上；`docker0` 网段被自定义过时，把 `172.17.0.1` 换成 `ip addr show docker0` 里的网关地址。两个发布地址都只在本机与 docker 网络内可达，不经云安全组对公网开放。）
+
+不跑 compose 的纯 `docker build` + `docker run` 等价形态：
+
+```sh
+docker build -t resume-studio .   # 国内网络慢可加 --build-arg NPM_REGISTRY=https://registry.npmmirror.com
+docker run -d --name resume-studio --restart unless-stopped \
+  -p 127.0.0.1:3001:3001 -p 172.17.0.1:3001:3001 \
+  -v resume-data:/app/server/.data --shm-size 256m \
+  -e BROWSER_EXTRA_ARGS=--no-sandbox -e TRUST_PROXY=1 \
+  -e ALLOWED_ORIGINS=https://你的域名 \
+  resume-studio
+```
+
+更新部署：`git pull && docker build -t resume-studio . && docker rm -f resume-studio`，再重跑上面那条 `docker run`（数据在 `resume-data` 卷里，删容器不丢）。
+
+已有 nginx 的 server 块需要核对（模板见 `nginx/default.conf`）：`client_max_body_size 8m`（缺了保存带图简历被 413）、`proxy_read_timeout 300s`（缺了导出 PDF 504）、`X-Forwarded-For` / `X-Forwarded-Proto`（compose 已设 `TRUST_PROXY=1`，nginx 不带这两个头的话登录锁定会按 nginx 的 IP 计数，误锁全站）、入口 HTML 与 `/api` 不缓存（缺了发版后白屏）。
+
+**从旧版宿主机部署（deploy.sh / systemd）迁移**：先 `sudo systemctl disable --now resume` 停掉旧服务（否则 3001 端口冲突），再执行上面的命令。要保留旧账号与简历，容器起来后把旧库拷进去（路径按实际部署目录）：
+
+```sh
+sudo docker cp /opt/vue-project/server/.data/app.db resume-studio:/app/server/.data/app.db
+sudo docker exec -u root resume-studio chown node:node /app/server/.data/app.db
+docker compose -p resume restart resume
+```
+
 ### 小内存机器（2G）能跑，但要按这个来
 
 | 部分                             | 大致占用         |

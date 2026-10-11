@@ -3,6 +3,10 @@
 #
 # 对外形态：nginx（容器，占宿主机端口）→ resume（容器，只在 compose 网络内可见）
 #
+# 服务器上已有自己的 nginx 占用宿主机 80/443 时：别起本文件里的 nginx，
+# 用 deploy-docker.sh --no-nginx，等价于
+#   docker compose -p resume -f docker-compose.yml -f docker-compose.shared-nginx.yml up -d --build resume
+#
 # 可用环境变量（不设也能起，但公网访问会 403，见下方 ALLOWED_ORIGINS 注释）：
 #   ALLOWED_ORIGINS       浏览器访问地址，逗号分隔，如 http://1.2.3.4,https://resume.example.com
 #   NGINX_HTTP_PORT       nginx 对外端口，默认 80
