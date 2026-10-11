@@ -5,6 +5,7 @@
 - **本地优先**：不登录也能完整使用，数据保存在浏览器（localStorage），随时导出 JSON 备份；
 - **可选云端**：注册账号后简历自动同步到服务端（SQLite），换设备继续编辑；
 - **AI 助手（自带 Key）**：一句话润色、简历体检、JD 匹配度分析；API Key 只存浏览器本地，经本机服务转发即用即弃，服务端不存储；
+- **Agent Skill（无界面产出）**：`skills/resume-workshop/` 按 Agent Skills 标准打包，AI 代理不开编辑器即可完成「写简历 → 白名单校验 → 导出矢量 PDF / Markdown」；
 - **简历分享**：一键生成 30 天有效的公开只读链接，随时可撤销；
 - **导出防刷**：渲染并发信号量 + 按用户/全站双层每日配额 + 内容去重缓存。
 
@@ -42,6 +43,18 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 | `npm run format`       | Prettier 格式化 src / server / tests / 根配置                            |
 | `npm run format:check` | 只校验不改动（CI 用）                                                    |
 
+## Agent Skill（AI 无界面产出）
+
+[`skills/resume-workshop/`](./skills/resume-workshop/SKILL.md) 是按 Agent Skills 标准（[anthropics/skills](https://github.com/anthropics/skills) 推广的 SKILL.md 格式）编写的技能包，Claude Code / Claude.ai / ZCode 等代理装载后，不打开编辑器就能产出与本编辑器完全兼容的简历 JSON 并交付：
+
+- `SKILL.md` — 工作流（收集 → 构建 JSON → 校验 → 导出）与硬性约束（不编造经历、一页纸配额、图片规则）；
+- `references/data-schema.md` — resume JSON 的结构、枚举与上限，服务端白名单（`server/sanitize.js`）的忠实转述；
+- `references/headless-api.md` — `POST /api/pdf` Bearer 通道的请求格式、响应头与错误处置；
+- `scripts/validate_resume.mjs` — 离线校验器，与服务端跑同一份白名单：`node skills/resume-workshop/scripts/validate_resume.mjs resume.json`；
+- `assets/resume-template.json` — 可直接填充的简历骨架。
+
+服务端侧只需 `.env` 里配好 `PDF_ACCESS_PASSWORD`（脚本 Bearer 通道），见 `DEPLOY.md` 环境变量参考。
+
 ## 工程约定
 
 - **格式与质量分工**：Prettier 管一切格式（无分号、单引号、100 列），ESLint 只管代码质量与 Vue 特有陷阱（响应性丢失、`v-html` 禁用、`key` 缺失等），风格规则由 `eslint-config-prettier` 关闭避免打架；
@@ -69,6 +82,8 @@ server/              应用服务（Express）
   imageProxy.js      远程图片代理（重定向逐跳复检的 SSRF 防线）
   captcha.js         注册滑块验证码（HMAC 签名挑战）
   semaphore.js       渲染并发信号量
+skills/              Agent Skill（AI 无界面操作）
+  resume-workshop/   SKILL.md + 数据结构/API 参考 + 校验脚本 + 简历骨架
 tests/               Vitest 单测
 ```
 

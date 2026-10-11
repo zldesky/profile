@@ -37,7 +37,7 @@ export default [
   },
 
   {
-    files: ['server/**', 'tests/**', '*.config.js'],
+    files: ['server/**', 'tests/**', 'skills/**/*.mjs', '*.config.js'],
     languageOptions: {
       globals: { ...globals.node },
     },

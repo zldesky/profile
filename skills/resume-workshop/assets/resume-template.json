@@ -1,0 +1,102 @@
+{
+  "version": 2,
+  "template": "classic",
+  "theme": {
+    "accent": "#000000",
+    "text": "#2b2f36",
+    "fontKey": "yahei",
+    "fs": 1,
+    "lh": 1.75,
+    "gap": 1,
+    "mv": 12,
+    "mh": 14,
+    "titleStyle": "fill",
+    "titleMarker": "square",
+    "titleGap": 0.5,
+    "titleMargin": 0.55,
+    "titleBottom": "none",
+    "titleBottomWidth": 100,
+    "titleBottomThickness": 2,
+    "titleBottomGap": 4,
+    "titleBottomAlign": "left"
+  },
+  "basics": {
+    "name": "",
+    "jobTitle": "",
+    "avatar": "",
+    "showAvatar": false,
+    "avatarShape": "square",
+    "avatarWidth": 25,
+    "avatarHeight": 35,
+    "avatarPos": { "dx": 0, "dy": 0 },
+    "fields": [
+      { "icon": "phone", "label": "联系电话", "value": "" },
+      { "icon": "mail", "label": "联系邮箱", "value": "" },
+      { "icon": "location", "label": "现居城市", "value": "" }
+    ]
+  },
+  "sections": [
+    {
+      "type": "grid",
+      "title": "求职意向",
+      "visible": true,
+      "layout": { "align": "inherit", "indent": 0, "extraGap": 0, "columns": "auto" },
+      "items": [
+        { "icon": "briefcase", "label": "求职岗位", "value": "" },
+        { "icon": "location", "label": "意向城市", "value": "" },
+        { "icon": "coin", "label": "期望薪资", "value": "" },
+        { "icon": "clock", "label": "到岗时间", "value": "" }
+      ]
+    },
+    {
+      "type": "entries",
+      "title": "工作经历",
+      "visible": true,
+      "layout": { "align": "inherit", "indent": 0, "extraGap": 0, "columns": "auto" },
+      "showLogo": false,
+      "items": [
+        {
+          "time": "",
+          "org": "",
+          "role": "",
+          "logo": "",
+          "meta": [],
+          "bullets": [{ "text": "" }]
+        }
+      ]
+    },
+    {
+      "type": "entries",
+      "title": "教育背景",
+      "visible": true,
+      "layout": { "align": "inherit", "indent": 0, "extraGap": 0, "columns": "auto" },
+      "showLogo": false,
+      "items": [
+        {
+          "time": "",
+          "org": "",
+          "role": "",
+          "logo": "",
+          "meta": [],
+          "bullets": []
+        }
+      ]
+    },
+    {
+      "type": "skills",
+      "title": "技能特长",
+      "visible": true,
+      "layout": { "align": "inherit", "indent": 0, "extraGap": 0, "columns": "auto" },
+      "showBars": false,
+      "fields": [{ "label": "技术栈", "value": "" }],
+      "items": []
+    },
+    {
+      "type": "text",
+      "title": "自我评价",
+      "visible": true,
+      "layout": { "align": "inherit", "indent": 0, "extraGap": 0, "columns": "auto" },
+      "content": ""
+    }
+  ]
+}
