@@ -268,12 +268,12 @@ export function buildResumeFromLines(lines: PdfLine[]): {
           current.bullets.push({ text })
         }
       } else {
-        (buckets.summary as string[]).push(text)
+        ;(buckets.summary as string[]).push(text)
       }
       continue
     }
 
-    (buckets[section] as string[]).push(text)
+    ;(buckets[section] as string[]).push(text)
   }
   if (current && section) (buckets[section] as DraftEntry[]).push(current)
 

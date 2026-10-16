@@ -592,12 +592,10 @@ app.put('/api/styles-admin', requireAuth, requireAdmin, (req, res) => {
       !STYLE_TITLE_BOTTOMS.includes(patch.titleBottom) ||
       (patch.fontKey !== undefined && !STYLE_FONT_KEYS.includes(patch.fontKey))
     ) {
-      res
-        .status(400)
-        .json({
-          ok: false,
-          message: `风格「${name}」的标题样式 / 标记 / 底边线 / 字体不在可选范围`,
-        })
+      res.status(400).json({
+        ok: false,
+        message: `风格「${name}」的标题样式 / 标记 / 底边线 / 字体不在可选范围`,
+      })
       return
     }
     const finalKey = key || `s-${randomBytes(4).toString('hex')}`

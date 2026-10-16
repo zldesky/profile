@@ -33,7 +33,6 @@ export interface AvatarSizePreset {
   height: number
 }
 
-
 /**
  * 字体清单。
  * 依据简历排版通行实践整理：中文优先无衬线，衬线用于更正式的岗位；
@@ -131,13 +130,19 @@ export const FONTS: Record<string, FontMeta> = {
   },
 }
 
-export const FONT_OPTIONS: (FontMeta & { value: string })[] = Object.entries(FONTS).map(([value, font]) => ({
-  value,
-  ...font,
-}))
+export const FONT_OPTIONS: (FontMeta & { value: string })[] = Object.entries(FONTS).map(
+  ([value, font]) => ({
+    value,
+    ...font,
+  }),
+)
 
 /** 按类别分组，供下拉框的 optgroup 使用 */
-export const FONT_GROUPS: { name: string; items: (FontMeta & { value: string })[] }[] = ['中文无衬线', '中文衬线', '英文推荐'].map((name) => ({
+export const FONT_GROUPS: { name: string; items: (FontMeta & { value: string })[] }[] = [
+  '中文无衬线',
+  '中文衬线',
+  '英文推荐',
+].map((name) => ({
   name,
   items: FONT_OPTIONS.filter((font) => font.category === name),
 }))
@@ -255,7 +260,10 @@ export const AVATAR_SIZE_PRESETS: AvatarSizePreset[] = [
 ]
 
 /** 头像尺寸可调范围（毫米） */
-export const AVATAR_SIZE_RANGE: { width: { min: number; max: number }; height: { min: number; max: number } } = {
+export const AVATAR_SIZE_RANGE: {
+  width: { min: number; max: number }
+  height: { min: number; max: number }
+} = {
   width: { min: 15, max: 50 },
   height: { min: 15, max: 65 },
 }
@@ -459,7 +467,12 @@ export const STYLE_PRESETS: StylePreset[] = [
     key: 'wine',
     name: '酒红典雅',
     swatch: 'linear-gradient(135deg, #a8434f, #8c2f39)',
-    patch: { accent: '#8c2f39', titleStyle: 'gradient', titleMarker: 'diamond', titleBottom: 'double' },
+    patch: {
+      accent: '#8c2f39',
+      titleStyle: 'gradient',
+      titleMarker: 'diamond',
+      titleBottom: 'double',
+    },
   },
   {
     key: 'forest',
@@ -471,7 +484,12 @@ export const STYLE_PRESETS: StylePreset[] = [
     key: 'ember',
     name: '暖橙活力',
     swatch: 'linear-gradient(135deg, #e06a1f, #c2410c)',
-    patch: { accent: '#c2410c', titleStyle: 'center', titleMarker: 'triangle', titleBottom: 'gradient' },
+    patch: {
+      accent: '#c2410c',
+      titleStyle: 'center',
+      titleMarker: 'triangle',
+      titleBottom: 'gradient',
+    },
   },
   {
     key: 'graphite',
@@ -483,12 +501,23 @@ export const STYLE_PRESETS: StylePreset[] = [
     key: 'academy',
     name: '墨蓝学院',
     swatch: 'linear-gradient(135deg, #2d6fa8, #0f4c81)',
-    patch: { accent: '#0f4c81', titleStyle: 'leader', titleMarker: 'ring', titleBottom: 'none', fontKey: 'sourceSong' },
+    patch: {
+      accent: '#0f4c81',
+      titleStyle: 'leader',
+      titleMarker: 'ring',
+      titleBottom: 'none',
+      fontKey: 'sourceSong',
+    },
   },
   {
     key: 'violet',
     name: '葡紫创意',
     swatch: 'linear-gradient(135deg, #7564ad, #5b4b8a)',
-    patch: { accent: '#5b4b8a', titleStyle: 'boxed', titleMarker: 'diamond', titleBottom: 'chevron' },
+    patch: {
+      accent: '#5b4b8a',
+      titleStyle: 'boxed',
+      titleMarker: 'diamond',
+      titleBottom: 'chevron',
+    },
   },
 ]

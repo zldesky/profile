@@ -1,5 +1,18 @@
 import type { SectionType, Theme } from '@/types/resume'
-import type { Bullet, EntryItem, EntryMeta, GridItem, GridSection, EntriesSection, Resume, Section, SectionLayout, SkillItem, SkillsSection, TextSection } from '@/types/resume'
+import type {
+  Bullet,
+  EntryItem,
+  EntryMeta,
+  GridItem,
+  GridSection,
+  EntriesSection,
+  Resume,
+  Section,
+  SectionLayout,
+  SkillItem,
+  SkillsSection,
+  TextSection,
+} from '@/types/resume'
 import { uid } from '@/utils/helpers'
 
 import { DEFAULT_CUSTOM_LAYOUT } from '@/data/presets'
@@ -127,7 +140,11 @@ export function createSection(type: SectionType, title = '新模块'): Section {
 
   switch (type) {
     case 'grid':
-      return { ...base, type: 'grid', items: [createGridItem({ label: '项目名', value: '内容' })] } as GridSection
+      return {
+        ...base,
+        type: 'grid',
+        items: [createGridItem({ label: '项目名', value: '内容' })],
+      } as GridSection
     case 'skills':
       return {
         ...base,
