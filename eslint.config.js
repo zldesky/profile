@@ -49,6 +49,27 @@ export default [
   },
 
   {
+    // 这两个测试自己用 tests/setup/browser-globals.js 装上 localStorage /
+    // window / document 桩（刻意不全局装，否则 pdf.js 会误判运行环境），
+    // 因此这里把这三个全局声明为只读，而不是把整个 tests 目录当浏览器环境。
+    files: [
+      'tests/setup/browser-globals.js',
+      'tests/resumeStore.test.js',
+      'tests/resumePersistence.test.js',
+      'tests/resumeHistory.test.js',
+      'tests/resumeDocuments.test.js',
+    ],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        localStorage: 'readonly',
+        window: 'readonly',
+        document: 'readonly',
+      },
+    },
+  },
+
+  {
     // render.js 里的 page.evaluate / addInitScript 回调运行在浏览器页面里，
     // 出现 document / window 是正常的
     files: ['server/render.js'],

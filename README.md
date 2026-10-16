@@ -34,17 +34,17 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 
 ## 常用脚本
 
-| 命令                   | 说明                                                                                 |
-| ---------------------- | ------------------------------------------------------------------------------------ |
-| `npm run dev`          | 仅启动前端（Vite，端口 5173）                                                        |
-| `npm run dev:all`      | 前端 + 应用服务一起启动，退出时同时结束                                              |
-| `npm run build`        | 构建产物到 `dist/`                                                                   |
-| `npm run pdf`          | 启动应用服务（托管 `dist/` 静态站点 + `/api`，端口 3001）                            |
-| `npm test`             | 运行 Vitest 单测（264 例：鉴权、数据清洗、SSRF 防线、导出、简历 store、AI 客户端等） |
-| `npm run lint`         | ESLint 检查（代码质量与 Vue 陷阱）                                                   |
-| `npm run lint:fix`     | ESLint 自动修复                                                                      |
-| `npm run format`       | Prettier 格式化 src / server / tests / 根配置                                        |
-| `npm run format:check` | 只校验不改动（CI 用）                                                                |
+| 命令                   | 说明                                                                                                                       |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`          | 仅启动前端（Vite，端口 5173）                                                                                              |
+| `npm run dev:all`      | 前端 + 应用服务一起启动，退出时同时结束                                                                                    |
+| `npm run build`        | 构建产物到 `dist/`                                                                                                         |
+| `npm run pdf`          | 启动应用服务（托管 `dist/` 静态站点 + `/api`，端口 3001）                                                                  |
+| `npm test`             | 运行 Vitest 单测（351 例：鉴权、数据清洗、SSRF 防线、导出、简历 store 及其拆解出的持久化/快照/多文档/模块树、AI 客户端等） |
+| `npm run lint`         | ESLint 检查（代码质量与 Vue 陷阱）                                                                                         |
+| `npm run lint:fix`     | ESLint 自动修复                                                                                                            |
+| `npm run format`       | Prettier 格式化 src / server / tests / 根配置                                                                              |
+| `npm run format:check` | 只校验不改动（CI 用）                                                                                                      |
 
 ## Agent Skill（AI 无界面产出）
 
@@ -64,6 +64,8 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 
 `stores/resume` 是本地优先的落盘中心（多文档槽位、历史快照、头像引用、超容量降级），迁移前先用 `tests/resumeStore.test.js` 立起不变量再改类型；该测试需要 `localStorage` 与 `window`/`document`，由 `tests/setup/browser-globals.js` 按需安装（**刻意不放进 vitest 的 setupFiles**：全局安装 `document` 会让 pdf.js 误判运行环境，导致 PDF 导入端到端测试失败）。
 
+`stores/resume` 已按职责拆成五个文件（见下方目录结构），`resume.ts` 只保留响应式状态与编排，不再直接读写 `localStorage`。拆出的模块都是「纯读写传入数据」的形态，因此 `resumeMutations` / `resumePersistence` / `resumeHistory` / `resumeDocuments` 各有独立单测，不必再经由 store 间接验证。
+
 - **格式与质量分工**：Prettier 管一切格式（无分号、单引号、100 列），ESLint 只管代码质量与 Vue 特有陷阱（响应性丢失、`v-html` 禁用、`key` 缺失等），风格规则由 `eslint-config-prettier` 关闭避免打架；
 - **提交门禁**：husky + lint-staged 在 commit 时对暂存文件自动格式化并修复 lint（首次克隆后跑一次 `npm install` 即自动启用）；
 - **配置分层**：`eslint.config.js` 按目录区分浏览器/Node 全局；`server/render.js` 的浏览器回调、`server/sanitize.js` 的控制字符正则都有注明原因的豁免，不让规则静默放过特例；
@@ -77,7 +79,12 @@ src/                 前端（Vue 3 + Pinia + Vue Router）
   pages/             页面（编辑器 / 登录）
   components/        组件（顶栏、预览纸张、编辑面板）
   composables/       组合式函数（认证、云端同步、PDF 导出、拖放…）
-  stores/            Pinia（简历数据、撤销/重做、自动保存）
+  stores/            Pinia
+    resume.ts        本机数据总入口：响应式状态 + 编排（不含具体持久化与树操作）
+    resumePersistence.ts  localStorage 键名 / 紧凑序列化 / 配额保护 / 自动保存调度
+    resumeHistory.ts      历史版本快照：采样节流、内容去重与 LRU
+    resumeDocuments.ts    多文档登记表与各文档槽位
+    resumeMutations.ts    模块树操作（纯函数，不碰存储、不认识 store）
   utils/             纯逻辑（历史栈、数据清洗、AI 客户端、多格式导出、备份）
 server/              应用服务（Express）
   db.js              SQLite 数据层（node:sqlite）
