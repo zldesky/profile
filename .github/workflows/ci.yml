@@ -27,6 +27,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # 类型检查必须单独跑：Vite 构建只转译不做类型校验，类型错误不会让 Build 失败，
+      # 少了这一步 TS 迁移就形同虚设（错的类型照样能合进 main）
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Test
         run: npm test
 
