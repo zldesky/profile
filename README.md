@@ -34,17 +34,17 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 
 ## 常用脚本
 
-| 命令                   | 说明                                                                     |
-| ---------------------- | ------------------------------------------------------------------------ |
-| `npm run dev`          | 仅启动前端（Vite，端口 5173）                                            |
-| `npm run dev:all`      | 前端 + 应用服务一起启动，退出时同时结束                                  |
-| `npm run build`        | 构建产物到 `dist/`                                                       |
-| `npm run pdf`          | 启动应用服务（托管 `dist/` 静态站点 + `/api`，端口 3001）                |
-| `npm test`             | 运行 Vitest 单测（191 例：鉴权、数据清洗、SSRF 防线、导出、AI 客户端等） |
-| `npm run lint`         | ESLint 检查（代码质量与 Vue 陷阱）                                       |
-| `npm run lint:fix`     | ESLint 自动修复                                                          |
-| `npm run format`       | Prettier 格式化 src / server / tests / 根配置                            |
-| `npm run format:check` | 只校验不改动（CI 用）                                                    |
+| 命令                   | 说明                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------------ |
+| `npm run dev`          | 仅启动前端（Vite，端口 5173）                                                        |
+| `npm run dev:all`      | 前端 + 应用服务一起启动，退出时同时结束                                              |
+| `npm run build`        | 构建产物到 `dist/`                                                                   |
+| `npm run pdf`          | 启动应用服务（托管 `dist/` 静态站点 + `/api`，端口 3001）                            |
+| `npm test`             | 运行 Vitest 单测（264 例：鉴权、数据清洗、SSRF 防线、导出、简历 store、AI 客户端等） |
+| `npm run lint`         | ESLint 检查（代码质量与 Vue 陷阱）                                                   |
+| `npm run lint:fix`     | ESLint 自动修复                                                                      |
+| `npm run format`       | Prettier 格式化 src / server / tests / 根配置                                        |
+| `npm run format:check` | 只校验不改动（CI 用）                                                                |
 
 ## Agent Skill（AI 无界面产出）
 
@@ -60,7 +60,9 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 
 ## 工程约定
 
-**TypeScript 迁移（进行中）**：领域类型在 `src/types/resume.ts`；`src/data`、核心 `src/utils` 与关键 composables 已是严格模式 TS，用 `npm run typecheck`（vue-tsc）把关。Vue 组件、`stores/resume` 与 server 仍为 JS，按「组件 → store → server」的阶段逐步迁移。
+**TypeScript 迁移（进行中）**：领域类型在 `src/types/resume.ts`；`src/data`、`src/stores/resume`、核心 `src/utils` 与关键 composables 已是严格模式 TS，用 `npm run typecheck`（vue-tsc）把关。Vue 组件、`stores/selection` 与 server 仍为 JS，按「组件 → server」的阶段逐步迁移。
+
+`stores/resume` 是本地优先的落盘中心（多文档槽位、历史快照、头像引用、超容量降级），迁移前先用 `tests/resumeStore.test.js` 立起不变量再改类型；该测试需要 `localStorage` 与 `window`/`document`，由 `tests/setup/browser-globals.js` 按需安装（**刻意不放进 vitest 的 setupFiles**：全局安装 `document` 会让 pdf.js 误判运行环境，导致 PDF 导入端到端测试失败）。
 
 - **格式与质量分工**：Prettier 管一切格式（无分号、单引号、100 列），ESLint 只管代码质量与 Vue 特有陷阱（响应性丢失、`v-html` 禁用、`key` 缺失等），风格规则由 `eslint-config-prettier` 关闭避免打架；
 - **提交门禁**：husky + lint-staged 在 commit 时对暂存文件自动格式化并修复 lint（首次克隆后跑一次 `npm install` 即自动启用）；
