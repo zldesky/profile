@@ -207,6 +207,16 @@ function runExport(action) {
   exportMenuOpen.value = false
   action()
 }
+
+/**
+ * 导入菜单同理：先收起菜单再打开文件选择框。
+ * 动作收进函数而不是写在模板里，是为了避免模板里出现多语句行内表达式——
+ * Prettier 换行后 Vue 编译器解析不了，会以语法错误中断构建。
+ */
+function runImport(action) {
+  importMenuOpen.value = false
+  action()
+}
 </script>
 
 <template>
@@ -294,24 +304,11 @@ function runExport(action) {
         <span class="btn-label">导入数据</span>
       </button>
       <div v-if="importMenuOpen" class="export-menu" role="menu">
-        <button
-          role="menuitem"
-          @click="
-            pickFile()
-            importMenuOpen = false
-          "
-        >
+        <button role="menuitem" @click="runImport(pickFile)">
           <span class="menu-name">JSON / 备份文件</span>
           <span class="menu-desc">本应用导出的数据</span>
         </button>
-        <button
-          role="menuitem"
-          :disabled="pdfParsing"
-          @click="
-            pickPdf()
-            importMenuOpen = false
-          "
-        >
+        <button role="menuitem" :disabled="pdfParsing" @click="runImport(pickPdf)">
           <span class="menu-name">{{ pdfParsing ? '解析中…' : 'PDF 简历导入' }}</span>
           <span class="menu-desc">文字版 PDF 转可编辑</span>
         </button>

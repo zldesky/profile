@@ -12,6 +12,11 @@ import globals from 'globals'
  *  - src：浏览器全局（window、localStorage…）；
  *  - server / tests / 根配置：Node 全局（process、import.meta…）；
  *  - prettier 关闭所有与格式化冲突的风格规则，必须放在最后。
+ *
+ * 约定（ESLint 与 Prettier 都拦不住，只能靠约定）：模板里的行内事件处理器只写单条语句，
+ * 多个动作一律包成 script 里的函数（如 TopBar 的 runExport / runImport）。
+ * 理由：超长行内表达式会被 Prettier 折成多行，而 Vue 编译器解析不了折行后的多语句
+ * 表达式，npm run build 会直接以语法错误失败——lint、typecheck 都不会报，CI 才炸。
  */
 export default [
   {
