@@ -23,6 +23,18 @@ const router = createRouter({
       name: 'share',
       component: () => import('@/pages/SharePage.vue'),
     },
+    {
+      // 官网简历合集：游客可见前若干份，登录后解锁全部
+      path: '/collection',
+      name: 'collection',
+      component: () => import('@/pages/CollectionPage.vue'),
+    },
+    {
+      // 管理后台：仅管理员（页面内做登录与权限门卫）
+      path: '/admin',
+      name: 'admin',
+      component: () => import('@/pages/AdminPage.vue'),
+    },
     // 单页应用没有其他深层链接，未知路径一律回编辑器
     { path: '/:pathMatch(.*)*', redirect: { name: 'editor' } },
   ],

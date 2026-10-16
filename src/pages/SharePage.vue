@@ -143,6 +143,11 @@ const expiryText = computed(() => {
 
       <span v-if="shared" class="sp-expiry">{{ expiryText }}</span>
 
+      <router-link class="ed-btn sp-link" :to="{ name: 'collection' }" title="浏览官网简历合集">
+        <SvgIcon name="image" :size="14" />
+        <span>简历合集</span>
+      </router-link>
+
       <button
         v-if="state === 'ready'"
         class="ed-btn"
@@ -253,6 +258,11 @@ const expiryText = computed(() => {
   flex: 1 1 auto;
 }
 
+/* 顶栏里的路由链接按钮：去掉 <a> 默认下划线与颜色 */
+.sp-link {
+  text-decoration: none;
+}
+
 .sp-expiry {
   color: var(--ed-text-4);
   font-size: 12px;
@@ -283,9 +293,8 @@ const expiryText = computed(() => {
   min-height: 0;
   padding: 26px 28px 34px;
   overflow: auto;
-  background-color: #f3f4f6;
-  background-image: radial-gradient(rgba(16, 24, 40, 0.075) 1px, transparent 1.6px);
-  background-size: 24px 24px;
+  /* 舞台画布：灰阶渐变 + 品牌晕光 + 点阵（--ed-canvas，晕光随本页简历主题色联动） */
+  background: var(--ed-canvas);
 }
 
 .paper {

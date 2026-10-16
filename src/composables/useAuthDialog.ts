@@ -1,6 +1,9 @@
 import { shallowRef } from 'vue'
 
 import { fetchServerHealth } from '@/utils/serverPdf'
+import type { AuthUser } from '@/composables/useAuth'
+
+type AuthMode = 'login' | 'register'
 
 /**
  * 登录 / 注册弹窗的全局状态（模块级单例）。
@@ -13,12 +16,12 @@ import { fetchServerHealth } from '@/utils/serverPdf'
  * 继续执行原操作，用户不丢编辑上下文。
  */
 const visible = shallowRef(false)
-const initialMode = shallowRef('login') // login | register
-let afterAuthed = null
+const initialMode = shallowRef<AuthMode>('login')
+let afterAuthed: ((user: AuthUser) => void) | null = null
 /** 弹窗开关缓存：每次页面加载只拉一次健康检查 */
-let popupFlagPromise = null
+let popupFlagPromise: Promise<boolean> | null = null
 
-async function popupEnabled() {
+async function popupEnabled(): Promise<boolean> {
   if (!popupFlagPromise) {
     popupFlagPromise = fetchServerHealth('').then(
       (health) => health?.authPopup !== false,
@@ -31,26 +34,25 @@ async function popupEnabled() {
 export function useAuthDialog() {
   /**
    * 尝试打开弹窗。
-   * @param {object} [options]
-   * @param {'login' | 'register'} [options.mode] 初始标签
-   * @param {(user: object) => void} [options.onAuthed] 登录/注册成功后的续跑回调
-   * @returns {Promise<boolean>} false = 配置关闭了弹窗，调用方应跳转登录页
+   * @returns false = 配置关闭了弹窗，调用方应跳转登录页
    */
-  async function open({ mode = 'login', onAuthed } = {}) {
+  async function open(
+    options: { mode?: AuthMode; onAuthed?: (user: AuthUser) => void } = {},
+  ): Promise<boolean> {
     if (!(await popupEnabled())) return false
-    initialMode.value = mode
-    afterAuthed = onAuthed || null
+    initialMode.value = options.mode ?? 'login'
+    afterAuthed = options.onAuthed || null
     visible.value = true
     return true
   }
 
-  function close() {
+  function close(): void {
     visible.value = false
     afterAuthed = null
   }
 
   /** AuthPanel 认证成功后调用：关弹窗并续跑回调 */
-  function notifyAuthed(user) {
+  function notifyAuthed(user: AuthUser): void {
     const callback = afterAuthed
     close()
     callback?.(user)

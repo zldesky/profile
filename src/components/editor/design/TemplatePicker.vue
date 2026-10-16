@@ -1,26 +1,86 @@
 <script setup>
 /**
- * 模板选择。
+ * 模板与风格选择（SKU 式组合约束）。
  * 缩略图是纯 CSS 画的示意图，不依赖任何图片资源；
  * 同时沿用当前主色，选模板时能一并看到配色效果。
+ * 风格与兼容矩阵来自管理后台的运行时配置（useStyleConfig），
+ * 未配置时回退内置默认；双向不兼容的组合置灰禁用。
+ * 仍需要特殊组合时可在下方「色彩」「标题」分区手动细调。
  */
 import { computed } from 'vue'
 
 import SvgIcon from '@/components/SvgIcon.vue'
 import { TEMPLATES } from '@/data/presets'
 import { useResumeStore } from '@/stores/resume'
+import { useStyleConfig } from '@/composables/useStyleConfig'
 
 const store = useResumeStore()
+const styleConfig = useStyleConfig()
 
 const thumbStyle = computed(() => ({ '--accent': store.theme.accent }))
+const stylePresets = styleConfig.presets
+
+/** 当前主题完整命中某风格预设时视为「已选风格」，作为双向约束的基准 */
+const activeStyle = computed(
+  () => stylePresets.value.find((preset) => isStyleActive(preset)) || null,
+)
+
+/** 模板与当前风格不兼容 → 置灰禁用 */
+function isTemplateLocked(tpl) {
+  const whitelist = styleConfig.stylesForTemplate(tpl.id)
+  return Boolean(activeStyle.value && whitelist && !whitelist.includes(activeStyle.value.key))
+}
+
+/** 风格与当前模板不兼容 → 置灰禁用 */
+function isStyleLocked(preset) {
+  const whitelist = styleConfig.stylesForTemplate(store.resume.template)
+  return Boolean(whitelist && !whitelist.includes(preset.key))
+}
 
 function selectTemplate(id) {
   store.resume.template = id
+}
+
+/** 套用风格预设：主题色、标题样式、标记与底边线整体切换 */
+function applyStyle(preset) {
+  store.setTheme(preset.patch)
+}
+
+/** 当前主题与预设的每个键都一致才算命中，用于高亮 */
+function isStyleActive(preset) {
+  return Object.entries(preset.patch).every(([key, value]) => store.theme[key] === value)
+}
+
+/** 置灰项的悬浮说明 */
+function lockedTitle(kind, name) {
+  return `「${name}」与当前${kind === 'tpl' ? '风格' : '模板'}不搭，已禁用；可在「色彩 / 标题」里手动细调出类似效果`
 }
 </script>
 
 <template>
   <div class="ed-group">
+    <div class="ed-group-title">
+      <span>风格</span>
+      <span class="ed-count">一键换气质</span>
+    </div>
+
+    <div class="style-row">
+      <button
+        v-for="preset in stylePresets"
+        :key="preset.key"
+        class="style-chip"
+        :class="{ 'is-active': isStyleActive(preset), 'is-locked': isStyleLocked(preset) }"
+        :disabled="isStyleLocked(preset)"
+        :title="
+          isStyleLocked(preset) ? lockedTitle('style', preset.name) : `套用「${preset.name}」风格`
+        "
+        @click="applyStyle(preset)"
+      >
+        <i class="style-swatch" :style="{ background: preset.swatch }"></i>
+        <span>{{ preset.name }}</span>
+      </button>
+    </div>
+
     <div class="ed-group-title">
       <span>模板</span>
       <span class="ed-count">共 {{ TEMPLATES.length }} 套</span>
@@ -32,7 +92,12 @@ function selectTemplate(id) {
           v-for="tpl in TEMPLATES"
           :key="tpl.id"
           class="tpl-card"
-          :class="{ 'is-active': store.resume.template === tpl.id }"
+          :class="{
+            'is-active': store.resume.template === tpl.id,
+            'is-locked': isTemplateLocked(tpl),
+          }"
+          :disabled="isTemplateLocked(tpl)"
+          :title="isTemplateLocked(tpl) ? lockedTitle('tpl', tpl.name) : `切换到「${tpl.name}」`"
           @click="selectTemplate(tpl.id)"
         >
           <div class="thumb" :class="`thumb--${tpl.id}`" :style="thumbStyle">
@@ -64,11 +129,73 @@ function selectTemplate(id) {
       </div>
     </div>
 
-    <p class="ed-hint">切换模板只改变排版结构，已填写的内容会自动套用到新模板。</p>
+    <p class="ed-hint">
+      风格管配色与标题装饰，模板管排版结构；不搭的组合已置灰，想微调可在「色彩」「标题」里手动改。
+    </p>
   </div>
 </template>
 
 <style scoped>
+/* 风格预设：横向滚动的胶囊条，色板圆点 + 名称 */
+.style-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.style-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 6px;
+  border: 1px solid #e3e6ec;
+  border-radius: 999px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  color: #475467;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.style-chip:hover {
+  border-color: #c2cad4;
+  color: #1f2329;
+}
+
+.style-chip.is-active {
+  border-color: var(--ed-brand);
+  background: var(--ed-brand-tint);
+  color: var(--ed-brand-deep);
+  font-weight: 600;
+}
+
+/* SKU 约束：与当前模板/风格不搭的组合置灰禁用 */
+.style-chip:disabled,
+.tpl-card:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(0.85);
+}
+
+.style-chip:disabled:hover {
+  border-color: #e3e6ec;
+  color: #475467;
+}
+
+.tpl-card:disabled:hover {
+  border-color: #e3e6ec;
+  box-shadow: none;
+}
+
+.style-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(16, 24, 40, 0.12);
+}
+
 .tpl-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

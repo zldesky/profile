@@ -1,19 +1,24 @@
 import { shallowRef } from 'vue'
 
+export interface AuthUser {
+  id: number
+  username: string
+  /** admin = 实例管理员（首个注册账号），member = 普通用户 */
+  role?: 'admin' | 'member'
+}
+
+/** 登录态三态：确认会话中 / 未登录（纯本地可用）/ 已登录（云端同步激活） */
+export type AuthStatus = 'loading' | 'anon' | 'authed'
+
 /**
  * 登录态。模块级单例：路由、顶栏、导出流程看到的都是同一份状态。
- *
- * status 有三态：
- *  - loading：正在向服务端确认会话（刷新后的短暂窗口）；
- *  - anon：未登录，编辑器照常可用（纯本地），只是没有云端同步与一键导出；
- *  - authed：已登录，云端同步激活。
  */
-const user = shallowRef(null)
-const status = shallowRef('loading')
+const user = shallowRef<AuthUser | null>(null)
+const status = shallowRef<AuthStatus>('loading')
 
-let initPromise = null
+let initPromise: Promise<void> | null = null
 
-async function requestMe() {
+async function requestMe(): Promise<AuthUser | null> {
   try {
     const response = await fetch('/api/auth/me')
     if (!response.ok) return null
@@ -26,7 +31,7 @@ async function requestMe() {
 }
 
 /** 收到 401（会话过期）时统一走这里：回到匿名态，界面随之切回「登录」入口 */
-function markExpired() {
+function markExpired(): void {
   user.value = null
   status.value = 'anon'
 }
@@ -36,7 +41,7 @@ export function useAuth() {
    * 启动时确认一次会话。幂等：多处调用共享同一个 Promise，
    * 避免刷新瞬间发出多个 /api/auth/me。
    */
-  function init() {
+  function init(): Promise<void> {
     if (!initPromise) {
       initPromise = requestMe().then((found) => {
         user.value = found
@@ -48,10 +53,14 @@ export function useAuth() {
 
   /**
    * 登录/注册共用：失败抛出带服务端可读信息的 Error，调用方展示在表单上。
-   * @param {'login' | 'register'} action
-   * @param {string} [captchaToken] 注册必填：滑块验证通过令牌，登录不传
+   * @param captchaToken 注册必填：滑块验证通过令牌，登录不传
    */
-  async function submitCredentials(action, username, password, captchaToken) {
+  async function submitCredentials(
+    action: 'login' | 'register',
+    username: string,
+    password: string,
+    captchaToken?: string,
+  ): Promise<AuthUser> {
     const response = await fetch(`/api/auth/${action}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -60,7 +69,7 @@ export function useAuth() {
 
     const data = await response.json().catch(() => ({}))
     if (!response.ok) {
-      const error = new Error(data?.message || '请求失败')
+      const error: Error & { status?: number } = new Error(data?.message || '请求失败')
       error.status = response.status
       throw error
     }
@@ -70,15 +79,15 @@ export function useAuth() {
     return data.user
   }
 
-  function login(username, password) {
+  function login(username: string, password: string): Promise<AuthUser> {
     return submitCredentials('login', username, password)
   }
 
-  function register(username, password, captchaToken) {
+  function register(username: string, password: string, captchaToken: string): Promise<AuthUser> {
     return submitCredentials('register', username, password, captchaToken)
   }
 
-  async function logout() {
+  async function logout(): Promise<void> {
     try {
       await fetch('/api/auth/logout', { method: 'POST' })
     } catch {

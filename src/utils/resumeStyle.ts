@@ -2,6 +2,7 @@
  * 简历纸张的样式计算（纯函数，无 Vue 依赖）。
  * 编辑器 store 与分享只读页共用，保证「分享出去的」和「编辑器里的」像素级一致。
  */
+import type { Resume } from '@/types/resume'
 import { FONTS, PAGE } from '@/data/presets'
 import { clamp, hexToRgb } from '@/utils/helpers'
 
@@ -9,7 +10,7 @@ import { clamp, hexToRgb } from '@/utils/helpers'
  * 纸张容器的 CSS 变量（主色、字体、字号、头像几何等）。
  * @param {object} resume 已 normalize 的简历对象
  */
-export function computePageStyle(resume) {
+export function computePageStyle(resume: Resume): Record<string, string | number> {
   const t = resume.theme
   const basics = resume.basics
 
@@ -68,7 +69,7 @@ export function computePageStyle(resume) {
 }
 
 /** 打印页边距的 @page 规则，注入到 document 供打印与渲染服务使用 */
-export function computePrintCss(resume) {
+export function computePrintCss(resume: Resume): string {
   const t = resume.theme
   return `@page{size:A4;margin:${t.mv}mm ${t.mh}mm;}`
 }

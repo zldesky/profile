@@ -34,7 +34,7 @@ import {
   verifyPassword,
 } from './auth.js'
 import { createCaptcha } from './captcha.js'
-import { createDatabase } from './db.js'
+import { CATEGORY_KEYS, createDatabase } from './db.js'
 import { fetchRemoteImage } from './imageProxy.js'
 import {
   closeBrowser,
@@ -61,6 +61,9 @@ const GLOBAL_SUBJECT = '__global__'
 
 /** 分享链接有效期（天）与创建频率限制：防滥用刷库 */
 const SHARE_TTL_DAYS = Number(process.env.SHARE_TTL_DAYS) || 30
+/** 简历合集分页大小与游客可见条数；「登录查看更多」由服务端截断，前端只做展示 */
+const COLLECTION_PAGE_SIZE = Number(process.env.COLLECTION_PAGE_SIZE) || 12
+const COLLECTION_GUEST_VISIBLE = Number(process.env.COLLECTION_GUEST_VISIBLE) || 6
 const shareLimiter = createSlidingWindowCounter({ max: 20, windowMs: 60 * 60 * 1000 })
 /** AI 转发按主体限频：Key 是用户自己的，限频保护的是上游服务与本机带宽 */
 const aiLimiter = createSlidingWindowCounter({ max: 60, windowMs: 60 * 60 * 1000 })
@@ -270,6 +273,12 @@ function requireAuth(req, res, next) {
   res.status(401).json({ ok: false, loginRequired: true, message: '请先登录后使用' })
 }
 
+/** 管理员专用中间件：必须是会话登录且用户行 role = admin（脚本口令通道无角色） */
+function requireAdmin(req, res, next) {
+  if (req.auth?.kind === 'session' && db.isAdminUser(req.auth.userId)) return next()
+  res.status(403).json({ ok: false, adminRequired: true, message: '该操作仅限管理员账号' })
+}
+
 /** 请求日志：一行 JSON，只记 /api（静态资源没有排查价值还刷屏） */
 function requestLogger(req, res, next) {
   if (!req.path.startsWith('/api')) return next()
@@ -418,7 +427,7 @@ app.post('/api/auth/register', (req, res, next) => {
     const token = createSessionToken()
     db.createSession(user.id, token)
     setSessionCookie(req, res, token)
-    res.json({ ok: true, user: { id: user.id, username: user.username } })
+    res.json({ ok: true, user: { id: user.id, username: user.username, role: user.role } })
   } catch (error) {
     // 用户名冲突体现为唯一约束错误（预检查仍有并发窗口，这里兜底转成可读提示）
     const text = String(error?.code || '') + String(error?.message || '')
@@ -461,7 +470,10 @@ app.post('/api/auth/login', (req, res) => {
   const token = createSessionToken()
   db.createSession(user.id, token)
   setSessionCookie(req, res, token)
-  res.json({ ok: true, user: { id: user.id, username: user.username } })
+  res.json({
+    ok: true,
+    user: { id: user.id, username: user.username, role: user.role || 'member' },
+  })
 })
 
 app.post('/api/auth/logout', (req, res) => {
@@ -478,9 +490,142 @@ app.get('/api/auth/me', (req, res) => {
     ok: true,
     authenticated: Boolean(session),
     user: session
-      ? { id: session.userId, username: db.findUserById(session.userId)?.username || '' }
+      ? {
+          id: session.userId,
+          username: db.findUserById(session.userId)?.username || '',
+          role: db.findUserById(session.userId)?.role || 'member',
+        }
       : null,
   })
+})
+
+/* ---------------- 样式配置（管理后台编辑，编辑器运行时读取） ---------------- */
+
+/** 与 src/data/presets.js 的枚举保持一致；漂移只影响新风格的合法值范围 */
+const STYLE_TITLE_STYLES = [
+  'fill',
+  'pill',
+  'gradient',
+  'underline',
+  'bar',
+  'boxed',
+  'center',
+  'leader',
+  'plain',
+]
+const STYLE_TITLE_MARKERS = ['square', 'diamond', 'circle', 'ring', 'triangle', 'bar', 'none']
+const STYLE_TITLE_BOTTOMS = [
+  'none',
+  'solid',
+  'dashed',
+  'dotted',
+  'gradient',
+  'double',
+  'trapezoid',
+  'ribbon',
+  'chevron',
+]
+const STYLE_FONT_KEYS = [
+  'yahei',
+  'sourceHei',
+  'pingfang',
+  'dengxian',
+  'heiti',
+  'sourceSong',
+  'songti',
+  'fangsong',
+  'kaiti',
+  'arial',
+  'helvetica',
+  'times',
+  'georgia',
+  'calibri',
+]
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/
+const STYLE_KEY_RE = /^[a-z0-9-]{1,24}$/
+const STYLE_PRESET_MAX = 40
+
+/** 读取运行时样式配置（公开：编辑器首次打开设计面板时拉取）；未配置时回 null，前端走内置默认 */
+app.get('/api/styles', (req, res) => {
+  res.set('Cache-Control', 'no-store')
+  res.json({ ok: true, config: db.getConfig('styleConfig') })
+})
+
+/** 管理后台读取完整配置（含未发布前为 null 的原始态） */
+app.get('/api/styles-admin', requireAuth, requireAdmin, (req, res) => {
+  res.set('Cache-Control', 'no-store')
+  res.json({ ok: true, config: db.getConfig('styleConfig') })
+})
+
+/**
+ * 保存样式配置（全量覆盖）：风格预设列表 + 模板兼容矩阵。
+ * 服务端只做结构与枚举校验，域逻辑（气质搭配）由后台维护者把关。
+ */
+app.put('/api/styles-admin', requireAuth, requireAdmin, (req, res) => {
+  const { presets, matrix } = req.body || {}
+
+  if (!Array.isArray(presets) || presets.length === 0 || presets.length > STYLE_PRESET_MAX) {
+    res.status(400).json({ ok: false, message: '风格列表不合法（1-40 条）' })
+    return
+  }
+
+  const seenKeys = new Set()
+  for (const preset of presets) {
+    const key = typeof preset.key === 'string' && preset.key ? preset.key : null
+    const name = typeof preset.name === 'string' ? preset.name.trim() : ''
+    const patch = preset.patch
+    if ((key && !STYLE_KEY_RE.test(key)) || name.length < 1 || name.length > 20) {
+      res.status(400).json({ ok: false, message: `风格「${name || key || '?'}」的键或名称不合法` })
+      return
+    }
+    if (!patch || typeof patch !== 'object') {
+      res.status(400).json({ ok: false, message: `风格「${name}」缺少样式参数` })
+      return
+    }
+    if (!HEX_COLOR_RE.test(String(patch.accent || ''))) {
+      res.status(400).json({ ok: false, message: `风格「${name}」的主色须为 #RRGGBB` })
+      return
+    }
+    if (
+      !STYLE_TITLE_STYLES.includes(patch.titleStyle) ||
+      !STYLE_TITLE_MARKERS.includes(patch.titleMarker) ||
+      !STYLE_TITLE_BOTTOMS.includes(patch.titleBottom) ||
+      (patch.fontKey !== undefined && !STYLE_FONT_KEYS.includes(patch.fontKey))
+    ) {
+      res
+        .status(400)
+        .json({
+          ok: false,
+          message: `风格「${name}」的标题样式 / 标记 / 底边线 / 字体不在可选范围`,
+        })
+      return
+    }
+    const finalKey = key || `s-${randomBytes(4).toString('hex')}`
+    if (seenKeys.has(finalKey)) {
+      res.status(400).json({ ok: false, message: `风格键「${finalKey}」重复` })
+      return
+    }
+    seenKeys.add(finalKey)
+    preset.key = finalKey
+  }
+
+  if (!matrix || typeof matrix !== 'object' || Array.isArray(matrix)) {
+    res.status(400).json({ ok: false, message: '兼容矩阵不合法' })
+    return
+  }
+  for (const [templateId, keys] of Object.entries(matrix)) {
+    if (!/^[a-z0-9-]{1,32}$/.test(templateId) || !Array.isArray(keys)) {
+      res.status(400).json({ ok: false, message: `模板「${templateId}」的矩阵行不合法` })
+      return
+    }
+    if (keys.some((key) => !seenKeys.has(key))) {
+      res.status(400).json({ ok: false, message: `模板「${templateId}」引用了不存在的风格` })
+      return
+    }
+  }
+
+  db.setConfig('styleConfig', { presets, matrix })
+  res.json({ ok: true })
 })
 
 /* ---------------- 云端简历（要求登录） ---------------- */
@@ -652,6 +797,9 @@ app.post('/api/share', requireAuth, (req, res) => {
     return
   }
 
+  // 展示到合集是显式勾选的公开行为：默认只生成链接，拿到链接的人仍可查看
+  const listInCollection = req.body?.listInCollection === true
+
   if (!shareLimiter.tryTake(`share:${req.auth.subject}`)) {
     res.status(429).json({ ok: false, message: '分享过于频繁，请一小时后再试' })
     return
@@ -668,6 +816,7 @@ app.post('/api/share', requireAuth, (req, res) => {
         req.auth.userId,
         sanitized.value,
         SHARE_TTL_DAYS * 24 * 60 * 60 * 1000,
+        listInCollection,
       )
     } catch (error) {
       // 主键碰撞（极小概率）换号重试；其它错误上抛
@@ -681,6 +830,15 @@ app.post('/api/share', requireAuth, (req, res) => {
   }
 
   res.json({ ok: true, id: result.id, expiresAt: result.expiresAt })
+})
+
+/** 当前用户的分享列表（「我的分享」管理用：撤销、取消合集展示） */
+app.get('/api/share/mine', requireAuth, (req, res) => {
+  if (req.auth.kind !== 'session') {
+    res.status(403).json({ ok: false, message: '脚本口令通道不提供分享能力' })
+    return
+  }
+  res.json({ ok: true, items: db.listUserShares(req.auth.userId) })
 })
 
 app.get('/api/share/:id', (req, res) => {
@@ -708,6 +866,46 @@ app.delete('/api/share/:id', requireAuth, (req, res) => {
     return
   }
   res.json({ ok: true })
+})
+
+/* ---------------- 简历合集（公开浏览，登录解锁全部） ---------------- */
+
+/**
+ * 官网简历合集：勾选「展示到合集」的未过期分享摘要，最新在前，可按分类过滤。
+ *
+ * 游客只拿到前 GUEST_VISIBLE 条且不含其余条目的 id——「登录查看更多」
+ * 是服务端截断而非前端隐藏；已登录（会话 Cookie）返回完整分页。
+ * 分类由分享入库时按求职意向自动推导（deriveCategory），此处仅做白名单透传。
+ * 摘要不含简历正文：正文由客户端按条目走公开的 /api/share/:id 拉取渲染。
+ */
+app.get('/api/collection', (req, res) => {
+  const authenticated = Boolean(readSessionUser(req))
+
+  const pageSize = Math.min(
+    24,
+    Math.max(1, Number.parseInt(req.query.limit, 10) || COLLECTION_PAGE_SIZE),
+  )
+  const offset = Math.min(1000, Math.max(0, Number.parseInt(req.query.offset, 10) || 0))
+  // 分类白名单：非法值按「全部」处理而不是报错，分享出去的链接容错更好
+  const rawCategory = String(req.query.category || '').trim()
+  const category = CATEGORY_KEYS.has(rawCategory) ? rawCategory : null
+
+  // 游客最多看到前 guestVisible 条，越界翻页直接给空列表
+  const limit = authenticated ? pageSize : Math.max(0, COLLECTION_GUEST_VISIBLE - offset)
+  const total = db.countCollection({ category })
+  const items = limit > 0 ? db.listCollection({ limit, offset, category }) : []
+
+  // 随会话 Cookie 变化，按不可缓存处理，避免登录后还看到截断前的列表
+  res.set('Cache-Control', 'no-store')
+  res.json({
+    ok: true,
+    total,
+    items,
+    categories: db.collectionFacets(),
+    authenticated,
+    guestLimited: !authenticated,
+    guestVisible: COLLECTION_GUEST_VISIBLE,
+  })
 })
 
 /* ---------------- AI 转发（要求登录；Key 只过内存，不落盘不写日志） ---------------- */

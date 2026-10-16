@@ -7,13 +7,13 @@ import { shallowRef } from 'vue'
  */
 const message = shallowRef('')
 const visible = shallowRef(false)
-let timer = null
+let timer: ReturnType<typeof setTimeout> | null = null
 
 export function useToast() {
-  function toast(text, duration = 2000) {
+  function toast(text: string, duration = 2000): void {
     message.value = text
     visible.value = true
-    clearTimeout(timer)
+    if (timer !== null) clearTimeout(timer)
     timer = setTimeout(() => {
       visible.value = false
     }, duration)

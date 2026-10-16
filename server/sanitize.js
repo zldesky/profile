@@ -6,7 +6,7 @@
  * 「永不信任输入」处理：主动剥离标签、限定枚举、裁剪数值、限制数量与长度，
  * 既防注入，也防超大数据把渲染拖垮。
  *
- * 枚举值从 src/data/presets.js 读取，保证与服务端白名单永不脱节。
+ * 枚举值从 src/data/presets.ts 读取（Node 22.18+ 默认类型剥离，可跨端引用 .ts），保证与服务端白名单永不脱节。
  */
 import {
   AVATAR_SHAPES,
@@ -19,7 +19,7 @@ import {
   TITLE_BOTTOM_STYLES,
   TITLE_MARKERS,
   TITLE_STYLES,
-} from '../src/data/presets.js'
+} from '../src/data/presets.ts'
 
 /** 模块类型白名单，需与 src/data/defaultResume.js 的 SECTION_TYPES 保持一致 */
 const SECTION_TYPES = ['grid', 'entries', 'skills', 'text']

@@ -1,3 +1,5 @@
+import type { SectionType, Theme } from '@/types/resume'
+import type { Bullet, EntryItem, EntryMeta, GridItem, GridSection, EntriesSection, Resume, Section, SectionLayout, SkillItem, SkillsSection, TextSection } from '@/types/resume'
 import { uid } from '@/utils/helpers'
 
 import { DEFAULT_CUSTOM_LAYOUT } from '@/data/presets'
@@ -19,14 +21,20 @@ import { DEFAULT_CUSTOM_LAYOUT } from '@/data/presets'
  *  - text    段落文本（自我评价）
  */
 
-export const SECTION_TYPES = [
+export interface SectionTypeOption {
+  value: SectionType
+  label: string
+  hint: string
+}
+
+export const SECTION_TYPES: SectionTypeOption[] = [
   { value: 'entries', label: '条目列表', hint: '适合教育、工作、项目经历' },
   { value: 'grid', label: '键值网格', hint: '适合求职意向等两列信息' },
   { value: 'skills', label: '技能特长', hint: '支持文字描述与熟练度进度条' },
   { value: 'text', label: '段落文本', hint: '适合自我评价、个人总结' },
 ]
 
-export const DEFAULT_THEME = {
+export const DEFAULT_THEME: Theme = {
   accent: '#000000',
   text: '#2b2f36',
   fontKey: 'yahei',
@@ -57,16 +65,16 @@ export const DEFAULT_THEME = {
 }
 
 /** 头像默认尺寸（毫米），取国内 1 寸证件照标准 25×35 */
-export const DEFAULT_AVATAR = {
+export const DEFAULT_AVATAR: { width: number; height: number } = {
   width: 25,
   height: 35,
 }
 
-export function createBullet(text = '') {
+export function createBullet(text = ''): Bullet {
   return { id: uid('b'), text }
 }
 
-export function createEntry(patch = {}) {
+export function createEntry(patch: Partial<EntryItem> = {}): EntryItem {
   return {
     id: uid('e'),
     time: '',
@@ -80,15 +88,15 @@ export function createEntry(patch = {}) {
   }
 }
 
-export function createMeta(label = '', value = '') {
+export function createMeta(label = '', value = ''): EntryMeta {
   return { id: uid('m'), label, value }
 }
 
-export function createGridItem(patch = {}) {
+export function createGridItem(patch: Partial<GridItem> = {}): GridItem {
   return { id: uid('g'), icon: 'user', label: '', value: '', ...patch }
 }
 
-export function createSkill(patch = {}) {
+export function createSkill(patch: Partial<SkillItem> = {}): SkillItem {
   return { id: uid('s'), name: '', level: 80, ...patch }
 }
 
@@ -96,7 +104,7 @@ export function createSkill(patch = {}) {
  * 模块的位置与对齐设置。
  * indent / extraGap 用像素便于做微调；columns 为 'auto' 时按内容自适应。
  */
-export const DEFAULT_SECTION_LAYOUT = {
+export const DEFAULT_SECTION_LAYOUT: SectionLayout = {
   align: 'inherit',
   indent: 0,
   extraGap: 0,
@@ -108,7 +116,7 @@ export const DEFAULT_SECTION_LAYOUT = {
  * @param {string} type grid | entries | skills | text
  * @param {string} title 模块标题
  */
-export function createSection(type, title = '新模块') {
+export function createSection(type: SectionType, title = '新模块'): Section {
   const base = {
     id: uid('sec'),
     type,
@@ -119,19 +127,20 @@ export function createSection(type, title = '新模块') {
 
   switch (type) {
     case 'grid':
-      return { ...base, items: [createGridItem({ label: '项目名', value: '内容' })] }
+      return { ...base, type: 'grid', items: [createGridItem({ label: '项目名', value: '内容' })] } as GridSection
     case 'skills':
       return {
         ...base,
+        type: 'skills',
         fields: [createMeta('技能描述', '')],
         items: [createSkill({ name: '技能', level: 80 })],
         showBars: false,
-      }
+      } as SkillsSection
     case 'text':
-      return { ...base, content: '' }
+      return { ...base, type: 'text', content: '' } as TextSection
     case 'entries':
     default:
-      return { ...base, items: [createEntry()], showLogo: false }
+      return { ...base, type: 'entries', items: [createEntry()], showLogo: false } as EntriesSection
   }
 }
 
@@ -140,7 +149,15 @@ export function createSection(type, title = '新模块') {
  * 依据简历结构通行做法整理：个人信息、教育背景、工作经历为必需模块；
  * 应届生可用实习经历、项目经历、校园经历替代工作经历。
  */
-export const SECTION_PRESETS = [
+export interface SectionPreset {
+  key: string
+  title: string
+  type: SectionType
+  desc: string
+  seed?: () => (GridItem | EntryItem | SkillItem)[]
+}
+
+export const SECTION_PRESETS: SectionPreset[] = [
   {
     key: 'intent',
     title: '求职意向',
@@ -237,20 +254,20 @@ export const SECTION_PRESETS = [
  * 按预设创建模块，返回可直接推入 resume.sections 的对象。
  * @param {string} key SECTION_PRESETS 中的 key
  */
-export function createSectionFromPreset(key) {
+export function createSectionFromPreset(key: string): Section {
   const preset = SECTION_PRESETS.find((item) => item.key === key)
   const section = createSection(preset?.type || 'entries', preset?.title || '新模块')
   const seed = preset?.seed?.()
-  if (seed) section.items = seed
+  if (seed) (section as { items: unknown[] }).items = seed
   return section
 }
 
 /**
  * 返回一份完整示例简历。
  */
-export function createResume() {
+export function createResume(): Resume {
   return {
-    version: 2,
+    version: 2 as const,
     template: 'classic',
     theme: { ...DEFAULT_THEME },
     basics: {
@@ -278,6 +295,7 @@ export function createResume() {
         type: 'grid',
         title: '求职意向',
         visible: true,
+        layout: { ...DEFAULT_SECTION_LAYOUT },
         items: [
           createGridItem({ icon: 'briefcase', label: '求职岗位', value: '前端开发工程师' }),
           createGridItem({ icon: 'location', label: '意向城市', value: '上海 / 杭州' }),
@@ -290,6 +308,7 @@ export function createResume() {
         type: 'entries',
         title: '工作经历',
         visible: true,
+        layout: { ...DEFAULT_SECTION_LAYOUT },
         showLogo: false,
         items: [
           createEntry({
@@ -324,6 +343,7 @@ export function createResume() {
         type: 'entries',
         title: '项目经历',
         visible: true,
+        layout: { ...DEFAULT_SECTION_LAYOUT },
         showLogo: false,
         items: [
           createEntry({
@@ -355,6 +375,7 @@ export function createResume() {
         type: 'entries',
         title: '教育背景',
         visible: true,
+        layout: { ...DEFAULT_SECTION_LAYOUT },
         showLogo: false,
         items: [
           createEntry({
@@ -373,6 +394,7 @@ export function createResume() {
         type: 'skills',
         title: '技能特长',
         visible: true,
+        layout: { ...DEFAULT_SECTION_LAYOUT },
         fields: [
           createMeta(
             '技术栈',
@@ -392,6 +414,7 @@ export function createResume() {
         type: 'text',
         title: '自我评价',
         visible: true,
+        layout: { ...DEFAULT_SECTION_LAYOUT },
         content:
           '五年前端开发经验，擅长从零搭建项目工程体系与组件抽象，对性能优化与工程化有较深实践。做事注重结果与数据，习惯用可量化的方式验证方案效果；沟通主动，能独立对接产品、设计与后端团队推进复杂需求落地。持续关注前端技术演进，保持技术博客输出与开源项目参与。',
       },

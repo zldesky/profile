@@ -23,6 +23,7 @@ import { useToast } from '@/composables/useToast'
 import { TEMPLATES } from '@/data/presets'
 import { useResumeStore } from '@/stores/resume'
 import { formatTime } from '@/utils/helpers'
+import { parseResumePdf } from '@/utils/pdfImport'
 
 const props = defineProps({
   /** 窄屏两栏二选一，此按钮的含义随之改变 */
@@ -152,9 +153,50 @@ function onFileChange(event) {
   importFromFile(event.target.files?.[0])
 }
 
-/** 点菜单外面收起导出菜单 */
+/** 导入菜单：JSON/备份 与 PDF 两条入口共用 */
+const importMenuOpen = shallowRef(false)
+const pdfInput = useTemplateRef('pdfInput')
+/** PDF 解析在主线程外的 worker 里跑，但整包可能要一两秒，按钮给出忙态 */
+const pdfParsing = shallowRef(false)
+
+function pickPdf() {
+  pdfInput.value.value = ''
+  pdfInput.value.click()
+}
+
+/**
+ * 导入 PDF 简历：浏览器端解析（文字层启发式），转成新文档交给用户核对。
+ * 扫描件没有文字层会直接给出可读的错误提示。
+ */
+async function onPdfChange(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  if (pdfParsing.value) return
+  pdfParsing.value = true
+  try {
+    const { resume, warnings } = await parseResumePdf(file)
+    store.importAsDoc(resume)
+    if (resume.basics.name) {
+      store.renameDoc(store.activeDocId, `${resume.basics.name}的简历`)
+    }
+    toast(
+      warnings.length
+        ? `已导入，请核对：${warnings[0]}${warnings.length > 1 ? ` 等 ${warnings.length} 项` : ''}`
+        : 'PDF 已转为可编辑简历，请核对识别结果',
+    )
+  } catch (error) {
+    toast(error.message || 'PDF 解析失败')
+  } finally {
+    pdfParsing.value = false
+  }
+}
+
+/** 点菜单外面收起导入 / 导出菜单 */
 function onDocPointerDown(event) {
-  if (!event.target.closest?.('.menu-wrap')) exportMenuOpen.value = false
+  if (!event.target.closest?.('.menu-wrap')) {
+    exportMenuOpen.value = false
+    importMenuOpen.value = false
+  }
 }
 
 onMounted(() => document.addEventListener('pointerdown', onDocPointerDown))
@@ -213,21 +255,68 @@ function runExport(action) {
       <span class="btn-label">我的简历</span>
     </button>
 
+    <router-link
+      class="ed-btn tb-collapse-md tb-link"
+      :to="{ name: 'collection' }"
+      title="浏览官网简历合集"
+    >
+      <SvgIcon name="image" :size="14" />
+      <span class="btn-label">简历合集</span>
+    </router-link>
+
+    <router-link
+      v-if="auth.user.value?.role === 'admin'"
+      class="ed-btn tb-collapse-md tb-link"
+      :to="{ name: 'admin' }"
+      title="风格与模板管理后台"
+    >
+      <SvgIcon name="palette" :size="14" />
+      <span class="btn-label">管理后台</span>
+    </router-link>
+
     <button class="ed-btn tb-collapse-md" :title="toggleLabel" @click="emit('toggle-panel')">
       <SvgIcon :name="toggleIcon" :size="14" />
       <span class="btn-label">{{ toggleLabel }}</span>
     </button>
 
     <!-- 下面几个属于次要操作，窄屏收成图标；文字仍在无障碍树里，靠 aria-label 保留语义 -->
-    <button
-      class="ed-btn is-compact"
-      title="导入数据：单份简历 JSON 或整包备份"
-      aria-label="导入数据"
-      @click="pickFile"
-    >
-      <SvgIcon name="upload" :size="14" />
-      <span class="btn-label">导入数据</span>
-    </button>
+    <div class="menu-wrap">
+      <button
+        class="ed-btn is-compact"
+        :class="{ 'is-active': importMenuOpen }"
+        title="导入数据：JSON / 备份 / PDF 简历"
+        aria-label="导入数据"
+        aria-haspopup="menu"
+        :aria-expanded="importMenuOpen"
+        @click="importMenuOpen = !importMenuOpen"
+      >
+        <SvgIcon name="upload" :size="14" />
+        <span class="btn-label">导入数据</span>
+      </button>
+      <div v-if="importMenuOpen" class="export-menu" role="menu">
+        <button
+          role="menuitem"
+          @click="
+            pickFile()
+            importMenuOpen = false
+          "
+        >
+          <span class="menu-name">JSON / 备份文件</span>
+          <span class="menu-desc">本应用导出的数据</span>
+        </button>
+        <button
+          role="menuitem"
+          :disabled="pdfParsing"
+          @click="
+            pickPdf()
+            importMenuOpen = false
+          "
+        >
+          <span class="menu-name">{{ pdfParsing ? '解析中…' : 'PDF 简历导入' }}</span>
+          <span class="menu-desc">文字版 PDF 转可编辑</span>
+        </button>
+      </div>
+    </div>
 
     <div class="menu-wrap">
       <button
@@ -356,6 +445,7 @@ function runExport(action) {
       hidden
       @change="onFileChange"
     />
+    <input ref="pdfInput" type="file" accept="application/pdf,.pdf" hidden @change="onPdfChange" />
 
     <!-- 弹窗组件内部都会 Teleport 到 body，放在这里只是便于就近阅读 -->
     <ResumeManagerDialog :open="managerOpen" @close="managerOpen = false" />
@@ -393,6 +483,11 @@ function runExport(action) {
   background: var(--ed-surface);
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
   flex-wrap: wrap;
+}
+
+/* 顶栏里的路由链接按钮（如「简历合集」）：去掉 <a> 默认下划线与颜色 */
+.tb-link {
+  text-decoration: none;
 }
 
 /* 品牌区：渐变 logo 块 + 产品名 + 当前模板胶囊 */

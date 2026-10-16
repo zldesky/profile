@@ -232,7 +232,7 @@ async function compressToOnePage() {
   min-height: 0;
 }
 
-/* 画布：浅灰底 + 极淡点阵，营造设计工具的工作台质感；打印时整块被隐藏 */
+/* 画布：灰阶渐变 + 品牌晕光 + 极淡点阵（--ed-canvas 随主题色联动），设计工具工作台质感 */
 .stage-scroll {
   display: flex;
   flex: 1 1 auto;
@@ -241,9 +241,7 @@ async function compressToOnePage() {
   min-height: 0;
   padding: 26px 28px 64px;
   overflow: auto;
-  background-color: #f3f4f6;
-  background-image: radial-gradient(rgba(16, 24, 40, 0.075) 1px, transparent 1.6px);
-  background-size: 24px 24px;
+  background: var(--ed-canvas);
   /* 滚到底后不要继续带动外层（移动端会触发下拉刷新/橡皮筋） */
   overscroll-behavior: contain;
 }

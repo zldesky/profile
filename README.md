@@ -6,7 +6,10 @@
 - **可选云端**：注册账号后简历自动同步到服务端（SQLite），换设备继续编辑；
 - **AI 助手（自带 Key）**：一句话润色、简历体检、JD 匹配度分析；API Key 只存浏览器本地，经本机服务转发即用即弃，服务端不存储；
 - **Agent Skill（无界面产出）**：`skills/resume-workshop/` 按 Agent Skills 标准打包，AI 代理不开编辑器即可完成「写简历 → 白名单校验 → 导出矢量 PDF / Markdown」；
-- **简历分享**：一键生成 30 天有效的公开只读链接，随时可撤销；
+- **简历分享**：一键生成 30 天有效的公开只读链接，随时可撤销；弹窗内「我的分享」集中管理历史分享（打开 / 撤销，撤销合集分享同步从官网移除）；
+- **官网简历合集**（`/collection`）：分享时勾选「展示到简历合集」即进入官网陈列页，卡片用真实模板实时渲染迷你预览，按求职方向自动分类并提供筛选（技术 / 产品 / 设计等，关键词推导自求职意向）；游客可看前 6 份，登录后浏览全部（`COLLECTION_GUEST_VISIBLE` 可调）；页面带官网式页尾。
+- **模板 × 风格 SKU 矩阵 + 管理后台**（`/admin`，仅管理员）：12 套布局模板叠加一键风格预设，不搭的组合在选择器里置灰禁用；风格与兼容矩阵存服务端（`app_config`），管理员在后台增删改风格、勾选模板兼容白名单，保存后全站编辑器立即生效。实例首个注册账号自动成为管理员。
+- **PDF 简历导入**：编辑器「导入数据 → PDF 简历导入」，浏览器端 pdf.js 解析文字版 PDF，按模块标题 / 时间段 / 联系方式启发式还原为可编辑简历（扫描件不支持，导入后请核对）。
 - **导出防刷**：渲染并发信号量 + 按用户/全站双层每日配额 + 内容去重缓存。
 
 部署方式（本机自用 / 服务器 / Docker / 纯静态托管）见 [DEPLOY.md](./DEPLOY.md)。
@@ -37,7 +40,7 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 | `npm run dev:all`      | 前端 + 应用服务一起启动，退出时同时结束                                  |
 | `npm run build`        | 构建产物到 `dist/`                                                       |
 | `npm run pdf`          | 启动应用服务（托管 `dist/` 静态站点 + `/api`，端口 3001）                |
-| `npm test`             | 运行 Vitest 单测（176 例：鉴权、数据清洗、SSRF 防线、导出、AI 客户端等） |
+| `npm test`             | 运行 Vitest 单测（191 例：鉴权、数据清洗、SSRF 防线、导出、AI 客户端等） |
 | `npm run lint`         | ESLint 检查（代码质量与 Vue 陷阱）                                       |
 | `npm run lint:fix`     | ESLint 自动修复                                                          |
 | `npm run format`       | Prettier 格式化 src / server / tests / 根配置                            |
@@ -56,6 +59,8 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 服务端侧只需 `.env` 里配好 `PDF_ACCESS_PASSWORD`（脚本 Bearer 通道），见 `DEPLOY.md` 环境变量参考。
 
 ## 工程约定
+
+**TypeScript 迁移（进行中）**：领域类型在 `src/types/resume.ts`；`src/data`、核心 `src/utils` 与关键 composables 已是严格模式 TS，用 `npm run typecheck`（vue-tsc）把关。Vue 组件、`stores/resume` 与 server 仍为 JS，按「组件 → store → server」的阶段逐步迁移。
 
 - **格式与质量分工**：Prettier 管一切格式（无分号、单引号、100 列），ESLint 只管代码质量与 Vue 特有陷阱（响应性丢失、`v-html` 禁用、`key` 缺失等），风格规则由 `eslint-config-prettier` 关闭避免打架；
 - **提交门禁**：husky + lint-staged 在 commit 时对暂存文件自动格式化并修复 lint（首次克隆后跑一次 `npm install` 即自动启用）；
