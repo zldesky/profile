@@ -7,8 +7,14 @@ import { buildResumeFromLines, extractPdfLines } from '../src/utils/pdfImport.ts
 
 /**
  * 端到端集成测试：用编辑器渲染服务产出的真实矢量 PDF（tests/fixtures/），
- * 走完 pdf.js 提取 + 启发式解析全链路。PDF 由 tests/fixtures 的示例数据渲染，
- * 内容是固定的一页简历（林致远 · 前端开发工程师）。
+ * 走完 pdf.js 提取 + 启发式解析全链路。
+ *
+ * fixture：tests/fixtures/resume-sample.pdf（单页，Chromium/Skia 渲染的矢量 PDF，
+ * 内容是「林致远 · 前端开发工程师」的固定简历）。它是二进制产物，必须入库：
+ * 本测试直接 readFileSync，文件缺失时会立刻失败，而 CI 的 Test 步骤在 Build 之前跑，
+ * 生成脚本依赖运行中的渲染服务、对 CI 不可用。
+ *
+ * 重新生成：用渲染服务导出同名文件后覆盖（内容变了要同步改下面的断言）。
  */
 const fixture = fileURLToPath(new URL('./fixtures/resume-sample.pdf', import.meta.url))
 
