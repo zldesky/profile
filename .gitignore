@@ -52,3 +52,7 @@ nginx/certs/
 
 # 本地 GUI 测试截图
 gui-test-screenshots
+
+# Python 工具脚本（tools/ 下生成 favicon 的脚本）产生的字节码缓存
+__pycache__/
+*.pyc
