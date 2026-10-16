@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { installBrowserGlobals, uninstallBrowserGlobals } from './setup/browser-globals.js'
+import { makeResume } from './helpers/resume-fixtures.js'
 
 /**
  * useResumeStore 的单测。
@@ -25,16 +26,6 @@ const SNAPSHOTS_KEY = 'resume-studio-snapshots-v1'
 const DOC_KEY_PREFIX = 'resume-studio-doc-'
 
 const docKey = (id) => `${DOC_KEY_PREFIX}${id}`
-
-/** 一份最小可用的简历数据（走 normalizeResume 后就是完整形态） */
-function makeResume(name = '测试姓名') {
-  return {
-    version: 2,
-    template: 'classic',
-    basics: { name, jobTitle: '前端开发工程师' },
-    sections: [{ type: 'text', title: '自我评价', visible: true, content: '一段自我评价' }],
-  }
-}
 
 /**
  * 清空所有模块。
