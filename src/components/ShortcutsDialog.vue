@@ -6,7 +6,7 @@
 import { computed, useTemplateRef } from 'vue'
 
 import SvgIcon from '@/components/SvgIcon.vue'
-import { useDialogA11y } from '@/composables/useDialogA11y'
+import { useDialogA11y } from '@/composables/useDialogA11y.ts'
 
 const props = defineProps({
   open: { type: Boolean, default: false },

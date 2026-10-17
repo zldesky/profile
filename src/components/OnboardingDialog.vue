@@ -7,7 +7,7 @@
 import { computed, shallowRef, useTemplateRef } from 'vue'
 
 import SvgIcon from '@/components/SvgIcon.vue'
-import { useDialogA11y } from '@/composables/useDialogA11y'
+import { useDialogA11y } from '@/composables/useDialogA11y.ts'
 
 const emit = defineEmits(['done'])
 

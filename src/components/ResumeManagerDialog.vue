@@ -10,7 +10,7 @@ import { shallowRef, useTemplateRef } from 'vue'
 
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
-import { useDialogA11y } from '@/composables/useDialogA11y'
+import { useDialogA11y } from '@/composables/useDialogA11y.ts'
 import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
 import { formatTime } from '@/utils/helpers'

@@ -9,7 +9,7 @@ import { shallowRef, useTemplateRef, watch } from 'vue'
 
 import SvgIcon from '@/components/SvgIcon.vue'
 import { useAuth } from '@/composables/useAuth'
-import { useDialogA11y } from '@/composables/useDialogA11y'
+import { useDialogA11y } from '@/composables/useDialogA11y.ts'
 import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
 import { formatTime } from '@/utils/helpers'

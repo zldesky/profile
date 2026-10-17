@@ -10,7 +10,7 @@ import { ref, useTemplateRef, watch } from 'vue'
 import AuthPanel from '@/components/AuthPanel.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { useAuthDialog } from '@/composables/useAuthDialog'
-import { useDialogA11y } from '@/composables/useDialogA11y'
+import { useDialogA11y } from '@/composables/useDialogA11y.ts'
 
 const { visible, initialMode, close, notifyAuthed } = useAuthDialog()
 

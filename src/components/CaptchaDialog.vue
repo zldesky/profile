@@ -9,7 +9,7 @@ import { ref, useTemplateRef, watch } from 'vue'
 
 import SliderCaptcha from '@/components/SliderCaptcha.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
-import { useDialogA11y } from '@/composables/useDialogA11y'
+import { useDialogA11y } from '@/composables/useDialogA11y.ts'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
