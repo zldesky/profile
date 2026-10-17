@@ -169,11 +169,6 @@ export const useResumeStore = defineStore('resume', () => {
     return blank
   }
 
-  /** 这份简历是否等同于「刚新建的空白文档」——是的话直接内存态，不必往返存储 */
-  function isBlankDoc(data: Resume): boolean {
-    return !data.basics.name && !data.basics.jobTitle && data.sections.length === 0
-  }
-
   /* ---------------- 持久化与自动保存 ---------------- */
 
   const autosave = createAutosave({

@@ -2,6 +2,7 @@ import js from '@eslint/js'
 import prettierConfig from 'eslint-config-prettier'
 import pluginVue from 'eslint-plugin-vue'
 import globals from 'globals'
+import tseslint from 'typescript-eslint'
 
 /**
  * 编码规范：ESLint 管代码质量与 Vue 特有陷阱，格式（缩进/引号/换行）
@@ -9,6 +10,7 @@ import globals from 'globals'
  *
  * 配置分层：
  *  - 全部源码：js.recommended + vue/essential（拦截响应性丢失、v-html、key 缺失等）；
+ *  - .ts 文件：typescript-eslint 的 recommended（见下方说明，缺了它 TS 完全不被 lint）；
  *  - src：浏览器全局（window、localStorage…）；
  *  - server / tests / 根配置：Node 全局（process、import.meta…）；
  *  - prettier 关闭所有与格式化冲突的风格规则，必须放在最后。
@@ -25,6 +27,19 @@ export default [
 
   js.configs.recommended,
   ...pluginVue.configs['flat/essential'],
+
+  /*
+   * TypeScript 文件必须单独接管解析器。
+   * 没有这段时，ESLint 的默认解析器（espree）不认识 `import type`、类型标注等语法，
+   * 而 flat config 里 js.recommended 与 vue/essential 都不匹配 .ts ——
+   * 结果是所有 .ts 文件被静默跳过（显式传入只会得到 File ignored 警告），
+   * 一旦有配置块覆盖到 .ts 又会直接报 Parsing error。两者都不是想要的状态。
+   * 这里只接管 .ts：.vue 目前都是 JS，等组件迁 TS 时再补 vue 的 TS 解析链。
+   */
+  ...tseslint.configs.recommended.map((config) => ({
+    ...config,
+    files: ['**/*.ts'],
+  })),
 
   {
     files: ['src/**'],
@@ -70,20 +85,31 @@ export default [
   },
 
   {
-    // render.js 里的 page.evaluate / addInitScript 回调运行在浏览器页面里，
+    // render 里的 page.evaluate / addInitScript 回调运行在浏览器页面里，
     // 出现 document / window 是正常的
-    files: ['server/render.js'],
+    files: ['server/render.ts'],
     languageOptions: {
       globals: { ...globals.node, window: 'readonly', document: 'readonly' },
     },
   },
 
   {
-    // sanitize.js 的职责就是清洗控制字符（正文去不可见字符、文件名去 CR/LF），
+    // sanitize 的职责就是清洗控制字符（正文去不可见字符、文件名去 CR/LF），
     // 控制字符正则在这里是业务本身而不是笔误
-    files: ['server/sanitize.js'],
+    files: ['server/sanitize.ts'],
     rules: {
       'no-control-regex': 'off',
+    },
+  },
+
+  {
+    // normalizeResume 的 RawRecord = Record<string, any> 是刻意的：
+    // 这个函数的职责就是逐字段收窄完全不可信的导入数据，入口处的 any 正是「尚未校验」的表达。
+    // 换成 unknown 会在这里逼出十余处断言，把收窄逻辑本身搅浑，安全性并不会提高
+    //（真正的边界是导入后的白名单与 normalizeResume 的产出类型）。
+    files: ['src/data/normalizeResume.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
     },
   },
 
