@@ -15,8 +15,25 @@
  * 应用随后按常规流程恢复这份数据并渲染纸张。
  */
 import { chromium } from 'playwright-core'
+import type { Browser, BrowserContext, Page } from 'playwright-core'
 
 import { createSemaphore } from './semaphore.ts'
+import type { HttpError } from './semaphore.ts'
+
+/** 渲染入参：简历数据不透明（渲染页自行归一化），只取 PDF 页边距 */
+export interface RenderPdfParams {
+  resume: { theme?: { mv?: unknown; mh?: unknown } }
+  /** 前端页面地址 */
+  renderUrl: string
+  /** PDF 文档标题 */
+  title?: string
+}
+
+/** 启动结果：浏览器实例与命中的渠道名 */
+interface LaunchResult {
+  browser: Browser
+  channel: string
+}
 
 /** 需与前端 stores/resume.js 中的 STORAGE_KEY 保持一致 */
 const STORAGE_KEY = 'resume-studio-v1'
@@ -52,11 +69,11 @@ const renderSlots = createSemaphore({
   maxQueue: RENDER_QUEUE_MAX,
 })
 
-let browserPromise = null
+let browserPromise: Promise<Browser> | null = null
 let resolvedChannel = ''
 
-async function launch() {
-  const failures = []
+async function launch(): Promise<LaunchResult> {
+  const failures: string[] = []
 
   if (process.env.BROWSER_PATH) {
     try {
@@ -89,17 +106,20 @@ async function launch() {
   console.error('[pdf] 未找到可用的 Chromium 内核浏览器：')
   failures.forEach((item) => console.error(`  · ${item}`))
 
-  const error = new Error('未找到可用的浏览器，请安装 Edge / Chrome，或设置环境变量 BROWSER_PATH')
-  error.statusCode = 503
+  const error: HttpError = Object.assign(
+    new Error('未找到可用的浏览器，请安装 Edge / Chrome，或设置环境变量 BROWSER_PATH'),
+    { statusCode: 503 },
+  )
   throw error
 }
 
-function firstLine(error) {
-  return String(error?.message || error).split('\n')[0]
+function firstLine(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.split('\n')[0]
 }
 
 /** 惰性启动并复用浏览器实例，避免每次导出都冷启动 */
-function getBrowser() {
+function getBrowser(): Promise<Browser> {
   if (!browserPromise) {
     browserPromise = launch()
       .then(({ browser, channel }) => {
@@ -116,21 +136,21 @@ function getBrowser() {
 }
 
 /** 预热：启动时探测一次，便于把结果直接打在控制台 */
-export async function ensureBrowser() {
+export async function ensureBrowser(): Promise<string> {
   await getBrowser()
   return resolvedChannel
 }
 
-export function getResolvedChannel() {
+export function getResolvedChannel(): string {
   return resolvedChannel
 }
 
 /** 当前渲染占用情况，供日志与健康检查使用 */
-export function getRenderStats() {
+export function getRenderStats(): ReturnType<typeof renderSlots.stats> {
   return renderSlots.stats()
 }
 
-export async function closeBrowser() {
+export async function closeBrowser(): Promise<void> {
   if (!browserPromise) return
   const browser = await browserPromise.catch(() => null)
   browserPromise = null
@@ -138,7 +158,7 @@ export async function closeBrowser() {
 }
 
 /** 等字体与图片就绪，否则首屏可能用回退字体或空白头像渲染 */
-async function waitForAssets(page) {
+async function waitForAssets(page: Page): Promise<void> {
   await page.evaluate(() => document.fonts.ready)
   await page.evaluate(() =>
     Promise.all(
@@ -154,15 +174,12 @@ async function waitForAssets(page) {
   )
 }
 
-/**
- * 渲染简历为 PDF。
- * @param {object} params
- * @param {object} params.resume 简历数据
- * @param {string} params.renderUrl 前端页面地址
- * @param {string} [params.title] PDF 文档标题
- * @returns {Promise<Buffer>} PDF 字节流
- */
-export async function renderResumePdf({ resume, renderUrl, title }) {
+/** 渲染简历为 PDF；排队失败（队满 / 等待超时）会抛出 429，由路由层直接透传 */
+export async function renderResumePdf({
+  resume,
+  renderUrl,
+  title,
+}: RenderPdfParams): Promise<Buffer> {
   // 排队失败（队满 / 等待超时）在这里抛出 429，由路由层直接透传
   return renderSlots.run(async () => {
     const browser = await getBrowser()

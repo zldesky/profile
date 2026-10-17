@@ -42,7 +42,7 @@ import {
   getResolvedChannel,
   getRenderStats,
   renderResumePdf,
-} from './render.js'
+} from './render.ts'
 import { sanitizeFilename, sanitizeResume } from './sanitize.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
