@@ -128,7 +128,7 @@ async function openLogin() {
   <div class="cl-page">
     <header class="cl-topbar">
       <router-link class="cl-brand" :to="{ name: 'editor' }" title="返回编辑器">
-        <span class="cl-logo"><SvgIcon name="layout" :size="15" /></span>
+        <span class="cl-logo ed-brand-block"><SvgIcon name="layout" :size="15" /></span>
         <span class="cl-name">简历工坊</span>
       </router-link>
       <span class="cl-chip">简历合集</span>
@@ -235,7 +235,7 @@ async function openLogin() {
       <div class="cl-footer-main">
         <div class="cl-footer-brand">
           <div class="cl-footer-logo">
-            <span class="cl-logo"><SvgIcon name="layout" :size="14" /></span>
+            <span class="cl-logo ed-brand-block"><SvgIcon name="layout" :size="14" /></span>
             <span class="cl-footer-name">简历工坊</span>
           </div>
           <p class="cl-footer-desc">
@@ -297,19 +297,9 @@ async function openLogin() {
   gap: 8px;
   text-decoration: none;
 }
-
-.cl-logo {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.cl-logo.ed-brand-block {
   width: 28px;
   height: 28px;
-  border-radius: var(--ed-radius-sm);
-  background: linear-gradient(135deg, var(--ed-brand-grad-hi) 0%, var(--ed-brand-strong) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.25),
-    var(--ed-brand-glow);
-  color: #fff;
 }
 
 .cl-name {
@@ -442,6 +432,18 @@ async function openLogin() {
   background: linear-gradient(100deg, var(--ed-fill) 40%, var(--ed-fill-2) 50%, var(--ed-fill) 60%);
   background-size: 200% 100%;
   animation: cl-shimmer 1.2s infinite;
+}
+
+/*
+ * 骨架屏的扫光是无限动画，属于「动效必须让路」的那一类：
+ * 用户明确要求减少动态效果时，静止的灰底已经足够表达「正在加载」，
+ * 继续扫光只会让人不适（前庭敏感人群对持续的横向移动尤其敏感）。
+ * 编辑器里的卡片闪烁、验证码等各处也遵循同一约定。
+ */
+@media (prefers-reduced-motion: reduce) {
+  .cl-skeleton {
+    animation: none;
+  }
 }
 
 @keyframes cl-shimmer {

@@ -4,6 +4,30 @@
  * 颜色、阴影、圆角一律消费 paper.css :root 里的 --ed-* 设计令牌，保证全套界面同源。
  */
 
+/* ---------------- 品牌色块 ---------------- */
+
+/*
+ * 品牌色方块：顶栏、登录页、合集页、分享页、管理页、引导弹窗里那个「logo 位」。
+ *
+ * 抽出来的理由是它本来被复制了 6 份，每份 9 条属性完全相同，只有类名与尺寸不同
+ * （.tb-logo / .auth-logo / .cl-logo / .sp-logo / .ad2-logo / .ob-icon）。
+ * 这类「同一样式散落多处」既是最明显的机器味信号，也是改一次要改六遍的维护坑 ——
+ * 何况其中五处尺寸都是 28px，唯独登录页是 32px，这种漂移正是复制粘贴的典型后果。
+ *
+ * 尺寸仍由各组件自己声明（28 / 32 / 52），这个类只管「长什么样」。
+ * 用法：在组件里给元素加 ed-brand-block 类，略微提高选择器优先级以压过共享类。
+ */
+.ed-brand-block {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--ed-radius-sm);
+  /* 渐变端点是运行时按简历主色重算的品牌令牌，不是写死的紫色渐变 */
+  background: linear-gradient(135deg, var(--ed-brand-grad-hi) 0%, var(--ed-brand-strong) 100%);
+  box-shadow: var(--ed-brand-sheen), var(--ed-brand-glow);
+  color: #fff;
+}
+
 /* ---------------- 按钮 ---------------- */
 
 .ed-btn {
@@ -51,9 +75,7 @@
     var(--ed-brand) 60%,
     var(--ed-brand-grad-lo) 100%
   );
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    var(--ed-brand-glow);
+  box-shadow: var(--ed-brand-sheen), var(--ed-brand-glow);
   color: #fff;
 }
 

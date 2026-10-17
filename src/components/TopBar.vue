@@ -222,7 +222,7 @@ function runImport(action) {
 <template>
   <header class="editor-topbar">
     <div class="tb-brand">
-      <span class="tb-logo"><SvgIcon name="layout" :size="16" /></span>
+      <span class="tb-logo ed-brand-block"><SvgIcon name="layout" :size="16" /></span>
       <span class="brand-name">简历工坊</span>
       <span class="brand-chip">{{ templateName }}</span>
     </div>
@@ -493,19 +493,9 @@ function runImport(action) {
   align-items: center;
   gap: 8px;
 }
-
-.tb-logo {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.tb-logo.ed-brand-block {
   width: 28px;
   height: 28px;
-  border-radius: var(--ed-radius-sm);
-  background: linear-gradient(135deg, var(--ed-brand-grad-hi) 0%, var(--ed-brand-strong) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.25),
-    var(--ed-brand-glow);
-  color: #fff;
 }
 
 .brand-name {

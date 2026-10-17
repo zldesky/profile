@@ -254,6 +254,16 @@ defineExpose({ refresh })
   animation: sc-shake 0.25s;
 }
 
+/*
+ * 抖动是「拼图放错了」的反馈。用户要求减少动态效果时不抖，
+ * 改为只靠下方的失败文案与红色描边表达 —— 那两处已经足够说明问题。
+ */
+@media (prefers-reduced-motion: reduce) {
+  .sc-stage.is-failed {
+    animation: none;
+  }
+}
+
 .sc-bg,
 .sc-piece {
   display: block;
@@ -341,7 +351,7 @@ defineExpose({ refresh })
   border: 1px solid var(--ed-line-3);
   border-radius: var(--ed-radius-sm);
   background: #fff;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.15);
+  box-shadow: var(--ed-shadow-handle);
   cursor: grab;
   /* 拖动期间不触发页面滚动/手势 */
   touch-action: none;

@@ -65,7 +65,7 @@ function next() {
         <div class="ob-step-mark">第 {{ step + 1 }} / {{ STEPS.length }} 步</div>
 
         <div class="ob-icon-wrap">
-          <span class="ob-icon"><SvgIcon :name="current.icon" :size="22" /></span>
+          <span class="ob-icon ed-brand-block"><SvgIcon :name="current.icon" :size="22" /></span>
         </div>
 
         <h3 class="ob-title">{{ current.title }}</h3>
@@ -132,19 +132,9 @@ function next() {
   justify-content: center;
   margin-top: 14px;
 }
-
-.ob-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.ob-icon.ed-brand-block {
   width: 52px;
   height: 52px;
-  border-radius: var(--ed-radius-xl);
-  background: linear-gradient(135deg, var(--ed-brand-grad-hi) 0%, var(--ed-brand-strong) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.25),
-    var(--ed-brand-glow);
-  color: #fff;
 }
 
 .ob-title {

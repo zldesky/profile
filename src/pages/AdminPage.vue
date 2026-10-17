@@ -264,7 +264,7 @@ const detailText = (patch) =>
   <div class="ad2-page">
     <header class="ad2-topbar">
       <router-link class="ad2-brand" :to="{ name: 'editor' }" title="返回编辑器">
-        <span class="ad2-logo"><SvgIcon name="layout" :size="15" /></span>
+        <span class="ad2-logo ed-brand-block"><SvgIcon name="layout" :size="15" /></span>
         <span class="ad2-name">简历工坊</span>
       </router-link>
       <span class="ad2-chip">管理后台</span>
@@ -496,19 +496,9 @@ const detailText = (patch) =>
   gap: 8px;
   text-decoration: none;
 }
-
-.ad2-logo {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.ad2-logo.ed-brand-block {
   width: 28px;
   height: 28px;
-  border-radius: var(--ed-radius-sm);
-  background: linear-gradient(135deg, var(--ed-brand-grad-hi) 0%, var(--ed-brand-strong) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.25),
-    var(--ed-brand-glow);
-  color: #fff;
 }
 
 .ad2-name {

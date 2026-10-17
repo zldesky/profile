@@ -61,6 +61,15 @@
   --ed-shadow-md: 0 4px 8px -2px rgba(16, 24, 40, 0.12), 0 2px 4px -2px rgba(16, 24, 40, 0.06);
   --ed-shadow-lg: 0 20px 24px -4px rgba(16, 24, 40, 0.1), 0 8px 8px -4px rgba(16, 24, 40, 0.05);
   --ed-paper-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 12px 32px -8px rgba(16, 24, 40, 0.16);
+  /*
+   * 浮动元素阴影：拖动中的卡片、手上拖着的模块、窄屏的纸张，以及夹在纸上的滑块手柄。
+   * 这几处原先各写了一遍同一个颜色（rgba(20,30,50,.16)）配不同模糊半径 —— 那是
+   * 复制粘贴留下的漂移，而不是有意的层次差别。收敛成两档：抬起的与更小的。
+   */
+  --ed-shadow-float: 0 6px 18px rgba(20, 30, 50, 0.16);
+  --ed-shadow-handle: 0 1px 4px rgba(15, 23, 42, 0.15);
+  /* 品牌色块顶部的一点内高光：实心块看起来才「可按 / 有厚度」 */
+  --ed-brand-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.25);
 
   /*
    * 中性色的补充档位。
@@ -120,12 +129,17 @@
 
   /*
    * 画布背景令牌：纸张四周的「舞台」用它（编辑器预览、分享页、合集页）。
-   * 分层：对角两抹品牌色晕光（--ed-brand-ring 随主题色联动）+ 细点阵 + 灰阶渐变，
-   * 让留白有纵深而不喧宾夺主；打印时画布必须整体重置为白（见文件末尾 @media print）。
+   *
+   * 原先叠了四层：对角两抹品牌色晕光 + 细点阵 + 灰阶渐变。按「AI 特征目录」的
+   * 自查项，那两抹模糊光晕正是最典型的机器味套路（floating blurred orbs，
+   * 「通用的深度感技巧」），而且对角等距、完全对称 —— 机器平衡，没有取舍。
+   * 现在去掉晕光，只留细点阵与灰阶渐变两层。
+   *
+   * 保留点阵的理由是它对得上主题：稿纸的方格肌理，正是「写简历」这件事的世界；
+   * 而光晕跟主题没有任何关系，换成任何产品都成立。宁少勿多。
+   * 打印时画布必须整体重置为白（见文件末尾 @media print）。
    */
   --ed-canvas:
-    radial-gradient(1100px 520px at 12% -8%, var(--ed-brand-ring), transparent 62%),
-    radial-gradient(900px 480px at 88% 108%, var(--ed-brand-ring), transparent 62%),
     radial-gradient(rgba(16, 24, 40, 0.07) 1px, transparent 1.6px) 0 0 / 24px 24px repeat,
     linear-gradient(180deg, #eff1f5 0%, #e7eaef 100%);
   --ed-font:
@@ -808,7 +822,7 @@ textarea {
 
 .paper.is-sec-dragging .r-sec.is-sec-selected {
   outline-style: dashed;
-  box-shadow: 0 4px 14px rgba(20, 30, 50, 0.16);
+  box-shadow: var(--ed-shadow-float);
 }
 
 /* ---------------- 深色区域反白 ---------------- */

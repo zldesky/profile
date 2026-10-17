@@ -134,7 +134,7 @@ const expiryText = computed(() => {
   <div class="editor-app">
     <header class="editor-topbar">
       <div class="sp-brand">
-        <span class="sp-logo"><SvgIcon name="layout" :size="15" /></span>
+        <span class="sp-logo ed-brand-block"><SvgIcon name="layout" :size="15" /></span>
         <span class="sp-name">简历工坊</span>
         <span class="sp-chip">分享预览</span>
       </div>
@@ -225,19 +225,9 @@ const expiryText = computed(() => {
   align-items: center;
   gap: 8px;
 }
-
-.sp-logo {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.sp-logo.ed-brand-block {
   width: 28px;
   height: 28px;
-  border-radius: var(--ed-radius-sm);
-  background: linear-gradient(135deg, var(--ed-brand-grad-hi) 0%, var(--ed-brand-strong) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.25),
-    var(--ed-brand-glow);
-  color: #fff;
 }
 
 .sp-name {

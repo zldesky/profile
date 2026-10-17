@@ -27,7 +27,7 @@ watch(
   <div class="auth-page">
     <div class="auth-card">
       <div class="auth-brand">
-        <span class="auth-logo"><SvgIcon name="layout" :size="18" /></span>
+        <span class="auth-logo ed-brand-block"><SvgIcon name="layout" :size="18" /></span>
         <span>简历工坊</span>
       </div>
 
@@ -48,10 +48,13 @@ watch(
   justify-content: center;
   min-height: 100vh;
   padding: 24px;
-  /* 顶部一抹品牌色晕光 + 向下过渡的浅灰，比纯色背景更有产品落地页的完成度 */
-  background:
-    radial-gradient(900px 420px at 50% -120px, var(--ed-brand-ring), transparent 70%),
-    linear-gradient(180deg, var(--ed-fill-2) 0%, var(--ed-fill-3) 100%);
+  /*
+   * 与编辑器预览、合集页、分享页共用同一套画布令牌。
+   * 这里原先自己叠了一抹「顶部居中晕光 + 浅灰渐变」—— 同一个模糊光晕套路，
+   * 而且是又一次复制粘贴（相同的灰阶渐变别处也写了一遍）。
+   * 用令牌后：一处定义、四处一致，也不再各自漂移。
+   */
+  background: var(--ed-canvas);
 }
 
 .auth-card {
@@ -73,19 +76,9 @@ watch(
   font-size: 17px;
   font-weight: 700;
 }
-
-.auth-logo {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.auth-logo.ed-brand-block {
   width: 32px;
   height: 32px;
-  border-radius: var(--ed-radius-sm);
-  background: linear-gradient(135deg, var(--ed-brand-grad-hi) 0%, var(--ed-brand-strong) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.25),
-    var(--ed-brand-glow);
-  color: #fff;
 }
 
 .auth-back {

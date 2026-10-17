@@ -386,7 +386,7 @@ async function compressToOnePage() {
   }
 
   .paper {
-    box-shadow: 0 2px 14px rgba(20, 30, 50, 0.16);
+    box-shadow: var(--ed-shadow-float);
   }
 }
 </style>

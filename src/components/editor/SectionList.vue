@@ -169,6 +169,6 @@ watch(requestSeq, async () => {
 
 .ed-chosen {
   border-color: var(--ed-brand);
-  box-shadow: 0 6px 18px rgba(20, 30, 50, 0.16);
+  box-shadow: var(--ed-shadow-float);
 }
 </style>
