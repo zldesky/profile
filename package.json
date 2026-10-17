@@ -16,7 +16,9 @@
     "format:check": "prettier --check --experimental-cli src server tests \"*.js\" \"*.md\"",
     "prepare": "husky",
     "typecheck": "vue-tsc --noEmit",
-    "check": "npm run typecheck && npm run lint && npm test"
+    "check": "npm run typecheck && npm run lint && npm test",
+    "audit:ui": "node tools/audit-ui.mjs",
+    "audit:el": "node tools/probe-el.mjs"
   },
   "lint-staged": {
     "*.{js,vue}": [

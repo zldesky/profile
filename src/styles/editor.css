@@ -127,6 +127,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  /*
+   * flex: 0 0 auto 不能省。只有 width: 28px 时，图标按钮在拥挤的行里会被 flex 压扁 ——
+   * 浏览器实测到过 18×28（宽度被挤掉 10px），而点击目标要求至少 24px 宽。
+   * 图标按钮的尺寸应当固定，宁可让同行其它元素让位。
+   */
+  flex: 0 0 auto;
   width: 28px;
   height: 28px;
   padding: 0;
@@ -255,8 +261,11 @@
 }
 
 .ed-range {
+  position: relative;
   flex: 1 1 auto;
   min-width: 0;
+  /* 撑到 24px：实测原生滑杆只有 16px 高，抓取很难（WCAG 2.2 最小点击目标为 24px） */
+  height: 24px;
   accent-color: var(--ed-brand);
 }
 
@@ -266,6 +275,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  /* 同 .ed-toggle：AvatarEditor 的复选框包在 .ed-row 里，也要给足命中高度 */
+  min-height: 24px;
   margin-bottom: 9px;
   font-size: 13px;
 }
@@ -277,6 +288,17 @@
 .ed-row > .ed-label {
   flex: 0 0 66px;
   color: var(--ed-text-2);
+}
+
+/*
+ * 兜底：凡是「直接包着复选框的 label」都补足命中高度。
+ * 前面给 .ed-toggle / .ed-row 加 min-height 只覆盖了已知的两处，而 .ed-check
+ * 还被 .sh-check（分享弹窗）以及 AdminPage 里裸放在 <td> 中的写法使用 ——
+ * 逐个追下去既漏又散，这里用 :has() 一次覆盖，且限定「直接子元素」避免误伤布局。
+ * 不需要给 .sh-check 单独加 min-height：它的 line-height 1.6 本身就超过 24px。
+ */
+label:has(> .ed-check) {
+  min-height: 24px;
 }
 
 .ed-grow {
@@ -537,7 +559,9 @@
 }
 
 .ed-count {
-  color: var(--ed-text-5);
+  /* 「6 个」这类计数是用户会读的信息，用可达的 --ed-text-4；
+     --ed-text-5 仅限装饰（见 paper.css 的说明） */
+  color: var(--ed-text-4);
   font-weight: 400;
 }
 
@@ -602,6 +626,13 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  /*
+   * 命中区域给足 24px：复选框本体只有 15–18px，达不到 WCAG 2.2 的最小点击目标。
+   * <input> 是替换元素、::after 不生效（实测确认过），所以扩在承载它的 label 上 ——
+   * 点 label 同样会切换勾选。注意 .ed-check 有 .ed-toggle / .ed-row / 组件自定类
+   * 好几种父元素，只改一个覆盖不全，故两边都给。
+   */
+  min-height: 24px;
   margin-bottom: 4px;
   color: var(--ed-text-2);
   font-size: 12.5px;
@@ -810,6 +841,22 @@
 
   .ed-btn {
     min-height: 36px;
+  }
+
+  /*
+   * 悬浮工具条（预览区底部、框选后弹出）实测按钮只有 18×28，
+   * 达不到 WCAG 2.2 的 24px 最小点击目标 —— 而它们正是手机上最常点的东西。
+   * 这两条工具条是 position: fixed 的悬浮层，加高不会推挤任何排版，因此直接给足 36px。
+   */
+  .editor-tools .ed-btn,
+  .sel-toolbar .ed-btn {
+    min-height: 36px;
+  }
+
+  .editor-tools .ed-icon-btn,
+  .sel-toolbar .ed-icon-btn {
+    width: 36px;
+    height: 36px;
   }
 
   .ed-seg button {

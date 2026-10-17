@@ -159,7 +159,12 @@ function next() {
   margin: 10px 0 14px;
 }
 
+/*
+ * 圆点视觉上仍是 7px（一排进度点的观感要轻），但命中区域撑到 24px：
+ * 实测它是全站最难点的元素（7×7），而它承担着「跳到第 N 步」的实际功能。
+ */
 .ob-dot {
+  position: relative;
   width: 7px;
   height: 7px;
   padding: 0;
@@ -168,6 +173,12 @@ function next() {
   background: var(--ed-line-2);
   cursor: pointer;
   transition: 0.2s;
+}
+
+.ob-dot::after {
+  content: '';
+  position: absolute;
+  inset: -9px -5px;
 }
 
 .ob-dot.is-active {

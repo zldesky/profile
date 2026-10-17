@@ -81,6 +81,20 @@ export default [
   },
 
   {
+    /*
+     * tools/ 下的审计脚本同时活在两个环境里：
+     *  - 脚本本体跑在 Node（process、console）；
+     *  - 传给 page.evaluate 的那个函数体是在**浏览器**里求值的，里面用 document、
+     *    getComputedStyle、elementFromPoint 都是正确的。
+     * 所以这里两套全局都给，而不是把其中一半报成 no-undef 再逐行加豁免。
+     */
+    files: ['tools/**/*.mjs'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
+    },
+  },
+
+  {
     // 这两个测试自己用 tests/setup/browser-globals.js 装上 localStorage /
     // window / document 桩（刻意不全局装，否则 pdf.js 会误判运行环境），
     // 因此这里把这三个全局声明为只读，而不是把整个 tests 目录当浏览器环境。
