@@ -60,7 +60,9 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 
 ## 工程约定
 
-**TypeScript 迁移（进行中）**：领域类型在 `src/types/resume.ts`；`src/data`、`src/stores`、核心 `src/utils`、关键 composables 与**整个 `server/`** 已是严格模式 TS，用 `npm run typecheck`（vue-tsc）把关，并由 CI 强制执行（Vite 构建只转译不做类型校验，类型错误不会让 Build 失败，因此 typecheck 必须单独跑）。`server/` 由 Node 内置的类型剥离直接执行 `.ts`，不带构建步骤，细节见 [server/README.md](./server/README.md)。剩余为 Vue 组件与部分 `src/utils`，按「组件」的阶段继续。
+**TypeScript 迁移（进行中）**：领域类型在 `src/types/resume.ts`；`src/data`、`src/stores`、核心 `src/utils`、关键 composables 与**整个 `server/`** 已是严格模式 TS，用 `npm run typecheck`（vue-tsc）把关，并由 CI 强制执行（Vite 构建只转译不做类型校验，类型错误不会让 Build 失败，因此 typecheck 必须单独跑）。`server/` 由 Node 内置的类型剥离直接执行 `.ts`，不带构建步骤，细节见 [server/README.md](./server/README.md)。
+
+**Vue 组件（进行中，18/48）**：已迁的是编辑器面板与分段编辑器那一层（`src/components/editor/**` 与若干通用弹窗），尚未迁的是体量最大的几个页面与弹窗（`AdminPage` / `TopBar` / `CollectionPage` / `TemplatePicker` 等）。组件迁 TS 的主要机械成本是**模板内联处理器的 DOM 收窄**：`$event.target` 是 `EventTarget`，取 `.value` / `.checked` 需要写成 `($event.target as HTMLInputElement)`。另外分段编辑器的 `section` prop 应按可辨识联合收窄成 `EntriesSection` / `GridSection` / `SkillsSection` / `TextSection`，否则模板里取 `section.items` 会报错 —— 那正是联合类型在提醒「先确定是哪种模块」。
 
 `stores/resume` 是本地优先的落盘中心（多文档槽位、历史快照、头像引用、超容量降级），迁移前先用 `tests/resumeStore.test.js` 立起不变量再改类型；该测试需要 `localStorage` 与 `window`/`document`，由 `tests/setup/browser-globals.js` 按需安装（**刻意不放进 vitest 的 setupFiles**：全局安装 `document` 会让 pdf.js 误判运行环境，导致 PDF 导入端到端测试失败）。
 
