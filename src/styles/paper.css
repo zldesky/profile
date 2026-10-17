@@ -715,6 +715,29 @@ textarea {
  * 不能在这里用 attr() 下发）。
  */
 
+/*
+ * 可编辑文字在悬停时给一点暗示：点上去会就地弹出编辑框。
+ *
+ * 用 outline 而不是 border/background ——
+ *  - outline 不参与布局，行内元素上也不会把文字挤动（纸张排版是命根子）；
+ *  - 改背景会直接影响所见即所得的观感，还会被误当成打印内容。
+ * 虚线而非实线：实线更像「已选中」，而选中态另有 --accent 的实线描边。
+ * 只在编辑态生效；导出走的是另一条渲染路径，不受影响。
+ */
+.paper [data-field] {
+  cursor: text;
+}
+
+.paper [data-field]:hover {
+  outline: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+/* 拖动排序时不参与悬停提示：此时光标语义是「抓取」，不是「编辑」 */
+.paper.is-sec-dragging [data-field]:hover {
+  outline: none;
+}
+
 .r-sec.is-sec-selected {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

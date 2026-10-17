@@ -24,8 +24,8 @@ const selectedSet = computed(() => new Set(props.selectedIds))
   <div class="tpl-labelcol">
     <header class="head">
       <div class="who">
-        <h1 class="r-name">{{ basics.name }}</h1>
-        <p v-if="basics.jobTitle" class="r-job">{{ basics.jobTitle }}</p>
+        <h1 class="r-name" data-field="name">{{ basics.name }}</h1>
+        <p v-if="basics.jobTitle" class="r-job" data-field="jobTitle">{{ basics.jobTitle }}</p>
 
         <div v-if="basics.fields.length" class="r-info-grid contact r-body">
           <div v-for="field in basics.fields" :key="field.id" class="r-info-item">
@@ -51,7 +51,7 @@ const selectedSet = computed(() => new Set(props.selectedIds))
       :style="sectionLayoutStyle(section)"
     >
       <!-- 标题列宽固定，所有模块的正文从同一竖轴起排；点线延伸在定宽列里没有延伸空间，不渲染 -->
-      <h2 class="r-title row-title">
+      <h2 class="r-title row-title" data-field="sectionTitle">
         <span class="dot"></span>
         <span>{{ section.title }}</span>
       </h2>

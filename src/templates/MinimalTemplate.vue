@@ -25,8 +25,8 @@ const selectedSet = computed(() => new Set(props.selectedIds))
   <div class="tpl-minimal">
     <header class="head">
       <div class="head-main">
-        <h1 class="name">{{ basics.name }}</h1>
-        <p v-if="basics.jobTitle" class="job">{{ basics.jobTitle }}</p>
+        <h1 class="name" data-field="name">{{ basics.name }}</h1>
+        <p v-if="basics.jobTitle" class="job" data-field="jobTitle">{{ basics.jobTitle }}</p>
         <div v-if="basics.fields.length" class="meta">
           <span v-for="(field, index) in basics.fields" :key="field.id" class="meta-item">
             <SvgIcon v-if="field.icon !== 'none'" :name="field.icon" :size="13" />
@@ -50,7 +50,7 @@ const selectedSet = computed(() => new Set(props.selectedIds))
       :data-sec-id="section.id"
       :style="sectionLayoutStyle(section)"
     >
-      <h2 class="r-title">
+      <h2 class="r-title" data-field="sectionTitle">
         <span class="dot"></span>
         <span>{{ section.title }}</span>
         <span class="r-leader"></span>

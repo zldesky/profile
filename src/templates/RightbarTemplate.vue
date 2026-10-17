@@ -36,7 +36,7 @@ const bodySections = computed(() => sections.value.filter((s) => !railTypes.incl
         :data-sec-id="section.id"
         :style="sectionLayoutStyle(section)"
       >
-        <h2 class="r-title">
+        <h2 class="r-title" data-field="sectionTitle">
           <span class="dot"></span>
           <span>{{ section.title }}</span>
           <span class="r-leader"></span>
@@ -51,12 +51,12 @@ const bodySections = computed(() => sections.value.filter((s) => !railTypes.incl
           <img v-if="basics.avatar" :src="basics.avatar" alt="头像" />
           <SvgIcon v-else name="user" />
         </div>
-        <h1 class="r-name">{{ basics.name }}</h1>
-        <p v-if="basics.jobTitle" class="r-job">{{ basics.jobTitle }}</p>
+        <h1 class="r-name" data-field="name">{{ basics.name }}</h1>
+        <p v-if="basics.jobTitle" class="r-job" data-field="jobTitle">{{ basics.jobTitle }}</p>
       </div>
 
       <section v-if="basics.fields.length" class="r-sec">
-        <h2 class="r-title">
+        <h2 class="r-title" data-field="sectionTitle">
           <span class="dot"></span>
           <span>联系方式</span>
           <span class="r-leader"></span>
@@ -78,7 +78,7 @@ const bodySections = computed(() => sections.value.filter((s) => !railTypes.incl
         :data-sec-id="section.id"
         :style="sectionLayoutStyle(section)"
       >
-        <h2 class="r-title">
+        <h2 class="r-title" data-field="sectionTitle">
           <span class="dot"></span>
           <span>{{ section.title }}</span>
           <span class="r-leader"></span>

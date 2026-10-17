@@ -54,8 +54,8 @@ const wideSections = computed(() => sections.value.filter((s) => wideTypes.inclu
     <!-- 页头：通栏色带 -->
     <header v-if="headerKind === 'banner'" class="band on-dark" :class="{ 'is-inbleed': isRail }">
       <div class="who">
-        <h1 class="r-name">{{ basics.name }}</h1>
-        <p v-if="basics.jobTitle" class="r-job">{{ basics.jobTitle }}</p>
+        <h1 class="r-name" data-field="name">{{ basics.name }}</h1>
+        <p v-if="basics.jobTitle" class="r-job" data-field="jobTitle">{{ basics.jobTitle }}</p>
 
         <div v-if="basics.fields.length" class="r-info-grid contact r-body">
           <div v-for="field in basics.fields" :key="field.id" class="r-info-item">
@@ -80,8 +80,8 @@ const wideSections = computed(() => sections.value.filter((s) => wideTypes.inclu
       </div>
 
       <div class="who">
-        <h1 class="r-name">{{ basics.name }}</h1>
-        <p v-if="basics.jobTitle" class="r-job">{{ basics.jobTitle }}</p>
+        <h1 class="r-name" data-field="name">{{ basics.name }}</h1>
+        <p v-if="basics.jobTitle" class="r-job" data-field="jobTitle">{{ basics.jobTitle }}</p>
 
         <div v-if="basics.fields.length && headerKind === 'center'" class="meta">
           <span v-for="(field, index) in basics.fields" :key="field.id" class="meta-item">
@@ -113,7 +113,7 @@ const wideSections = computed(() => sections.value.filter((s) => wideTypes.inclu
           :data-sec-id="section.id"
           :style="sectionLayoutStyle(section)"
         >
-          <h2 class="r-title">
+          <h2 class="r-title" data-field="sectionTitle">
             <span class="dot"></span>
             <span>{{ section.title }}</span>
             <span class="r-leader"></span>
@@ -135,12 +135,12 @@ const wideSections = computed(() => sections.value.filter((s) => wideTypes.inclu
             <img v-if="basics.avatar" :src="basics.avatar" alt="头像" />
             <SvgIcon v-else name="user" />
           </div>
-          <h1 class="r-name">{{ basics.name }}</h1>
-          <p v-if="basics.jobTitle" class="r-job">{{ basics.jobTitle }}</p>
+          <h1 class="r-name" data-field="name">{{ basics.name }}</h1>
+          <p v-if="basics.jobTitle" class="r-job" data-field="jobTitle">{{ basics.jobTitle }}</p>
         </div>
 
         <section v-if="basics.fields.length && headerKind !== 'banner'" class="r-sec">
-          <h2 class="r-title">
+          <h2 class="r-title" data-field="sectionTitle">
             <span class="dot"></span>
             <span>联系方式</span>
             <span class="r-leader"></span>
@@ -162,7 +162,7 @@ const wideSections = computed(() => sections.value.filter((s) => wideTypes.inclu
           :data-sec-id="section.id"
           :style="sectionLayoutStyle(section)"
         >
-          <h2 class="r-title">
+          <h2 class="r-title" data-field="sectionTitle">
             <span class="dot"></span>
             <span>{{ section.title }}</span>
             <span class="r-leader"></span>
@@ -180,7 +180,7 @@ const wideSections = computed(() => sections.value.filter((s) => wideTypes.inclu
           :data-sec-id="section.id"
           :style="sectionLayoutStyle(section)"
         >
-          <h2 class="r-title">
+          <h2 class="r-title" data-field="sectionTitle">
             <span class="dot"></span>
             <span>{{ section.title }}</span>
             <span class="r-leader"></span>
@@ -201,7 +201,7 @@ const wideSections = computed(() => sections.value.filter((s) => wideTypes.inclu
           :data-sec-id="section.id"
           :style="sectionLayoutStyle(section)"
         >
-          <h2 class="r-title">
+          <h2 class="r-title" data-field="sectionTitle">
             <span class="dot"></span>
             <span>{{ section.title }}</span>
             <span class="r-leader"></span>
@@ -218,7 +218,7 @@ const wideSections = computed(() => sections.value.filter((s) => wideTypes.inclu
           :data-sec-id="section.id"
           :style="sectionLayoutStyle(section)"
         >
-          <h2 class="r-title">
+          <h2 class="r-title" data-field="sectionTitle">
             <span class="dot"></span>
             <span>{{ section.title }}</span>
             <span class="r-leader"></span>

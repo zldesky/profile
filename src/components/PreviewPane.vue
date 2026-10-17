@@ -14,9 +14,11 @@ import {
   watch,
 } from 'vue'
 
+import InlineEditor from '@/components/paper/InlineEditor.vue'
 import PreviewToolbar from '@/components/preview/PreviewToolbar.vue'
 import SelectionToolbar from '@/components/preview/SelectionToolbar.vue'
 import { useAvatarDrag } from '@/composables/useAvatarDrag'
+import { resolveEditTarget } from '@/composables/useInlineEdit'
 import { usePageMetrics } from '@/composables/usePageMetrics'
 import { usePaperSelection } from '@/composables/usePaperSelection'
 import { usePaperJump } from '@/composables/usePaperJump'
@@ -58,17 +60,61 @@ const {
 const { focusSection } = usePaperJump()
 
 /**
+ * 就地编辑：维护「正在编辑哪个字段 + 锚点元素」。
+ *
+ * 锚点用 shallowRef 而非 ref —— 存的是 DOM 元素，被 Vue 代理一层既没必要，
+ * 也会让 getBoundingClientRect 之类的调用绕远路。
+ */
+const editTarget = shallowRef(null)
+const editAnchor = shallowRef(null)
+
+/**
+ * 从被点的元素解析出可编辑字段。命中返回 true（调用方据此不再跳转）。
+ *
+ * 向上找最近的带 data-field 的祖先：点到的是文字节点所在的 span，
+ * 但它可能是 <span data-field> 里的 <img>，所以要向上收敛。
+ */
+function openInlineEdit(node) {
+  const el = node?.closest?.('[data-field]')
+  if (!el) return false
+
+  const sectionEl = el.closest('[data-sec-id]')
+  const entryEl = el.closest('[data-item-id]')
+  const target = resolveEditTarget(store.resume, {
+    sectionId: sectionEl?.dataset.secId || '',
+    field: el.dataset.field || '',
+    // SectionBody 把条目/要点/meta 的 id 挂在最近的 data-item-id 上
+    itemId: el.dataset.itemId || entryEl?.dataset.itemId || '',
+    // 条目本身的 id 挂在 .r-entry 上，要点与 meta 需要它定位父条目
+    entryId: el.closest('.r-entry')?.dataset.itemId || '',
+  })
+  if (!target) return false
+
+  editTarget.value = target
+  editAnchor.value = el
+  // 选中该模块，右侧面板同步高亮，便于改完对照
+  if (sectionEl?.dataset.secId) selection.replace([sectionEl.dataset.secId])
+  return true
+}
+
+function closeInlineEdit() {
+  editTarget.value = null
+  editAnchor.value = null
+  refreshLayout()
+}
+
+/**
  * 纸面模块的操作提示。
  *
- * 光标是 grab（拖动排序仍是纸面上的主要直接操作），但这会让「点一下就能去改」
- * 变得不可见，因此挂个 title 把两个操作都讲清楚。
+ * 光标是 grab（拖动排序仍是纸面上的主要直接操作），但这会让「点文字就能改」
+ * 变得不可见，因此挂个 title 把几个操作都讲清楚。
  * 统一在纸张渲染后由本组件挂到各模板的模块上：12 个模板各写一遍必然会走样，
  * 而且这个提示属于预览区的交互，不属于模板自身的结构。
  *
  * 代价是光标停在纸张空白处也会显示该提示。相比逐模板改造的维护成本，这个取舍更划算；
  * 若以后觉得碍事，改成在 12 个模板里各写一次即可。
  */
-const SECTION_TIP = '点击跳到该模块的编辑卡片，按住拖动可调整顺序'
+const SECTION_TIP = '点文字就地修改 · 点空白处跳到右侧编辑卡片 · 按住拖动可排序'
 
 /**
  * 把提示挂到纸上每个模块。模板切换后 DOM 是新的，所以要重新挂。
@@ -108,7 +154,9 @@ function onPaperPointerDown(event) {
 /**
  * 纸面点击：把「点哪个模块就在哪儿改」接起来。
  *
- * 普通点击 = 只选中该模块并跳到它的编辑卡片。
+ * 普通点击分两种结果：
+ *  - 点到**可编辑的文字**（页头姓名/职位、模块标题、正文、条目各字段）→ 就地弹出编辑框；
+ *  - 点到模块的其它地方 → 只选中该模块，并跳到右侧对应的编辑卡片。
  * 按住 Ctrl/Cmd 时**直接返回，不跳也不动选中集** —— usePaperSelection 的
  * pressSection 已经在 pointerdown 里做了加选/去选；这里若再 toggle 一次，
  * 两次切换互相抵消，多选会彻底失效（此前踩过）。
@@ -123,6 +171,9 @@ function onPaperClick(event) {
   if (secDragging.value) return
   if (event.detail > 1) return
   if (event.ctrlKey || event.metaKey) return
+
+  // 就地编辑优先：文字上有点击锚点时直接改，不再绕去右侧面板
+  if (openInlineEdit(event.target)) return
 
   const hit = event.target.closest?.('.r-sec[data-sec-id]')
   if (!hit) return
@@ -252,6 +303,13 @@ async function compressToOnePage() {
         <component :is="templateComponent" :resume="store.resume" :selected-ids="selection.ids" />
       </div>
     </div>
+
+    <InlineEditor
+      :target="editTarget"
+      :anchor="editAnchor"
+      :boundary="paperRef"
+      @close="closeInlineEdit"
+    />
 
     <div v-if="bandRect" class="sel-band no-print" :style="bandStyle"></div>
 
