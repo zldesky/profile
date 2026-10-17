@@ -9,8 +9,12 @@
  *
  * 因此这里只在需要的测试文件里用 installBrowserGlobals() / uninstallBrowserGlobals()
  * 成对开关，且不引入 jsdom，只补 store 真正用到的那几项：
- *   localStorage、window.addEventListener、document 的 addEventListener /
- *   visibilityState / createElement。
+ *   localStorage、sessionStorage、window.addEventListener、document 的
+ *   addEventListener / visibilityState / createElement。
+ *
+ * sessionStorage 必须一起补：AI 配置的「草稿」与「仅本次会话」两条路都写它，
+ * 少了它会抛 ReferenceError，而调用处是 try/catch 静默降级 —— 测试会「通过」，
+ * 但通过的原因是写入失败了，等于什么都没验证。
  *
  * avatarStore 依赖 IndexedDB，它对缺失已内置降级（isAvailable() 返回 false），
  * 这里刻意不补 indexedDB，顺带覆盖「无 IndexedDB 环境」这条分支。
@@ -109,15 +113,18 @@ function makeEventTarget() {
 
 const saved = {}
 
-/** 安装浏览器全局，返回 localStorage 实例供断言使用 */
+/** 安装浏览器全局，返回 localStorage / sessionStorage 实例供断言使用 */
 export function installBrowserGlobals() {
   const storage = new MemoryStorage()
+  const session = new MemoryStorage()
 
   saved.localStorage = globalThis.localStorage
+  saved.sessionStorage = globalThis.sessionStorage
   saved.window = globalThis.window
   saved.document = globalThis.document
 
   globalThis.localStorage = storage
+  globalThis.sessionStorage = session
   globalThis.window = makeEventTarget()
   globalThis.document = {
     ...makeEventTarget(),
@@ -130,13 +137,13 @@ export function installBrowserGlobals() {
     body: makeElement('body'),
   }
 
-  return { storage, failStorageKey }
+  return { storage, session, failStorageKey }
 }
 
 /** 还原环境，避免污染同进程内的其它测试文件 */
 export function uninstallBrowserGlobals() {
   failingKeys = new Set()
-  for (const key of ['localStorage', 'window', 'document']) {
+  for (const key of ['localStorage', 'sessionStorage', 'window', 'document']) {
     if (saved[key] === undefined) delete globalThis[key]
     else globalThis[key] = saved[key]
     delete saved[key]

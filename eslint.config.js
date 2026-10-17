@@ -90,11 +90,13 @@ export default [
       'tests/resumePersistence.test.js',
       'tests/resumeHistory.test.js',
       'tests/resumeDocuments.test.js',
+      'tests/aiKeyStore.test.js',
     ],
     languageOptions: {
       globals: {
         ...globals.node,
         localStorage: 'readonly',
+        sessionStorage: 'readonly',
         window: 'readonly',
         document: 'readonly',
       },

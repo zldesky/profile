@@ -1,16 +1,32 @@
 <script setup>
 /**
  * AI 服务设置弹窗：用户自带 API Key（BYOK）。
- * 预设覆盖 DeepSeek / 智谱 / Kimi，也支持任意 OpenAI 兼容端点。
- * Key 的存储位置与风险在界面上明示，见 utils/aiKeyStore.js 的安全模型。
+ *
+ * 三个交互上的要点：
+ *  1. **边填边存草稿**：弹窗可能被 Esc、点遮罩或外层弹窗关掉而卸载，
+ *     组件卸载后 setup 里的 ref 就没了。因此每次输入都写一份 sessionStorage 草稿，
+ *     下次打开原样回填 —— 填了一半的 Key 不会因为误关而消失。
+ *  2. **模型可从下拉直接选**：各服务商的常用模型列在预设里，省去手打模型名；
+ *     仍保留手填，因为各家模型上新很快，写死必然过期。
+ *  3. **Esc 只关最上层**：useDialogA11y 需要能追踪的开关（computed），
+ *     传 getter 会导致本弹窗从未登记进 Esc 栈，一次 Esc 连外层弹窗一起关掉。
  */
-import { shallowRef, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, shallowRef, useTemplateRef, watch } from 'vue'
 
 import SvgIcon from '@/components/SvgIcon.vue'
-import { useDialogA11y } from '@/composables/useDialogA11y'
+import { useDialogA11y } from '@/composables/useDialogA11y.ts'
 import { useToast } from '@/composables/useToast'
 import { aiChat } from '@/utils/aiClient'
-import { AI_PRESETS, clearAISettings, loadAISettings, saveAISettings } from '@/utils/aiKeyStore'
+import {
+  AI_PRESETS,
+  clearAIDraft,
+  clearAISettings,
+  loadAIDraft,
+  loadAISettings,
+  presetById,
+  saveAIDraft,
+  saveAISettings,
+} from '@/utils/aiKeyStore'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -21,11 +37,9 @@ const emit = defineEmits(['close', 'saved'])
 const { toast } = useToast()
 
 const cardRef = useTemplateRef('cardRef')
-useDialogA11y(
-  () => props.open,
-  cardRef,
-  () => emit('close'),
-)
+/** 必须是能追踪的 Ref：传 getter 的话 useDialogA11y 的 watch 只求值一次，弹窗不会进 Esc 栈 */
+const isOpen = computed(() => props.open)
+useDialogA11y(isOpen, cardRef, () => emit('close'))
 
 const presetId = shallowRef('deepseek')
 const baseUrl = shallowRef('')
@@ -35,29 +49,88 @@ const remember = shallowRef(true)
 const showKey = shallowRef(false)
 const testing = shallowRef(false)
 const keyReady = shallowRef(false)
+/** 是否手填模型名（选「自定义模型」时）。为 false 时模型用下拉选择 */
+const customModel = shallowRef(false)
+/** 当前表单内容是否来自未保存的草稿，界面据此提示 */
+const fromDraft = shallowRef(false)
 
-// 每次打开都回填当前配置，避免上一次的半截输入被误保存
+const preset = computed(() => presetById(presetId.value))
+/** 当前服务商可选的内置模型；「自定义」预设没有候选，直接手填 */
+const modelOptions = computed(() => preset.value.models || [])
+const isCustomPreset = computed(() => presetId.value === 'custom')
+
+/**
+ * 回填优先级：草稿 > 已保存配置 > 预设默认值。
+ * 草稿在前是因为它的含义就是「上次没填完的东西」。
+ */
+function fillForm() {
+  const saved = loadAISettings()
+  const draft = loadAIDraft()
+
+  if (draft) {
+    presetId.value = presetById(draft.presetId).id
+    baseUrl.value = draft.baseUrl ?? ''
+    model.value = draft.model ?? ''
+    apiKey.value = draft.apiKey ?? ''
+    remember.value = draft.remember !== false
+    fromDraft.value = true
+  } else {
+    presetId.value = saved
+      ? AI_PRESETS.find((p) => p.baseUrl === saved.baseUrl)?.id || 'custom'
+      : AI_PRESETS[0].id
+    const source = saved || AI_PRESETS[0]
+    baseUrl.value = source.baseUrl || ''
+    model.value = source.model || ''
+    apiKey.value = saved?.apiKey || ''
+    remember.value = saved ? saved.remember : true
+    fromDraft.value = false
+  }
+
+  keyReady.value = Boolean(saved?.apiKey)
+  // 模型不在候选里（例如手填过）时切到手填，否则下拉会显示成空
+  customModel.value = !(presetById(presetId.value).models || []).includes(model.value)
+  showKey.value = false
+}
+
 watch(
   () => props.open,
   (open) => {
-    if (!open) return
-    const saved = loadAISettings()
-    baseUrl.value = saved?.baseUrl || AI_PRESETS[0].baseUrl
-    model.value = saved?.model || AI_PRESETS[0].model
-    apiKey.value = saved?.apiKey || ''
-    remember.value = saved ? saved.remember : true
-    keyReady.value = Boolean(saved?.apiKey)
-    presetId.value = AI_PRESETS.find((p) => p.baseUrl === baseUrl.value)?.id || 'custom'
-    showKey.value = false
+    if (open) fillForm()
   },
 )
 
+/** 统一入口：模板各输入框的 @input 都走它，省去为 5 个字段各写一个 watch */
+function persistDraft() {
+  saveAIDraft({
+    presetId: presetId.value,
+    baseUrl: baseUrl.value,
+    model: model.value,
+    apiKey: apiKey.value,
+    remember: remember.value,
+  })
+  fromDraft.value = true
+}
+
+/** 换服务商：填入该家默认地址与模型 */
 function applyPreset() {
-  const preset = AI_PRESETS.find((p) => p.id === presetId.value)
-  if (preset && preset.baseUrl) {
-    baseUrl.value = preset.baseUrl
-    model.value = preset.model
+  const picked = presetById(presetId.value)
+  if (picked.baseUrl) {
+    baseUrl.value = picked.baseUrl
+    model.value = picked.model
   }
+  // 自定义预设没有候选模型，直接进入手填
+  customModel.value = !picked.models?.length
+  persistDraft()
+}
+
+/**
+ * 在「下拉选模型」与「手填模型名」之间切换。
+ * 抽成函数而不是写在模板里：模板的行内处理器必须保持单条语句，
+ * 多语句被 Prettier 折行后 Vue 编译器会直接解析失败（npm run build 会炸）。
+ */
+function toggleCustomModel() {
+  customModel.value = !customModel.value
+  persistDraft()
 }
 
 async function saveAndTest() {
@@ -84,6 +157,9 @@ async function saveAndTest() {
       apiKey: apiKey.value.trim(),
       remember: remember.value,
     })
+    // 已正式保存，草稿的使命结束
+    clearAIDraft()
+    fromDraft.value = false
     keyReady.value = true
     toast(`连接成功，配置已保存${remember.value ? '' : '（仅本次会话有效）'}`)
     emit('saved')
@@ -102,13 +178,30 @@ function forget() {
   clearAISettings()
   apiKey.value = ''
   keyReady.value = false
+  fromDraft.value = false
   toast('已清除本机保存的 Key')
 }
+
+/** 关掉前把当前输入存成草稿：无论怎么关（Esc / 遮罩 / 关闭按钮）都不丢 */
+function close() {
+  persistDraft()
+  emit('close')
+}
+
+/** 打开后把光标落到第一个空字段，省一次点击 */
+watch(isOpen, async (open) => {
+  if (!open) return
+  await nextTick()
+  const card = cardRef.value
+  if (!card) return
+  const empty = [...card.querySelectorAll('input')].find((el) => !el.value)
+  if (empty) empty.focus()
+})
 </script>
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="ai-mask" @click.self="emit('close')">
+    <div v-if="open" class="ai-mask" @click.self="close">
       <div
         ref="cardRef"
         class="ai-card"
@@ -119,7 +212,7 @@ function forget() {
       >
         <div class="ai-head">
           <h3 class="ai-title">AI 服务设置</h3>
-          <button class="ai-close" title="关闭" aria-label="关闭" @click="emit('close')">
+          <button class="ai-close" title="关闭" aria-label="关闭" @click="close">
             <SvgIcon name="close" :size="14" />
           </button>
         </div>
@@ -127,8 +220,8 @@ function forget() {
         <label class="ai-field">
           <span>服务商</span>
           <select v-model="presetId" class="ed-select" @change="applyPreset">
-            <option v-for="preset in AI_PRESETS" :key="preset.id" :value="preset.id">
-              {{ preset.label }}
+            <option v-for="item in AI_PRESETS" :key="item.id" :value="item.id">
+              {{ item.label }}
             </option>
           </select>
         </label>
@@ -141,12 +234,40 @@ function forget() {
             type="url"
             placeholder="https://api.deepseek.com"
             spellcheck="false"
+            @input="persistDraft"
           />
         </label>
 
         <label class="ai-field">
           <span>模型</span>
-          <input v-model="model" class="ed-input" placeholder="deepseek-chat" spellcheck="false" />
+          <span class="ai-model-row">
+            <select
+              v-if="!customModel && modelOptions.length"
+              v-model="model"
+              class="ed-select"
+              @change="persistDraft"
+            >
+              <option v-for="name in modelOptions" :key="name" :value="name">{{ name }}</option>
+            </select>
+            <input
+              v-else
+              v-model="model"
+              class="ed-input"
+              placeholder="deepseek-chat"
+              spellcheck="false"
+              @input="persistDraft"
+            />
+            <button
+              v-if="modelOptions.length"
+              class="ed-icon-btn"
+              type="button"
+              :title="customModel ? '从列表选择' : '手动输入模型名'"
+              :aria-label="customModel ? '从列表选择模型' : '手动输入模型名'"
+              @click="toggleCustomModel"
+            >
+              <SvgIcon :name="customModel ? 'layout' : 'text'" :size="14" />
+            </button>
+          </span>
         </label>
 
         <label class="ai-field">
@@ -156,9 +277,10 @@ function forget() {
               v-model="apiKey"
               class="ed-input"
               :type="showKey ? 'text' : 'password'"
-              placeholder="sk-…"
+              :placeholder="isCustomPreset ? 'sk-…' : '粘贴该服务商的 API Key'"
               autocomplete="off"
               spellcheck="false"
+              @input="persistDraft"
             />
             <button
               class="ed-icon-btn"
@@ -173,9 +295,14 @@ function forget() {
         </label>
 
         <label class="ed-toggle">
-          <input v-model="remember" type="checkbox" class="ed-check" />
+          <input v-model="remember" type="checkbox" class="ed-check" @change="persistDraft" />
           <span>记住密钥（保存到本机浏览器，下次免输入）</span>
         </label>
+
+        <p v-if="fromDraft && !keyReady" class="ai-draft-hint">
+          <SvgIcon name="clock" :size="13" />
+          <span>已恢复上次未保存的内容，点「保存并测试」后才会生效。</span>
+        </p>
 
         <p class="ed-hint">
           Key 只保存在你自己的浏览器里（{{ remember ? 'localStorage' : '仅当前会话' }}），
@@ -265,14 +392,37 @@ function forget() {
   font-size: 12.5px;
 }
 
-.ai-key-row {
+.ai-key-row,
+.ai-model-row {
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
-.ai-key-row .ed-input {
+.ai-key-row .ed-input,
+.ai-model-row .ed-input,
+.ai-model-row .ed-select {
   flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 草稿提示：琥珀色，与「软校验警告」同一语气 */
+.ai-draft-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: var(--ed-warn-tint);
+  color: var(--ed-warn);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.ai-draft-hint :deep(.svg-icon) {
+  flex: 0 0 auto;
+  margin-top: 2px;
 }
 
 .ai-actions {
