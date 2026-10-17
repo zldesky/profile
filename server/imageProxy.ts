@@ -25,8 +25,23 @@ export const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 const FETCH_TIMEOUT = 8000
 const MAX_REDIRECTS = 3
 
+/** 主机名解析函数：返回该主机的全部地址（DNS 可能有多条记录，需逐个校验） */
+export type LookupFn = (host: string) => Promise<Array<{ address: string }>>
+
+/** 可注入的依赖，便于在 Node 下直测而不真的联网 */
+export interface FetchRemoteImageDeps {
+  fetchImpl?: typeof fetch
+  lookup?: LookupFn
+}
+
+export interface RemoteImage {
+  dataUrl: string
+  contentType: string
+  bytes: number
+}
+
 /** 校验 IP 是否公网单播地址；回环 / 内网 / 保留段一律拒绝 */
-export function isPublicIp(ip) {
+export function isPublicIp(ip: string): boolean {
   const version = net.isIP(ip)
   if (version === 4) {
     const [a, b] = ip.split('.').map(Number)
@@ -50,18 +65,18 @@ export function isPublicIp(ip) {
 
 /**
  * 校验目标主机可访问：主机名解析出的所有地址都必须是公网 IP。
- * @param {string} hostname 域名或 IP 字面量
- * @param {(host: string) => Promise<Array<{address: string}>>} [lookup] 注入的解析函数
+ * @param hostname 域名或 IP 字面量
+ * @param lookup 注入的解析函数（默认走真实 DNS）
  */
 export async function assertPublicHost(
-  hostname,
-  lookup = (host) => dns.lookup(host, { all: true, verbatim: true }),
-) {
+  hostname: string,
+  lookup: LookupFn = (host) => dns.lookup(host, { all: true, verbatim: true }),
+): Promise<void> {
   if (net.isIP(hostname)) {
     if (!isPublicIp(hostname)) throw new Error('目标地址不允许访问')
     return
   }
-  let addresses
+  let addresses: Array<{ address: string }>
   try {
     addresses = await lookup(hostname)
   } catch {
@@ -72,7 +87,7 @@ export async function assertPublicHost(
   }
 }
 
-function parseTarget(rawUrl) {
+function parseTarget(rawUrl: string): URL {
   let url
   try {
     url = new URL(rawUrl)
@@ -87,9 +102,9 @@ function parseTarget(rawUrl) {
 }
 
 /** 流式读取响应体，超过上限立即断开，避免大响应占满内存 */
-async function readBodyWithCap(response) {
-  const reader = response.body.getReader()
-  const chunks = []
+async function readBodyWithCap(response: Response): Promise<Buffer> {
+  const reader = response.body!.getReader()
+  const chunks: Uint8Array[] = []
   let received = 0
   for (;;) {
     const { done, value } = await reader.read()
@@ -106,16 +121,18 @@ async function readBodyWithCap(response) {
 
 /**
  * 抓取远程图片并转为 data URL，供前端无污染地绘制到 Canvas。
- * @param {string} rawUrl 图片链接
- * @param {{ fetchImpl?: typeof fetch, lookup?: (host: string) => Promise<Array<{address: string}>> }} [deps]
- * @returns {Promise<{ dataUrl: string, contentType: string, bytes: number }>}
+ * @param rawUrl 图片链接
+ * @param deps 可注入的 fetch / lookup，便于测试
  */
-export async function fetchRemoteImage(rawUrl, { fetchImpl = fetch, lookup } = {}) {
+export async function fetchRemoteImage(
+  rawUrl: string,
+  { fetchImpl = fetch, lookup }: FetchRemoteImageDeps = {},
+): Promise<RemoteImage> {
   let target = parseTarget(rawUrl)
   await assertPublicHost(target.hostname, lookup)
 
   for (let redirects = 0; ; redirects++) {
-    let response
+    let response: Response
     try {
       response = await fetchImpl(target, {
         redirect: 'manual',
@@ -123,7 +140,9 @@ export async function fetchRemoteImage(rawUrl, { fetchImpl = fetch, lookup } = {
         headers: { accept: 'image/*' },
       })
     } catch (error) {
-      if (error.name === 'TimeoutError') throw new Error('下载超时', { cause: error })
+      if (error instanceof Error && error.name === 'TimeoutError') {
+        throw new Error('下载超时', { cause: error })
+      }
       throw new Error('下载失败：网络不可达', { cause: error })
     }
 

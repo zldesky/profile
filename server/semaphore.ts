@@ -10,14 +10,35 @@
  * Node 单线程下 acquire/release 都是同步段，不存在竞态。
  */
 
-/**
- * @param {object} options
- * @param {number} options.concurrency 同时执行的渲染上限
- * @param {number} options.maxQueue 排队上限，超过直接拒绝
- * @param {number} [options.queueTimeoutMs] 排队等待上限
- * @returns {{ run<T>(task: () => Promise<T>): Promise<T>, stats: () => { active: number, queued: number } }}
- */
-export function createSemaphore({ concurrency, maxQueue, queueTimeoutMs = 10000 }) {
+/** 带 HTTP 状态码的错误：路由层据此直接回 429，不必再判断错误类型 */
+export interface HttpError extends Error {
+  statusCode: number
+}
+
+export interface SemaphoreOptions {
+  /** 同时执行的渲染上限 */
+  concurrency: number
+  /** 排队上限，超过直接拒绝 */
+  maxQueue: number
+  /** 排队等待上限（毫秒），默认 10 秒 */
+  queueTimeoutMs?: number
+}
+
+export interface SemaphoreStats {
+  active: number
+  queued: number
+}
+
+export interface Semaphore {
+  run<T>(task: () => Promise<T>): Promise<T>
+  stats: () => SemaphoreStats
+}
+
+export function createSemaphore({
+  concurrency,
+  maxQueue,
+  queueTimeoutMs = 10000,
+}: SemaphoreOptions): Semaphore {
   if (!Number.isInteger(concurrency) || concurrency < 1) {
     throw new Error(`并发上限非法：${concurrency}`)
   }
@@ -26,10 +47,10 @@ export function createSemaphore({ concurrency, maxQueue, queueTimeoutMs = 10000 
   }
 
   let active = 0
-  /** @type {Array<{ resolve: () => void, timer: NodeJS.Timeout }>} */
-  const waiters = []
+  /** 排队中的任务：resolve 用来把槽位直接移交过去，timer 用来做超时放弃 */
+  const waiters: Array<{ resolve: () => void; timer: NodeJS.Timeout }> = []
 
-  function dequeue() {
+  function dequeue(): void {
     const next = waiters.shift()
     if (!next) {
       active -= 1
@@ -40,15 +61,16 @@ export function createSemaphore({ concurrency, maxQueue, queueTimeoutMs = 10000 
     next.resolve()
   }
 
-  function acquire() {
+  function acquire(): Promise<void> {
     if (active < concurrency) {
       active += 1
       return Promise.resolve()
     }
 
     if (waiters.length >= maxQueue) {
-      const error = new Error('渲染排队已满，请稍后再试')
-      error.statusCode = 429
+      const error: HttpError = Object.assign(new Error('渲染排队已满，请稍后再试'), {
+        statusCode: 429,
+      })
       return Promise.reject(error)
     }
 
@@ -56,8 +78,9 @@ export function createSemaphore({ concurrency, maxQueue, queueTimeoutMs = 10000 
       const timer = setTimeout(() => {
         const index = waiters.findIndex((waiter) => waiter.resolve === resolve)
         if (index >= 0) waiters.splice(index, 1)
-        const timeout = new Error('渲染排队超时，请稍后再试')
-        timeout.statusCode = 429
+        const timeout: HttpError = Object.assign(new Error('渲染排队超时，请稍后再试'), {
+          statusCode: 429,
+        })
         reject(timeout)
       }, queueTimeoutMs)
 
@@ -65,13 +88,8 @@ export function createSemaphore({ concurrency, maxQueue, queueTimeoutMs = 10000 
     })
   }
 
-  /**
-   * 在并发闸门内执行任务。任务抛错时槽位照常归还。
-   * @template T
-   * @param {() => Promise<T>} task
-   * @returns {Promise<T>}
-   */
-  async function run(task) {
+  /** 在并发闸门内执行任务。任务抛错时槽位照常归还 */
+  async function run<T>(task: () => Promise<T>): Promise<T> {
     await acquire()
     try {
       return await task()
@@ -80,7 +98,7 @@ export function createSemaphore({ concurrency, maxQueue, queueTimeoutMs = 10000 
     }
   }
 
-  function stats() {
+  function stats(): SemaphoreStats {
     return { active, queued: waiters.length }
   }
 

@@ -16,7 +16,7 @@
  */
 import crypto from 'node:crypto'
 
-import { safeEqual } from './auth.js'
+import { safeEqual } from './auth.ts'
 
 /** 视图盒尺寸：前端按此等比缩放渲染，坐标换算见 SliderCaptcha 组件 */
 export const VIEW_WIDTH = 320
@@ -28,16 +28,46 @@ const KNOB_RADIUS = 8
 const MIN_X = 20
 const MAX_X = VIEW_WIDTH - PIECE_SIZE - 20
 
+export interface CaptchaOptions {
+  /** HMAC 密钥；留空则每次启动随机生成 */
+  secret?: string
+  /** 挑战有效期（毫秒） */
+  ttlMs?: number
+  /** 通过令牌有效期（毫秒） */
+  passTtlMs?: number
+  /** 拖动结果与缺口坐标的容差 */
+  tolerance?: number
+  /** 未完成挑战的内存上限，防刷爆 */
+  maxPending?: number
+  /** 缺口横向坐标（测试注入用） */
+  randomX?: () => number
+  /** 缺口纵向坐标（测试注入用） */
+  randomY?: () => number
+}
+
+export interface CaptchaChallenge {
+  id: string
+  exp: number
+  width: number
+  height: number
+  pieceY: number
+  background: string
+  piece: string
+}
+
+/** 校验结果：成功给出一次性令牌，失败给出可区分的原因 */
+export type CaptchaVerifyResult =
+  { ok: true; token: string } | { ok: false; reason: 'invalid' | 'expired' | 'mismatch' }
+
+export interface Captcha {
+  challenge: () => CaptchaChallenge
+  verify: (id: string, answerX: number) => CaptchaVerifyResult
+  consume: (token: string) => boolean
+}
+
 /**
  * 创建验证码实例。
- * @param {object} [options]
- * @param {string} [options.secret] HMAC 密钥；留空则每次启动随机生成
- * @param {number} [options.ttlMs] 挑战有效期
- * @param {number} [options.passTtlMs] 通过令牌有效期
- * @param {number} [options.tolerance] 拖动结果与缺口坐标的容差
- * @param {number} [options.maxPending] 未完成挑战的内存上限，防刷爆
- * @param {() => number} [options.randomX] 缺口横向坐标（测试注入用）
- * @param {() => number} [options.randomY] 缺口纵向坐标（测试注入用）
+ * 依赖全部可注入，因此不需要真实 HTTP 或时间流逝即可测试。
  */
 export function createCaptcha({
   secret = '',
@@ -47,19 +77,19 @@ export function createCaptcha({
   maxPending = 5000,
   randomX = () => crypto.randomInt(MIN_X, MAX_X + 1),
   randomY = () => crypto.randomInt(14, VIEW_HEIGHT - PIECE_SIZE - 14),
-} = {}) {
+}: CaptchaOptions = {}): Captcha {
   const key = Buffer.from(secret.trim() || crypto.randomBytes(32).toString('hex'))
 
-  /** @type {Map<string, { x: number, exp: number }>} 挑战 id → 缺口坐标 */
-  const pending = new Map()
-  /** @type {Map<string, number>} 通过令牌 jti → 过期时间（一次性凭证） */
-  const passed = new Map()
+  /** 挑战 id → 缺口坐标与过期时间 */
+  const pending = new Map<string, { x: number; exp: number }>()
+  /** 通过令牌 jti → 过期时间（一次性凭证） */
+  const passed = new Map<string, number>()
 
-  function sign(payload) {
+  function sign(payload: string): string {
     return crypto.createHmac('sha256', key).update(payload).digest('base64url')
   }
 
-  function sweep(now) {
+  function sweep(now: number): void {
     for (const [id, entry] of pending) if (entry.exp <= now) pending.delete(id)
     for (const [jti, exp] of passed) if (exp <= now) passed.delete(jti)
   }
@@ -69,13 +99,15 @@ export function createCaptcha({
    * 背景与拼图块共用，块内用 clipPath 裁出缺口对应区域——
    * 拖到缺口横向位置时内容恰好对齐。
    */
-  function challenge() {
+  function challenge(): CaptchaChallenge {
     const now = Date.now()
     sweep(now)
 
     // 超过内存上限就丢掉最早的挑战：刷挑战接口烧不掉服务端内存
     if (pending.size >= maxPending) {
-      pending.delete(pending.keys().next().value)
+      // size >= maxPending 且 maxPending >= 1，所以一定有键；断言只是把这个前提写给类型系统
+      const oldest = pending.keys().next().value as string
+      pending.delete(oldest)
     }
 
     const id = crypto.randomBytes(12).toString('base64url')
@@ -157,7 +189,8 @@ export function createCaptcha({
       `</g>` +
       `</svg>`
 
-    const toDataUri = (svg) => `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
+    const toDataUri = (svg: string): string =>
+      `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
 
     return {
       id,
@@ -173,11 +206,10 @@ export function createCaptcha({
   /**
    * 校验拖动结果。挑战无论成败都立刻作废：每个 id 只有一次机会，
    * 爆破只能靠不断拉新挑战，成本被容差与请求量天然抬高。
-   * @param {string} id 挑战 id
-   * @param {number} answerX 前端换算到视图盒坐标的横向位置
-   * @returns {{ ok: true, token: string } | { ok: false, reason: 'invalid' | 'expired' | 'mismatch' }}
+   * @param id 挑战 id
+   * @param answerX 前端换算到视图盒坐标的横向位置
    */
-  function verify(id, answerX) {
+  function verify(id: string, answerX: number): CaptchaVerifyResult {
     const now = Date.now()
 
     // 先取出并作废本次挑战，再清理其余过期的：
@@ -207,9 +239,9 @@ export function createCaptcha({
   /**
    * 消费通过令牌：签名不符、已过期、已用过都返回 false。
    * 在注册这类有副作用的接口里调用，验证通过一次只放行一次。
-   * @param {string} token verify 签发的令牌
+   * @param token verify 签发的令牌
    */
-  function consume(token) {
+  function consume(token: string): boolean {
     const parts = String(token || '').split('.')
     if (parts.length !== 3) return false
 
