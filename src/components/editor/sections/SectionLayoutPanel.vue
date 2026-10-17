@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 模块的位置与对齐设置，对所有模块类型生效。
  * 只负责布局项，不涉及模块内容。
@@ -9,10 +9,9 @@ import SvgIcon from '@/components/SvgIcon.vue'
 import { DEFAULT_SECTION_LAYOUT } from '@/data/defaultResume'
 import { SECTION_ALIGN_OPTIONS, SECTION_COLUMN_OPTIONS } from '@/data/presets'
 import { useResumeStore } from '@/stores/resume'
+import type { Section } from '@/types/resume'
 
-const props = defineProps({
-  section: { type: Object, required: true },
-})
+const props = defineProps<{ section: Section }>()
 
 const store = useResumeStore()
 const open = shallowRef(false)
@@ -23,7 +22,7 @@ const layout = computed(() => ({ ...DEFAULT_SECTION_LAYOUT, ...(props.section.la
 /** 列数只对键值网格与技能进度条有意义 */
 const showColumns = computed(() => ['grid', 'skills'].includes(props.section.type))
 
-function setLayout(patch) {
+function setLayout(patch: Record<string, unknown>): void {
   store.updateSectionLayout(props.section.id, patch)
 }
 
@@ -62,7 +61,7 @@ function resetLayout() {
           max="48"
           step="1"
           :value="layout.indent"
-          @input="setLayout({ indent: Number($event.target.value) })"
+          @input="setLayout({ indent: Number(($event.target as HTMLInputElement).value) })"
         />
         <span class="ed-value">{{ layout.indent }}px</span>
       </label>
@@ -76,7 +75,7 @@ function resetLayout() {
           max="48"
           step="1"
           :value="layout.extraGap"
-          @input="setLayout({ extraGap: Number($event.target.value) })"
+          @input="setLayout({ extraGap: Number(($event.target as HTMLInputElement).value) })"
         />
         <span class="ed-value">{{ layout.extraGap }}px</span>
       </label>

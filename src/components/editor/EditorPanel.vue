@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 右侧编辑面板外壳，负责「内容 / 设计」两个页签的切换。
  */

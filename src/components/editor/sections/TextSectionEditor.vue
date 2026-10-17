@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 段落文本编辑：自我评价、个人总结等。
  * 「AI 润色」整段改写：用户自带 Key，确认后才应用。
@@ -9,17 +9,16 @@ import AIPolishDialog from '@/components/AIPolishDialog.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
+import type { TextSection } from '@/types/resume'
 
-const props = defineProps({
-  section: { type: Object, required: true },
-})
+const props = defineProps<{ section: TextSection }>()
 
 const store = useResumeStore()
 const { toast } = useToast()
 
 const polishOpen = shallowRef(false)
 
-function applyPolish(text) {
+function applyPolish(text: string): void {
   store.updateSection(props.section.id, { content: text })
   toast('已应用润色结果，Ctrl+Z 可撤销')
 }
@@ -42,7 +41,9 @@ function applyPolish(text) {
       class="ed-textarea ed-para-input"
       :value="section.content"
       placeholder="填写段落内容"
-      @input="store.updateSection(section.id, { content: $event.target.value })"
+      @input="
+        store.updateSection(section.id, { content: ($event.target as HTMLInputElement).value })
+      "
     ></textarea>
     <p class="ed-hint">支持换行，预览与打印会保留换行效果。</p>
 

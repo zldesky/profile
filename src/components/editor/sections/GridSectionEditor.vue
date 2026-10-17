@@ -1,18 +1,18 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 键值网格内容编辑：求职意向、荣誉奖项、证书、作品集等。
  */
 import SvgIcon from '@/components/SvgIcon.vue'
 import { ICON_OPTIONS } from '@/data/presets'
 import { useResumeStore } from '@/stores/resume'
+import type { GridSection } from '@/types/resume'
 
-const props = defineProps({
-  section: { type: Object, required: true },
-})
+const props = defineProps<{ section: GridSection }>()
 
 const store = useResumeStore()
 
-const updateItem = (itemId, patch) => store.updateGridItem(props.section.id, itemId, patch)
+const updateItem = (itemId: string, patch: Record<string, unknown>): void =>
+  store.updateGridItem(props.section.id, itemId, patch)
 </script>
 
 <template>
@@ -24,7 +24,7 @@ const updateItem = (itemId, patch) => store.updateGridItem(props.section.id, ite
         <select
           class="ed-select ed-icon-select"
           :value="item.icon"
-          @change="updateItem(item.id, { icon: $event.target.value })"
+          @change="updateItem(item.id, { icon: ($event.target as HTMLInputElement).value })"
         >
           <option v-for="option in ICON_OPTIONS" :key="option.value" :value="option.value">
             {{ option.label }}
@@ -34,7 +34,7 @@ const updateItem = (itemId, patch) => store.updateGridItem(props.section.id, ite
           class="ed-input"
           :value="item.label"
           placeholder="标签"
-          @input="updateItem(item.id, { label: $event.target.value })"
+          @input="updateItem(item.id, { label: ($event.target as HTMLInputElement).value })"
         />
         <button
           class="ed-icon-btn danger"
@@ -48,7 +48,7 @@ const updateItem = (itemId, patch) => store.updateGridItem(props.section.id, ite
         class="ed-input"
         :value="item.value"
         placeholder="内容"
-        @input="updateItem(item.id, { value: $event.target.value })"
+        @input="updateItem(item.id, { value: ($event.target as HTMLInputElement).value })"
       />
     </div>
 

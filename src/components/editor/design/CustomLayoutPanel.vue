@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 自由定制模板的布局参数面板。
  * 仅在模板切到「自由定制」时显示，参数存于 theme.customLayout，
@@ -14,7 +14,7 @@ const store = useResumeStore()
 const visible = computed(() => store.resume.template === 'custom')
 const layout = computed(() => store.theme.customLayout)
 
-function set(key, value) {
+function set(key: string, value: unknown): void {
   store.setTheme({ customLayout: { ...store.theme.customLayout, [key]: value } })
 }
 </script>

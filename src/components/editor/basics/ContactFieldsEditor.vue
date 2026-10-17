@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 联系方式字段列表：图标、字段名与内容的增删改。
  * 内容按字段名语义做软校验（邮箱/电话/链接），只在琥珀色提示，不阻止输入。
@@ -12,11 +12,12 @@ import { contactFieldIssue } from '@/utils/validators'
 
 const store = useResumeStore()
 
-const updateField = (fieldId, patch) => store.updateBasicsField(fieldId, patch)
+const updateField = (fieldId: string, patch: Record<string, unknown>): void =>
+  store.updateBasicsField(fieldId, patch)
 
 /** 每个字段的格式警告文案，'' 表示没问题 */
 const fieldIssues = computed(() => {
-  const map = {}
+  const map: Record<string, string> = {}
   store.basics.fields.forEach((field) => {
     map[field.id] = contactFieldIssue(field.label, field.value)
   })
@@ -40,7 +41,7 @@ const fieldIssues = computed(() => {
         <select
           class="ed-select ed-icon-select"
           :value="field.icon"
-          @change="updateField(field.id, { icon: $event.target.value })"
+          @change="updateField(field.id, { icon: ($event.target as HTMLInputElement).value })"
         >
           <option v-for="option in ICON_OPTIONS" :key="option.value" :value="option.value">
             {{ option.label }}
@@ -50,7 +51,7 @@ const fieldIssues = computed(() => {
           class="ed-input field-label"
           :value="field.label"
           placeholder="字段名"
-          @input="updateField(field.id, { label: $event.target.value })"
+          @input="updateField(field.id, { label: ($event.target as HTMLInputElement).value })"
         />
         <button
           class="ed-icon-btn danger"
@@ -65,7 +66,7 @@ const fieldIssues = computed(() => {
         :class="{ 'is-warn': fieldIssues[field.id] }"
         :value="field.value"
         placeholder="字段内容"
-        @input="updateField(field.id, { value: $event.target.value })"
+        @input="updateField(field.id, { value: ($event.target as HTMLInputElement).value })"
       />
       <p v-if="fieldIssues[field.id]" class="ed-warn-hint">{{ fieldIssues[field.id] }}</p>
     </div>

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 单个简历模块卡片：标题重命名、显隐、排序、复制、删除，展开后编辑内容。
  * 展开状态由父级持有，便于新增模块后自动展开。
@@ -7,9 +7,11 @@ import SectionEditor from '@/components/editor/SectionEditor.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { useResumeStore } from '@/stores/resume'
 import { useSelectionStore } from '@/stores/selection'
+import type { PropType } from 'vue'
+import type { Section } from '@/types/resume'
 
 const props = defineProps({
-  section: { type: Object, required: true },
+  section: { type: Object as PropType<Section>, required: true },
   index: { type: Number, required: true },
   total: { type: Number, required: true },
   open: { type: Boolean, default: false },
@@ -41,7 +43,9 @@ const toggleVisible = () =>
         class="ed-card-title"
         :value="section.title"
         title="点击可重命名模块"
-        @input="store.updateSection(section.id, { title: $event.target.value })"
+        @input="
+          store.updateSection(section.id, { title: ($event.target as HTMLInputElement).value })
+        "
       />
 
       <button

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 条目列表编辑：教育背景、工作经历、项目经历、校园经历等。
  * 每段经历交给 ExperienceEntryEditor，本组件只负责模块级开关与列表编排。
@@ -6,10 +6,9 @@
 import SvgIcon from '@/components/SvgIcon.vue'
 import ExperienceEntryEditor from '@/components/editor/sections/ExperienceEntryEditor.vue'
 import { useResumeStore } from '@/stores/resume'
+import type { EntriesSection } from '@/types/resume'
 
-defineProps({
-  section: { type: Object, required: true },
-})
+defineProps<{ section: EntriesSection }>()
 
 const store = useResumeStore()
 </script>
@@ -21,7 +20,9 @@ const store = useResumeStore()
         class="ed-check"
         type="checkbox"
         :checked="section.showLogo"
-        @change="store.updateSection(section.id, { showLogo: $event.target.checked })"
+        @change="
+          store.updateSection(section.id, { showLogo: ($event.target as HTMLInputElement).checked })
+        "
       />
       <span>显示机构图标（校徽 / 公司 logo）</span>
     </label>

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 配色：主色预设、主色与文字色的自定义取色。
  */
@@ -12,7 +12,7 @@ const store = useResumeStore()
 /** 预设色板高亮：忽略大小写差异 */
 const activePreset = computed(() => store.theme.accent.toLowerCase())
 
-function isPresetActive(color) {
+function isPresetActive(color: string): boolean {
   return activePreset.value === color.toLowerCase()
 }
 </script>
@@ -41,7 +41,7 @@ function isPresetActive(color) {
         class="ed-color"
         type="color"
         :value="store.theme.accent"
-        @input="store.setTheme({ accent: $event.target.value })"
+        @input="store.setTheme({ accent: ($event.target as HTMLInputElement).value })"
       />
       <span class="color-text">{{ store.theme.accent }}</span>
     </label>
@@ -52,7 +52,7 @@ function isPresetActive(color) {
         class="ed-color"
         type="color"
         :value="store.theme.text"
-        @input="store.setTheme({ text: $event.target.value })"
+        @input="store.setTheme({ text: ($event.target as HTMLInputElement).value })"
       />
       <span class="color-text">{{ store.theme.text }}</span>
     </label>
