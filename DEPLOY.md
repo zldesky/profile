@@ -22,7 +22,7 @@
 npm install
 
 # 2. 应用服务依赖（独立 package.json，必须单独装；
-#    npm run pdf 以 server/index.js 为入口，模块从 server/node_modules 解析）
+#    npm run pdf 以 server/index.ts 为入口，模块从 server/node_modules 解析）
 cd server && npm install && cd ..
 
 # 3. 可选：配置。复制模板为 .env，按需修改
@@ -142,7 +142,7 @@ After=network.target
 Type=simple
 User=deploy
 WorkingDirectory=/opt/vue-project
-ExecStart=/usr/bin/node --env-file-if-exists=.env server/index.js
+ExecStart=/usr/bin/node --env-file-if-exists=.env server/index.ts
 Restart=on-failure
 Environment=HOST=127.0.0.1
 Environment=TRUST_PROXY=1

@@ -25,7 +25,7 @@ export interface MinimalRequest {
   method?: string
   path?: string
   secure?: boolean
-  get: (name: string) => string | undefined
+  get: (name: string) => unknown
   /** 由 requireAuth 写入的登录态 */
   auth?: AuthInfo
 }
@@ -42,13 +42,17 @@ export interface MinimalResponse {
 
 export type NextFn = () => void
 
-/** 登录态：会话登录带 userId；脚本口令通道没有用户 */
-export interface AuthInfo {
-  kind: 'session' | 'bearer'
-  token?: string
-  userId: number | null
-  subject: string
-}
+/**
+ * 登录态。
+ *
+ * 刻意写成可辨识联合而不是 `{ kind: 'session' | 'bearer'; userId: number | null }`：
+ * 后者在任何地方取 userId 都要额外判空，而「会话通道必有 userId、脚本口令通道必无」
+ * 本来就是类型已知的事实。写成联合后，`req.auth.kind === 'session'` 一处判断即可让
+ * 后续的 userId 收窄为 number，路由里那些手写的收窄判断也才有类型上的意义。
+ */
+export type AuthInfo =
+  | { kind: 'session'; token: string; userId: number; subject: string }
+  | { kind: 'bearer'; userId: null; subject: string }
 
 /** 会话守卫与配额只需要数据库的这几个方法 */
 export interface GuardDb {
@@ -136,7 +140,8 @@ export function createRequestGuards(options: RequestGuardOptions): RequestGuards
    */
   function checkOrigin(req: MinimalRequest, res: MinimalResponse, next: NextFn): void {
     const origin = req.get('origin')
-    if (!origin || allowed.has(origin)) return next()
+    const originText = typeof origin === 'string' ? origin : ''
+    if (!originText || allowed.has(originText)) return next()
     res.status(403).json({ ok: false, message: '请求来源不被允许' })
   }
 
@@ -160,7 +165,8 @@ export function createRequestGuards(options: RequestGuardOptions): RequestGuards
    * 库里查不到（过期、被吊销、伪造）一律视为未登录。
    */
   function readSessionUser(req: MinimalRequest): AuthInfo | null {
-    const token = parseCookieToken(req.get('cookie'))
+    const cookieHeader = req.get('cookie')
+    const token = parseCookieToken(typeof cookieHeader === 'string' ? cookieHeader : undefined)
     if (!token) return null
     const session = db.findSession(token)
     if (!session) return null

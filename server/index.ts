@@ -19,6 +19,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
 import express from 'express'
+import type { NextFunction, Request, Response } from 'express'
 
 import { readJsonWithCap, resolveAiEndpoint } from './aiGuard.ts'
 import {
@@ -33,14 +34,15 @@ import {
   verifyPassword,
 } from './auth.ts'
 import { createCaptcha } from './captcha.ts'
+import { CATEGORY_KEYS, createDatabase } from './db.ts'
+import { fetchRemoteImage } from './imageProxy.ts'
 import {
   BEARER_SUBJECT,
   GLOBAL_SUBJECT,
   SESSION_TTL_DAYS,
   createRequestGuards,
 } from './requestGuards.ts'
-import { CATEGORY_KEYS, createDatabase } from './db.ts'
-import { fetchRemoteImage } from './imageProxy.ts'
+import type { AuthInfo } from './requestGuards.ts'
 import {
   closeBrowser,
   ensureBrowser,
@@ -49,6 +51,71 @@ import {
   renderResumePdf,
 } from './render.ts'
 import { sanitizeFilename, sanitizeResume } from './sanitize.ts'
+
+/**
+ * 给 Express 的 Request 补上 req.auth。
+ * requireAuth 成功后写入它，后续路由据此取登录主体；用声明合并而不是到处断言，
+ * 这样「谁写了 req.auth、谁在读」在类型上是一致的。
+ */
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      auth?: AuthInfo
+    }
+  }
+}
+
+/** 读取失败时的可读信息：catch 到的 error 在 strict 下是 unknown */
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+/** 带 error.code 的错误（SQLite 唯一约束、网络错误码等） */
+function errorCode(error: unknown): string {
+  return error && typeof error === 'object' && 'code' in error
+    ? String((error as { code: unknown }).code)
+    : ''
+}
+
+/** 解析 AI 上游返回的 JSON 时用的宽松形状：字段不可信，逐层收窄 */
+type JsonRecord = Record<string, unknown>
+
+function asRecord(value: unknown): JsonRecord {
+  return value && typeof value === 'object' ? (value as JsonRecord) : {}
+}
+
+/**
+ * 取会话登录态。
+ *
+ * 挂在 requireAuth 之后的路由里，req.auth 一定有值（会话通道）；管理员路由更是
+ * 只可能是会话（bearer 无角色）。这里把该前提收敛到一个显式断言，避免在十几处
+ * 路由里各写一次 `!`，也让「什么条件下 userId 必然存在」有唯一出处。
+ */
+function sessionAuth(req: Request): { userId: number; subject: string } {
+  const auth = req.auth
+  if (!auth || auth.userId === null) {
+    // 代码路径上不可达：requireAuth 已拦截无登录态的请求
+    throw Object.assign(new Error('缺少登录态'), { statusCode: 500 })
+  }
+  return { userId: auth.userId, subject: auth.subject }
+}
+
+/**
+ * 取配额主体 —— 会话与脚本口令两条通道都有。
+ *
+ * 导出、图片代抓、AI 转发这三个端点对两种通道都开放，因此只能依赖 subject
+ * （脚本口令通道没有 userId）。这里若误用 sessionAuth，脚本调用会直接 500 ——
+ * 之前就踩过这个坑，故单列一个函数把差别写明。
+ */
+function subjectOf(req: Request): string {
+  const auth = req.auth
+  if (!auth) {
+    // 代码路径上不可达：requireAuth 已拦截无登录态的请求
+    throw Object.assign(new Error('缺少登录态'), { statusCode: 500 })
+  }
+  return auth.subject
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT) || 3001
@@ -224,6 +291,8 @@ app.use(guards.checkOrigin)
  */
 app.get('/api/health', async (req, res) => {
   const session = guards.readSessionUser(req)
+  // 会话分支才有用户行；health 只在会话时返回用户名
+  const sessionUserId = session?.kind === 'session' ? session.userId : null
   const bearerOk = guard.enabled && guard.verify(readPassword(req)) === 'ok'
   const subject = session?.subject || (bearerOk ? BEARER_SUBJECT : null)
 
@@ -233,7 +302,7 @@ app.get('/api/health', async (req, res) => {
     authPopup: AUTH_POPUP_ENABLED,
     authRequired: guard.enabled,
     user: session
-      ? { id: session.userId, username: db.findUserById(session.userId)?.username || '' }
+      ? { id: sessionUserId, username: db.findUserById(sessionUserId as number)?.username || '' }
       : null,
     ...(subject
       ? {
@@ -311,7 +380,7 @@ app.post('/api/auth/register', (req, res, next) => {
     res.json({ ok: true, user: { id: user.id, username: user.username, role: user.role } })
   } catch (error) {
     // 用户名冲突体现为唯一约束错误（预检查仍有并发窗口，这里兜底转成可读提示）
-    const text = String(error?.code || '') + String(error?.message || '')
+    const text = errorCode(error) + errorMessage(error)
     if (text.includes('SQLITE_CONSTRAINT') || text.includes('UNIQUE')) {
       res.status(409).json({ ok: false, message: '用户名已被占用' })
       return
@@ -345,6 +414,7 @@ app.post('/api/auth/login', (req, res) => {
     return
   }
 
+  if (!user) return
   loginGuard.reset(ip, username)
   // 登录是清理过期会话的自然时机，平时不安排后台任务
   db.purgeExpiredSessions()
@@ -361,7 +431,7 @@ app.post('/api/auth/logout', (req, res) => {
   // 用会话解析拿令牌，而不是自己再解析一次 Cookie：
   // 解析规则（Cookie 名、解码、非法值处理）只保留在 requestGuards 一处
   const session = guards.readSessionUser(req)
-  if (session?.token) db.deleteSession(session.token)
+  if (session?.kind === 'session') db.deleteSession(session.token)
   guards.clearSessionCookie(res)
   res.json({ ok: true })
 })
@@ -369,16 +439,12 @@ app.post('/api/auth/logout', (req, res) => {
 /** 登录态查询。恒为 200：前端用它决定渲染哪个界面，未登录不是错误 */
 app.get('/api/auth/me', (req, res) => {
   const session = guards.readSessionUser(req)
+  const sessionUserId = session?.kind === 'session' ? session.userId : null
+  const profile = sessionUserId === null ? null : db.findUserById(sessionUserId)
   res.json({
     ok: true,
     authenticated: Boolean(session),
-    user: session
-      ? {
-          id: session.userId,
-          username: db.findUserById(session.userId)?.username || '',
-          role: db.findUserById(session.userId)?.role || 'member',
-        }
-      : null,
+    user: profile ? { id: profile.id, username: profile.username, role: profile.role } : null,
   })
 })
 
@@ -512,19 +578,15 @@ app.put('/api/styles-admin', guards.requireAuth, guards.requireAdmin, (req, res)
 /* ---------------- 云端简历（要求登录） ---------------- */
 
 app.get('/api/resume', guards.requireAuth, (req, res) => {
-  if (req.auth.kind !== 'session') {
-    res.status(403).json({ ok: false, message: '脚本口令通道不提供简历存取' })
-    return
-  }
-  const stored = db.getResume(req.auth.userId)
+  // 会话通道才有用户身份：脚本口令通道没有 userId，取出来直接拒绝
+  const auth = sessionAuth(req)
+  const stored = db.getResume(auth.userId)
   res.json({ ok: true, resume: stored?.resume ?? null, updatedAt: stored?.updatedAt ?? null })
 })
 
 app.put('/api/resume', guards.requireAuth, (req, res) => {
-  if (req.auth.kind !== 'session') {
-    res.status(403).json({ ok: false, message: '脚本口令通道不提供简历存取' })
-    return
-  }
+  // 会话通道才有用户身份：脚本口令通道没有 userId，取出来直接拒绝
+  const auth = sessionAuth(req)
 
   // 与导出共用同一套清洗：入库的数据同样按「不可信输入」对待，
   // 条目 id 不入账（由前端 normalize 重新生成，避免客户端伪造重复 key）
@@ -534,7 +596,7 @@ app.put('/api/resume', guards.requireAuth, (req, res) => {
     return
   }
 
-  const { updatedAt } = db.saveResume(req.auth.userId, sanitized.value)
+  const { updatedAt } = db.saveResume(auth.userId, sanitized.value)
   res.json({ ok: true, updatedAt })
 })
 
@@ -543,15 +605,16 @@ app.put('/api/resume', guards.requireAuth, (req, res) => {
 /** PDF 缓存：同一份简历短时间内重复导出不再消耗浏览器与额度 */
 const PDF_CACHE_TTL = 10 * 60 * 1000
 const PDF_CACHE_MAX = 10
-/** @type {Map<string, { buffer: Buffer, at: number }>} */
-const pdfCache = new Map()
+const pdfCache = new Map<string, { buffer: Buffer; at: number }>()
 
 /** PDF 缓存键：同一份简历 + 文件名的重复导出，产物完全一致 */
-function cacheKeyOf(resume, title) {
+function cacheKeyOf(resume: unknown, title: unknown): string {
   return createHash('sha256').update(JSON.stringify({ resume, title })).digest('hex')
 }
 
 app.post('/api/pdf', guards.requireAuth, async (req, res) => {
+  // 该端点对会话与脚本口令都开放，只能依赖 subject
+  const subject = subjectOf(req)
   const { resume, filename } = req.body || {}
 
   // 先校验再扣额度：参数不合法属于调用方问题，不应消耗当天配额
@@ -573,14 +636,14 @@ app.post('/api/pdf', guards.requireAuth, async (req, res) => {
       'Content-Disposition',
       `attachment; filename*=UTF-8''${encodeURIComponent(safeName)}`,
     )
-    res.setHeader('X-Quota-Remaining', String(guards.quotaStatus(req.auth.subject).remaining))
+    res.setHeader('X-Quota-Remaining', String(guards.quotaStatus(subject).remaining))
     res.setHeader('X-Pdf-Cache', 'hit')
     res.send(cached.buffer)
     return
   }
   if (cached) pdfCache.delete(key)
 
-  const subject = req.auth.subject
+  // subject 已在处理器开头取出
   const userQuota = guards.quotaStatus(subject)
   if (userQuota.remaining <= 0) {
     res.status(429).json({
@@ -630,7 +693,10 @@ app.post('/api/pdf', guards.requireAuth, async (req, res) => {
     guards.quotaRefund(subject)
     guards.quotaRefund(GLOBAL_SUBJECT)
     console.error('[pdf] 渲染失败：', error)
-    res.status(error.statusCode || 500).json({ ok: false, message: error.message || '渲染失败' })
+    const failure = asRecord(error)
+    res
+      .status(Number(failure.statusCode) || 500)
+      .json({ ok: false, message: String(failure.message || '渲染失败') })
   }
 })
 
@@ -640,12 +706,14 @@ app.post('/api/pdf', guards.requireAuth, async (req, res) => {
  * 任意 URL 抓取是高危能力，与导出同为登录后能力，目标校验见 imageProxy.js。
  */
 app.post('/api/image-proxy', guards.requireAuth, async (req, res) => {
+  // 该端点对会话与脚本口令都开放，只能依赖 subject
+  const subject = subjectOf(req)
   const url = typeof req.body?.url === 'string' ? req.body.url.trim() : ''
   if (!url) {
     res.status(400).json({ ok: false, message: '缺少图片链接' })
     return
   }
-  if (!imageLimiter.tryTake(`img:${req.auth.subject}`)) {
+  if (!imageLimiter.tryTake(`img:${subject}`)) {
     res.status(429).json({ ok: false, message: '图片抓取过于频繁，请一小时后再试' })
     return
   }
@@ -654,7 +722,7 @@ app.post('/api/image-proxy', guards.requireAuth, async (req, res) => {
     res.json({ ok: true, ...result })
   } catch (error) {
     // 目标校验不通过、下载失败都属于调用方问题，统一 400 并回传原因
-    res.status(400).json({ ok: false, message: error.message || '抓取失败' })
+    res.status(400).json({ ok: false, message: errorMessage(error) || '抓取失败' })
   }
 })
 
@@ -666,10 +734,8 @@ function newShareId() {
 }
 
 app.post('/api/share', guards.requireAuth, (req, res) => {
-  if (req.auth.kind !== 'session') {
-    res.status(403).json({ ok: false, message: '脚本口令通道不提供分享能力' })
-    return
-  }
+  // 会话通道才有用户身份：脚本口令通道没有 userId，取出来直接拒绝
+  const auth = sessionAuth(req)
 
   // 与导出/云端共用同一套清洗：公开出去的数据按「不可信输入」对待
   const sanitized = sanitizeResume(req.body?.resume)
@@ -681,7 +747,7 @@ app.post('/api/share', guards.requireAuth, (req, res) => {
   // 展示到合集是显式勾选的公开行为：默认只生成链接，拿到链接的人仍可查看
   const listInCollection = req.body?.listInCollection === true
 
-  if (!shareLimiter.tryTake(`share:${req.auth.subject}`)) {
+  if (!shareLimiter.tryTake(`share:${auth.subject}`)) {
     res.status(429).json({ ok: false, message: '分享过于频繁，请一小时后再试' })
     return
   }
@@ -694,14 +760,14 @@ app.post('/api/share', guards.requireAuth, (req, res) => {
     try {
       result = db.createShare(
         newShareId(),
-        req.auth.userId,
+        auth.userId,
         sanitized.value,
         SHARE_TTL_DAYS * 24 * 60 * 60 * 1000,
         listInCollection,
       )
     } catch (error) {
       // 主键碰撞（极小概率）换号重试；其它错误上抛
-      if (!String(error?.code || '').includes('SQLITE_CONSTRAINT')) throw error
+      if (!errorCode(error).includes('SQLITE_CONSTRAINT')) throw error
     }
   }
 
@@ -715,11 +781,9 @@ app.post('/api/share', guards.requireAuth, (req, res) => {
 
 /** 当前用户的分享列表（「我的分享」管理用：撤销、取消合集展示） */
 app.get('/api/share/mine', guards.requireAuth, (req, res) => {
-  if (req.auth.kind !== 'session') {
-    res.status(403).json({ ok: false, message: '脚本口令通道不提供分享能力' })
-    return
-  }
-  res.json({ ok: true, items: db.listUserShares(req.auth.userId) })
+  // 会话通道才有用户身份：脚本口令通道没有 userId，取出来直接拒绝
+  const auth = sessionAuth(req)
+  res.json({ ok: true, items: db.listUserShares(auth.userId) })
 })
 
 app.get('/api/share/:id', (req, res) => {
@@ -737,11 +801,9 @@ app.get('/api/share/:id', (req, res) => {
 })
 
 app.delete('/api/share/:id', guards.requireAuth, (req, res) => {
-  if (req.auth.kind !== 'session') {
-    res.status(403).json({ ok: false, message: '脚本口令通道不提供分享能力' })
-    return
-  }
-  const deleted = db.deleteShare(req.params.id, req.auth.userId)
+  // 会话通道才有用户身份：脚本口令通道没有 userId，取出来直接拒绝
+  const auth = sessionAuth(req)
+  const deleted = db.deleteShare(req.params.id, auth.userId)
   if (!deleted) {
     res.status(404).json({ ok: false, message: '分享不存在，或不是你创建的' })
     return
@@ -764,9 +826,12 @@ app.get('/api/collection', (req, res) => {
 
   const pageSize = Math.min(
     24,
-    Math.max(1, Number.parseInt(req.query.limit, 10) || COLLECTION_PAGE_SIZE),
+    Math.max(1, Number.parseInt(String(req.query.limit ?? ''), 10) || COLLECTION_PAGE_SIZE),
   )
-  const offset = Math.min(1000, Math.max(0, Number.parseInt(req.query.offset, 10) || 0))
+  const offset = Math.min(
+    1000,
+    Math.max(0, Number.parseInt(String(req.query.offset ?? ''), 10) || 0),
+  )
   // 分类白名单：非法值按「全部」处理而不是报错，分享出去的链接容错更好
   const rawCategory = String(req.query.category || '').trim()
   const category = CATEGORY_KEYS.has(rawCategory) ? rawCategory : null
@@ -828,7 +893,8 @@ app.post('/api/ai/chat', guards.requireAuth, async (req, res) => {
     return
   }
 
-  const subject = req.auth.subject
+  // 该端点对会话与脚本口令都开放，只能依赖 subject
+  const subject = subjectOf(req)
   if (!aiLimiter.tryTake(`ai:${subject}`)) {
     res.status(429).json({ ok: false, message: 'AI 调用过于频繁，请一小时后再试' })
     return
@@ -858,31 +924,33 @@ app.post('/api/ai/chat', guards.requireAuth, async (req, res) => {
     // 上游错误页常是 HTML、恶意上游可能是超大 body：读不出合法 JSON 就按
     // 空对象处理，与下方「AI 服务返回了 X 状态码」的兜底提示衔接。
     // readJsonWithCap 边读边计数，超大响应体在读入内存前就被断开。
-    let data = {}
+    let data: JsonRecord = {}
     try {
-      data = await readJsonWithCap(upstream)
+      data = asRecord(await readJsonWithCap(upstream))
     } catch {
       /* 按空对象处理 */
     }
     if (!upstream.ok) {
       const message =
-        data?.error?.message || data?.message || `AI 服务返回了 ${upstream.status} 状态码`
+        String(asRecord(data.error).message || data.message || '') ||
+        `AI 服务返回了 ${upstream.status} 状态码`
       res.status(502).json({ ok: false, message })
       return
     }
 
-    const content = data?.choices?.[0]?.message?.content
+    const choices = Array.isArray(data.choices) ? data.choices : []
+    const content = asRecord(asRecord(choices[0]).message).content
     if (typeof content !== 'string' || !content.trim()) {
       res.status(502).json({ ok: false, message: 'AI 服务没有返回有效内容' })
       return
     }
     res.json({ ok: true, content })
   } catch (error) {
-    if (error?.name === 'TimeoutError') {
+    if (error instanceof Error && error.name === 'TimeoutError') {
       res.status(504).json({ ok: false, message: 'AI 服务响应超时，请稍后再试' })
       return
     }
-    res.status(502).json({ ok: false, message: `AI 服务连接失败：${error.message}` })
+    res.status(502).json({ ok: false, message: `AI 服务连接失败：${errorMessage(error)}` })
   }
 })
 
@@ -911,10 +979,10 @@ app.use((req, res, next) => {
  * 那会把服务端绝对路径与依赖内部结构全部暴露出去，因此必须换成精简响应。
  * 真实错误只写进服务端日志。
  */
-app.use((error, req, res, next) => {
+app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
   if (res.headersSent) return next(error)
 
-  const status = Number(error.status || error.statusCode) || 500
+  const status = Number(asRecord(error).status ?? asRecord(error).statusCode) || 500
   const message =
     status === 413
       ? '请求体过大'
@@ -955,7 +1023,7 @@ const server = app.listen(PORT, HOST, async () => {
     const channel = await ensureBrowser()
     console.log(`渲染内核：\u3000\u3000${channel}`)
   } catch (error) {
-    console.error(`渲染内核不可用：${error.message}`)
+    console.error(`渲染内核不可用：${errorMessage(error)}`)
   }
 
   // 顺带跑一次探测，把渲染源打进日志（getRenderUrl 内部已有变化才打印）

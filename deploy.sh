@@ -171,7 +171,7 @@ After=network.target
 Type=simple
 User=$RUN_USER
 WorkingDirectory=$APP_DIR
-ExecStart=$NODE_BIN --env-file-if-exists=.env server/index.js
+ExecStart=$NODE_BIN --env-file-if-exists=.env server/index.ts
 Restart=on-failure
 RestartSec=3
 

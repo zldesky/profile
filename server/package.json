@@ -10,5 +10,8 @@
   "dependencies": {
     "express": "^5.1.0",
     "playwright-core": "^1.50.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6"
   }
 }

@@ -108,10 +108,14 @@ export function isLoopbackHost(host: unknown): boolean {
  *
  * 用请求头而不是 URL 查询参数：查询参数会被写进访问日志、浏览器历史与 Referer，
  * 等于把口令到处散播。
- * @param req Express 请求对象
+ *
+ * 参数形状刻意收窄成「有个 get 方法」：Express 的 Request.get 是重载签名，
+ * 若把它写成精确的最小接口，真实的 Express.Request 反而因重载而匹配不上。
+ * 这里只声明用到的能力，调用方无需为类型做断言。
+ * @param req 任何能按名字取请求头的对象（Express 请求、测试替身）
  */
-export function readPassword(req: { get: (name: string) => string | undefined }): string {
-  const raw = req.get('authorization') || ''
+export function readPassword(req: { get: (name: string) => unknown }): string {
+  const raw = String(req.get('authorization') ?? '')
   const matched = /^Bearer\s+(.+)$/i.exec(raw.trim())
   return matched ? matched[1].trim() : ''
 }

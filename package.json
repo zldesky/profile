@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:all": "concurrently -k -n web,pdf -c cyan,green \"vite\" \"node --env-file-if-exists=.env server/index.js\"",
+    "dev:all": "concurrently -k -n web,pdf -c cyan,green \"vite\" \"node --env-file-if-exists=.env server/index.ts\"",
     "build": "vite build",
     "preview": "vite preview",
-    "pdf": "node --env-file-if-exists=.env server/index.js",
+    "pdf": "node --env-file-if-exists=.env server/index.ts",
     "test": "vitest run",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

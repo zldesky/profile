@@ -50,4 +50,4 @@ RUN mkdir -p /app/server/.data && chown node:node /app/server/.data
 USER node
 
 # 数据库（账号/简历/配额）落在 /app/server/.data，compose 里必须挂卷持久化
-CMD ["node", "server/index.js"]
+CMD ["node", "server/index.ts"]
