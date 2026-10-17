@@ -17,8 +17,10 @@
     "prepare": "husky",
     "typecheck": "vue-tsc --noEmit",
     "check": "npm run typecheck && npm run lint && npm test",
+    "audit:login": "node tools/audit-login.mjs",
     "audit:ui": "node tools/audit-ui.mjs",
-    "audit:el": "node tools/probe-el.mjs"
+    "audit:el": "node tools/probe-el.mjs",
+    "audit:session": "node tools/probe-session.mjs"
   },
   "lint-staged": {
     "*.{js,vue}": [

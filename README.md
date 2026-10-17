@@ -34,28 +34,34 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 
 ## 常用脚本
 
-| 命令                   | 说明                                                                                                                                                 |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run dev`          | 仅启动前端（Vite，端口 5173）                                                                                                                        |
-| `npm run dev:all`      | 前端 + 应用服务一起启动，退出时同时结束                                                                                                              |
-| `npm run build`        | 构建产物到 `dist/`                                                                                                                                   |
-| `npm run pdf`          | 启动应用服务（托管 `dist/` 静态站点 + `/api`，端口 3001）                                                                                            |
-| `npm test`             | 运行 Vitest 单测（389 例：鉴权与会话守卫、来源校验、配额、数据清洗、SSRF 防线、导出、简历 store 及其拆解出的持久化/快照/多文档/模块树、AI 客户端等） |
-| `npm run lint`         | ESLint 检查（代码质量与 Vue 陷阱）                                                                                                                   |
-| `npm run lint:fix`     | ESLint 自动修复                                                                                                                                      |
-| `npm run format`       | Prettier 格式化 src / server / tests / 根配置                                                                                                        |
-| `npm run format:check` | 只校验不改动（CI 用）                                                                                                                                |
-| `npm run audit:ui`     | **真实浏览器度量**（对比度 / 点击目标 / 文本溢出 / 键盘焦点），需先起服务                                                                            |
-| `npm run audit:el`     | 量单个元素的盒子与真实命中区，如 `npm run audit:el -- .ed-check`                                                                                     |
+| 命令                    | 说明                                                                                                                                                 |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`           | 仅启动前端（Vite，端口 5173）                                                                                                                        |
+| `npm run dev:all`       | 前端 + 应用服务一起启动，退出时同时结束                                                                                                              |
+| `npm run build`         | 构建产物到 `dist/`                                                                                                                                   |
+| `npm run pdf`           | 启动应用服务（托管 `dist/` 静态站点 + `/api`，端口 3001）                                                                                            |
+| `npm test`              | 运行 Vitest 单测（389 例：鉴权与会话守卫、来源校验、配额、数据清洗、SSRF 防线、导出、简历 store 及其拆解出的持久化/快照/多文档/模块树、AI 客户端等） |
+| `npm run lint`          | ESLint 检查（代码质量与 Vue 陷阱）                                                                                                                   |
+| `npm run lint:fix`      | ESLint 自动修复                                                                                                                                      |
+| `npm run format`        | Prettier 格式化 src / server / tests / 根配置                                                                                                        |
+| `npm run format:check`  | 只校验不改动（CI 用）                                                                                                                                |
+| `npm run audit:ui`      | **真实浏览器度量**（对比度 / 点击目标 / 文本溢出 / 键盘焦点），需先起服务                                                                            |
+| `npm run audit:el`      | 量单个元素的盒子与真实命中区，如 `npm run audit:el -- .ed-check`                                                                                     |
+| `npm run audit:login`   | 造一个已登录会话令牌，配合 `npm run audit:ui -- --token <令牌>`                                                                                      |
+| `npm run audit:session` | 诊断会话令牌是否真的生效                                                                                                                             |
 
 ### 界面审计（`tools/`）
 
 静态检查只能查「写法」（`transition: all`、渐变颜色），查不出**渲染结果**。界面真正的毛病 —— 对比度不够、点击目标太小、键盘焦点看不见、换行处拥挤 —— 都得真的渲染出来量。思路来自开源清单 [taste-skill](https://github.com/Leonxlnx/taste-skill) 的 `scripts/inspect.mjs`（真的渲染、真的量、真的截图），但那个脚本是为落地页写的（量 hero 行数、空白屏占比），对编辑器应用不对症，因此按同样思路写了对症版：
 
-- `tools/audit-ui.mjs` —— 桌面 1440 / 窄桌面 1024 / 手机 390 三档各量一轮：文字对比度（按 WCAG AA 的 4.5 / 3.0 判定）、点击目标、文本溢出、以及 Tab 键逐次检查焦点是否可见。
+- `tools/audit-ui.mjs` —— 桌面 1440 / 窄桌面 1024 / 手机 390 三档各量一轮：文字对比度（按 WCAG AA 的 4.5 / 3.0 判定）、点击目标、文本溢出、以及 Tab 键逐次检查焦点是否可见。**量之前会先展开所有模块卡片、再切到「设计」页签**：否则量到的只是默认视图，折叠区域里的问题一个都看不到，报出来的 0 是假安心。
+- `tools/audit-login.mjs` —— 造一个已登录会话（直接建用户 + 建会话，用的是生产同一套 `hashPassword` / `createUser` / `createSession`，绕开注册的滑块验证码），配合 `audit-ui.mjs --token` 用于需要登录态的界面。
 - `tools/probe-el.mjs` —— 量单个元素的盒子、承载它的 label 高度、以及**用 `elementFromPoint` 复核真实命中区**。
+- `tools/probe-session.mjs` —— 诊断令牌到底生效没有，避免「以为量了登录后的界面、其实量的是未登录页」。
 
-两个脚本都只用项目已有的 `playwright-core`（在 `server/node_modules`）与本机 Edge，不额外加依赖。
+**一个曾经的误判，值得记下**：起初以为「未登录时编辑器被挡住，所以审计只覆盖公开页面」。实测推翻了它 —— 这个应用**未登录也完整渲染编辑器**（`ed-card=6`、`panel-tabs=1` 两种状态一致），只有云端功能才要求登录，页头把「登录/注册」换成用户名而已（正是 1721 与 1727 那 6 个元素之差）。所以编辑器面板本来就在审计范围内。**推断出来的覆盖面不可信，得实测** —— `probe-session.mjs` 就是为此留下的。
+
+四个脚本都只用项目已有的 `playwright-core`（在 `server/node_modules`）与本机 Edge，不额外加依赖。
 
 **踩过的坑，都写进了脚本注释**：
 

@@ -7,14 +7,25 @@
  * （它就是「真的渲染、真的量、真的截图」），但那个脚本是为落地页写的
  * （量 hero 行数、空白屏占比），对编辑器应用不对症，所以这里按同样思路做了对症版。
  *
- * 用法：node tools/audit-ui.mjs [url]
+ * 用法：
+ *   node tools/audit-ui.mjs [url] [--token <会话令牌>]
+ *
+ * **不带令牌时只能量到未登录的界面**；编辑器的模块面板、设计面板、管理页都要登录
+ * 之后才渲染，恰恰是界面问题最集中的地方。令牌用 tools/audit-login.mjs 生成。
+ *
  * 依赖：本机 Edge（与 PDF 渲染同一个内核）+ playwright-core。
  * 注意 playwright-core 装在 server/node_modules（PDF 渲染用它），
  * 根目录没有，因此从那个路径直接导入，不额外给根项目加一份依赖。
  */
 import { chromium } from '../server/node_modules/playwright-core/index.mjs'
 
-const url = process.argv[2] || 'http://127.0.0.1:3001/'
+/** 会话 Cookie 名与服务端保持一致（server/requestGuards.ts 的 SESSION_COOKIE） */
+const SESSION_COOKIE = 'rs_session'
+
+const argv = process.argv.slice(2)
+const tokenFlag = argv.indexOf('--token')
+const sessionToken = tokenFlag >= 0 ? argv[tokenFlag + 1] || '' : ''
+const url = argv.find((a) => a.startsWith('http')) || 'http://127.0.0.1:3001/'
 /** 桌面两档 + 手机一档；断点在 900px，所以要跨过它看 */
 const WIDTHS = [
   { w: 1440, h: 900, name: '桌面' },
@@ -116,6 +127,8 @@ function collect(limits) {
   /* ---------- 1. 文字对比度 ---------- */
   const contrast = []
   const seenText = new Set()
+  /** 因背景是渐变而未能判定的元素数（如实报出，避免把 0 读成「全达标」） */
+  let skipped = 0
   for (const el of document.querySelectorAll('body *')) {
     // 只取直接含文字的元素，避免父节点重复计入
     const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())
@@ -128,7 +141,12 @@ function collect(limits) {
     seenText.add(key)
 
     const bg = effectiveBg(el)
-    if (!bg) continue // 背景是渐变，本脚本不判（见 effectiveBg 的说明）
+    if (!bg) {
+      // 背景是渐变，本脚本不判。必须计数并报出来 —— 否则「0 处」会被误读成
+      // 「全部达标」，而实际上有一批元素从未被检查（画布本身就是渐变）。
+      skipped += 1
+      continue
+    }
     const r = ratio(over(fg, bg), bg)
     const size = px(s.fontSize)
     const bold = px(s.fontWeight) >= 700
@@ -202,14 +220,44 @@ function collect(limits) {
     }
   }
 
-  return { contrast, small, focusables: focusables.length, tokenState, overflowing, title: document.title, bodyFont: getComputedStyle(document.body).fontFamily.slice(0, 60) }
+  /*
+   * 把「量了多少」也带上。只报问题数会误导：0 处既可能是真干净，
+   * 也可能是页面根本没渲染出内容（未登录、加载失败）。这两个必须能区分。
+   */
+  const stats = {
+    nodes: document.querySelectorAll('body *').length,
+    cards: document.querySelectorAll('.ed-card').length,
+    hints: document.querySelectorAll('.ed-hint, .ed-value, .ed-count').length,
+    buttons: document.querySelectorAll('button').length,
+    textNodes: [...document.querySelectorAll('body *')].filter((el) =>
+      [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()),
+    ).length,
+  }
+  return {
+    contrast,
+    small,
+    focusables: focusables.length,
+    tokenState,
+    overflowing,
+    skipped,
+    stats,
+    title: document.title,
+    bodyFont: getComputedStyle(document.body).fontFamily.slice(0, 60),
+  }
 }
 
 const browser = await chromium.launch({ channel: 'msedge' })
 const report = { url, viewports: [], focus: [], errors: [] }
 
 for (const vp of WIDTHS) {
-  const page = await browser.newPage({ viewport: { width: vp.w, height: vp.h } })
+  const context = await browser.newContext({ viewport: { width: vp.w, height: vp.h } })
+  if (sessionToken) {
+    // 注入服务端会话 Cookie，让编辑器与各面板真正渲染出来
+    await context.addCookies([
+      { name: SESSION_COOKIE, value: sessionToken, url, httpOnly: true, sameSite: 'Lax' },
+    ])
+  }
+  const page = await context.newPage()
   page.on('console', (m) => {
     if (m.type() === 'error') report.errors.push(`[${vp.name}] ${m.text().slice(0, 120)}`)
   })
@@ -219,7 +267,58 @@ for (const vp of WIDTHS) {
     report.errors.push(`[${vp.name}] 打开失败: ${String(e.message).slice(0, 100)}`)
   }
   await page.waitForTimeout(600)
+
+  /*
+   * 先把折叠的内容展开再量。否则量到的只是默认视图 —— 模块卡片折叠着、
+   * 「设计」页签没切换，那些区域里的问题（.ed-hint / .ed-value / .ed-count 等）
+   * 一个都量不到，报出来的 0 是假安心。
+   * 只做「展开」这类无副作用的操作，不改任何数据。
+   */
+  const expanded = await page.evaluate(() => {
+    let n = 0
+    // 展开所有模块卡片
+    for (const btn of document.querySelectorAll('.ed-card-head .expand, .ed-card-head button')) {
+      if (btn.getAttribute('aria-expanded') !== 'true') {
+        btn.click()
+        n += 1
+      }
+    }
+    return n
+  })
+  await page.waitForTimeout(500)
+
   const data = await page.evaluate(collect, { AA_TEXT, AA_LARGE, MIN_TAP })
+
+  // 再切到「设计」页签量一轮（它同样是问题密集区），取两轮里更差的结果
+  const design = await page.evaluate(() => {
+    const tab = [...document.querySelectorAll('.panel-tabs button')].find((b) =>
+      (b.textContent || '').includes('设计'),
+    )
+    if (tab) tab.click()
+    return Boolean(tab)
+  })
+  if (design) {
+    await page.waitForTimeout(500)
+    const d = await page.evaluate(collect, { AA_TEXT, AA_LARGE, MIN_TAP })
+    // 合并两轮：按「元素+文本」去重
+    const key = (x) => x.el + '|' + x.text
+    const seen = new Set(data.contrast.map(key))
+    for (const c of d.contrast) {
+      if (!seen.has(key(c))) {
+        data.contrast.push(c)
+        seen.add(key(c))
+      }
+    }
+    const seenTap2 = new Set(data.small.map(key))
+    for (const t of d.small) {
+      if (!seenTap2.has(key(t))) {
+        data.small.push(t)
+        seenTap2.add(key(t))
+      }
+    }
+    data.overflowing.push(...d.overflowing)
+  }
+  report.expanded = (report.expanded || 0) + expanded
   report.viewports.push({ ...vp, ...data, finalUrl: page.url() })
   if (vp.name === '桌面') {
     // 键盘焦点：逐个 Tab，看获得焦点的元素有没有可见的 outline / box-shadow
@@ -240,7 +339,7 @@ for (const vp of WIDTHS) {
       if (f) report.focus.push(f)
     }
   }
-  await page.close()
+  await context.close()
 }
 
 await browser.close()
@@ -248,10 +347,17 @@ await browser.close()
 /* ---------------- 输出 ---------------- */
 const line = (s) => console.log(s)
 line(`UI 审计  ${report.url}`)
+line(`登录态：${sessionToken ? '已注入会话' : '未登录（只能量到公开页面）'}  ·  已先展开模块卡片并切换「设计」页签再量`)
 line('='.repeat(72))
 for (const v of report.viewports) {
   line(`\n▌${v.name} ${v.w}×${v.h}   （${v.finalUrl}）`)
-  line(`  对比度不足 : ${v.contrast.length} 处`)
+  const st = v.stats || {}
+  line(
+    `  量到的元素 : ${st.nodes} 个（其中卡片 ${st.cards}、提示类 ${st.hints}、按钮 ${st.buttons}、含文字 ${st.textNodes}）`,
+  )
+  line(
+    `  对比度不足 : ${v.contrast.length} 处${v.skipped ? `（另有 ${v.skipped} 处因背景是渐变未判定）` : ''}`,
+  )
   for (const c of v.contrast.slice(0, 12)) {
     line(`      ${c.ratio} (需 ${c.need})  ${c.size}px  ${c.el}  「${c.text}」`)
   }
