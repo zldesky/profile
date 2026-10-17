@@ -41,6 +41,13 @@
   --ed-line: #e4e7ec;
   --ed-line-2: #d0d5dd;
   --ed-line-soft: #eaecf0;
+  /*
+   * 下拉框的展开箭头（v 形）。原生 select 的箭头由操作系统绘制，在 Windows 上是
+   * 灰底小三角、在 macOS 上是蓝色胶囊，跟本项目的扁平风格都不一致，因此用
+   * appearance: none 收掉原生渲染、改为自绘这个 SVG（见 editor.css 的 .ed-select）。
+   * 颜色即 --ed-text-3(#667085)，# 在 url() 里必须转义成 %23。
+   */
+  --ed-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%23667085' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --ed-fill: #f2f4f7;
   --ed-fill-2: #f9fafb;
   --ed-surface: #fff;

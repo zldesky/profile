@@ -152,6 +152,32 @@
   color: var(--ed-text-4);
 }
 
+/*
+ * 下拉框：收掉系统的原生外观，改成与其它表单控件一致的扁平样式。
+ *
+ * 只写 border / border-radius 是不够的 —— 箭头与内部底色仍由操作系统绘制
+ * （Windows 是灰底小三角、macOS 是蓝色胶囊），所以必须 appearance: none 全部接管，
+ * 再用 --ed-chevron 自绘箭头。内边距右侧特意留出 28px 给箭头，
+ * 否则长选项文字会压到箭头上（原生渲染不会出现这个问题，接管后要自己处理）。
+ * color-scheme: light 让展开的原生列表也用浅色主题 —— 那里无法自绘。
+ */
+.ed-select {
+  appearance: none;
+  padding-right: 28px;
+  background-image: var(--ed-chevron);
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 12px 12px;
+  color-scheme: light;
+  cursor: pointer;
+}
+
+/* 展开的原生选项列表由系统绘制（只有背景色与文字色可控），这里对齐界面的浅色底 */
+.ed-select option {
+  background: var(--ed-surface);
+  color: var(--ed-ink);
+}
+
 .ed-textarea {
   min-height: 64px;
   line-height: 1.65;
@@ -523,6 +549,9 @@
 
 .ed-icon-select {
   flex: 0 0 84px;
+  /* 这一栏只有 84px，且放的是短图标名，箭头留白相应收窄，把宽度让给文字 */
+  padding-right: 20px;
+  background-position: right 6px center;
 }
 
 .ed-meta-label {

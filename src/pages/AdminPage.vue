@@ -377,7 +377,7 @@ const detailText = (patch) =>
               </label>
               <label class="ad2-field">
                 <span>标题样式</span>
-                <select v-model="editing.patch.titleStyle" class="ed-input">
+                <select v-model="editing.patch.titleStyle" class="ed-select">
                   <option v-for="item in TITLE_STYLES" :key="item.value" :value="item.value">
                     {{ item.label }}
                   </option>
@@ -385,7 +385,7 @@ const detailText = (patch) =>
               </label>
               <label class="ad2-field">
                 <span>标题标记</span>
-                <select v-model="editing.patch.titleMarker" class="ed-input">
+                <select v-model="editing.patch.titleMarker" class="ed-select">
                   <option v-for="item in TITLE_MARKERS" :key="item.value" :value="item.value">
                     {{ item.label }}
                   </option>
@@ -393,7 +393,7 @@ const detailText = (patch) =>
               </label>
               <label class="ad2-field">
                 <span>标题底边线</span>
-                <select v-model="editing.patch.titleBottom" class="ed-input">
+                <select v-model="editing.patch.titleBottom" class="ed-select">
                   <option v-for="item in TITLE_BOTTOM_STYLES" :key="item.value" :value="item.value">
                     {{ item.label }}
                   </option>
@@ -401,7 +401,7 @@ const detailText = (patch) =>
               </label>
               <label class="ad2-field">
                 <span>字体（可选）</span>
-                <select v-model="editing.patch.fontKey" class="ed-input">
+                <select v-model="editing.patch.fontKey" class="ed-select">
                   <option :value="undefined">跟随简历当前字体</option>
                   <option v-for="font in fontOptions" :key="font.key" :value="font.key">
                     {{ font.name }}
