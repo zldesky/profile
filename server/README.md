@@ -19,34 +19,38 @@ TS 侧对应开启 `allowImportingTsExtensions`（仅在 `noEmit` 下可用，�
 
 | 文件            | 行数 | 状态                |
 | --------------- | ---- | ------------------- |
-| `semaphore.ts`  | 88   | ✅ 已迁移并标注类型 |
-| `imageProxy.ts` | 149  | ✅ 已迁移并标注类型 |
-| `captcha.ts`    | 224  | ✅ 已迁移并标注类型 |
-| `aiGuard.ts`    | 204  | ✅ 已迁移并标注类型 |
-| `sanitize.ts`   | 291  | ✅ 已迁移并标注类型 |
-| `auth.ts`       | 330  | ✅ 已迁移并标注类型 |
-| `db.js`         | 553  | ⬜ 未开始           |
-| `render.js`     | 216  | ⬜ 未开始           |
+| `semaphore.ts`  | 106  | ✅ 已迁移并标注类型 |
+| `imageProxy.ts` | 168  | ✅ 已迁移并标注类型 |
+| `aiGuard.ts`    | 221  | ✅ 已迁移并标注类型 |
+| `captcha.ts`    | 256  | ✅ 已迁移并标注类型 |
+| `render.ts`     | 233  | ✅ 已迁移并标注类型 |
+| `sanitize.ts`   | 328  | ✅ 已迁移并标注类型 |
+| `auth.ts`       | 390  | ✅ 已迁移并标注类型 |
+| `db.ts`         | 705  | ✅ 已迁移并标注类型 |
 | `index.js`      | 1090 | ⬜ 未开始           |
 
-已迁移的 6 个模块通过现有单测（72 例），`node server/index.js` 可正常启动，且
-`tsconfig.json` 的 `include` **已包含 `server/**/*.ts`** —— 这 6 个模块现在受
-`npm run typecheck` 与 CI 保护。
+已迁移的 8 个模块通过现有单测（98 例），`node server/index.js` 可正常启动，且
+`tsconfig.json` 的 `include` **已包含 `server/**/*.ts`** —— 它们受 `npm run typecheck`
+与 CI 保护；`eslint.config.js` 也已接入 typescript-eslint，`.ts` 同样受 lint 覆盖。
 
-注意：`db.js` / `render.js` / `index.js` 仍是 `.js`，因为 `checkJs` 未开，它们**不在**
-类型检查范围内；一旦改名为 `.ts` 而未标注类型，会立刻让 typecheck 失败。
+除单测外，还真实跑通过一次端到端导出：`POST /api/pdf` 返回 200、`application/pdf`、
+约 100KB、以 `%PDF-` 开头，该链路依次经过 render → sanitize → semaphore → db。
+
+注意：`index.js` 仍是 `.js`，因为 `checkJs` 未开，它**不在**类型检查范围内；
+一旦改名为 `.ts` 而未标注类型，会立刻让 typecheck 失败。
 
 ## 怎么继续
 
-1. 把 `db.js` → `db.ts`：`node:sqlite` 的 `DatabaseSync` 自带类型，收益较高。
-2. 把 `render.js` → `render.ts`：注意 `page.evaluate` 的回调在浏览器上下文执行，
-   类型上要按浏览器环境给（`eslint.config.js` 里已有对应豁免，别删）。
-3. 把 `index.js` → `index.ts`（1090 行、无测试，最需要小心）。
-4. 每步改完后同步更新这些启动路径里的文件名：
-   - `package.json` 的 `pdf` / `dev:all` 脚本
-   - `deploy.sh` 里 systemd 的 `ExecStart`
-   - `Dockerfile` 的 `CMD`
-   - 各 `tests/*.test.js` 的 `../server/xxx.js` 导入
+只剩 `index.js` → `index.ts`（1090 行、**零测试**，路由与配额、分享、AI 转发、
+图片代理的汇聚点）。建议**先补测试再迁类型**，理由与当初处理 `stores/resume`
+一致：它现在既没有类型也没有测试，任何改动都没有安全网。
+
+改完后同步更新这些启动路径里的文件名：
+
+- `package.json` 的 `pdf` / `dev:all` 脚本
+- `deploy.sh` 里 systemd 的 `ExecStart`
+  - `Dockerfile` 的 `CMD`
+  - 各 `tests/*.test.js` 的 `../server/xxx.js` 导入
 
 ## 类型化带来的实际约束
 
