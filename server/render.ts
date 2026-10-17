@@ -15,7 +15,7 @@
  * 应用随后按常规流程恢复这份数据并渲染纸张。
  */
 import { chromium } from 'playwright-core'
-import type { Browser, BrowserContext, Page } from 'playwright-core'
+import type { Browser, Page } from 'playwright-core'
 
 import { createSemaphore } from './semaphore.ts'
 import type { HttpError } from './semaphore.ts'
