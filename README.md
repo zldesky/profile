@@ -34,17 +34,17 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 
 ## 常用脚本
 
-| 命令                   | 说明                                                                                                                       |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `npm run dev`          | 仅启动前端（Vite，端口 5173）                                                                                              |
-| `npm run dev:all`      | 前端 + 应用服务一起启动，退出时同时结束                                                                                    |
-| `npm run build`        | 构建产物到 `dist/`                                                                                                         |
-| `npm run pdf`          | 启动应用服务（托管 `dist/` 静态站点 + `/api`，端口 3001）                                                                  |
-| `npm test`             | 运行 Vitest 单测（351 例：鉴权、数据清洗、SSRF 防线、导出、简历 store 及其拆解出的持久化/快照/多文档/模块树、AI 客户端等） |
-| `npm run lint`         | ESLint 检查（代码质量与 Vue 陷阱）                                                                                         |
-| `npm run lint:fix`     | ESLint 自动修复                                                                                                            |
-| `npm run format`       | Prettier 格式化 src / server / tests / 根配置                                                                              |
-| `npm run format:check` | 只校验不改动（CI 用）                                                                                                      |
+| 命令                   | 说明                                                                                                                                                 |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`          | 仅启动前端（Vite，端口 5173）                                                                                                                        |
+| `npm run dev:all`      | 前端 + 应用服务一起启动，退出时同时结束                                                                                                              |
+| `npm run build`        | 构建产物到 `dist/`                                                                                                                                   |
+| `npm run pdf`          | 启动应用服务（托管 `dist/` 静态站点 + `/api`，端口 3001）                                                                                            |
+| `npm test`             | 运行 Vitest 单测（389 例：鉴权与会话守卫、来源校验、配额、数据清洗、SSRF 防线、导出、简历 store 及其拆解出的持久化/快照/多文档/模块树、AI 客户端等） |
+| `npm run lint`         | ESLint 检查（代码质量与 Vue 陷阱）                                                                                                                   |
+| `npm run lint:fix`     | ESLint 自动修复                                                                                                                                      |
+| `npm run format`       | Prettier 格式化 src / server / tests / 根配置                                                                                                        |
+| `npm run format:check` | 只校验不改动（CI 用）                                                                                                                                |
 
 ## Agent Skill（AI 无界面产出）
 
@@ -60,7 +60,7 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 
 ## 工程约定
 
-**TypeScript 迁移（进行中）**：领域类型在 `src/types/resume.ts`；`src/data`、`src/stores/resume`、核心 `src/utils` 与关键 composables 已是严格模式 TS，用 `npm run typecheck`（vue-tsc）把关。Vue 组件、`stores/selection` 与 server 仍为 JS，按「组件 → server」的阶段逐步迁移。
+**TypeScript 迁移（进行中）**：领域类型在 `src/types/resume.ts`；`src/data`、`src/stores`、核心 `src/utils`、关键 composables 与**整个 `server/`** 已是严格模式 TS，用 `npm run typecheck`（vue-tsc）把关，并由 CI 强制执行（Vite 构建只转译不做类型校验，类型错误不会让 Build 失败，因此 typecheck 必须单独跑）。`server/` 由 Node 内置的类型剥离直接执行 `.ts`，不带构建步骤，细节见 [server/README.md](./server/README.md)。剩余为 Vue 组件与部分 `src/utils`，按「组件」的阶段继续。
 
 `stores/resume` 是本地优先的落盘中心（多文档槽位、历史快照、头像引用、超容量降级），迁移前先用 `tests/resumeStore.test.js` 立起不变量再改类型；该测试需要 `localStorage` 与 `window`/`document`，由 `tests/setup/browser-globals.js` 按需安装（**刻意不放进 vitest 的 setupFiles**：全局安装 `document` 会让 pdf.js 误判运行环境，导致 PDF 导入端到端测试失败）。
 
@@ -86,16 +86,17 @@ src/                 前端（Vue 3 + Pinia + Vue Router）
     resumeDocuments.ts    多文档登记表与各文档槽位
     resumeMutations.ts    模块树操作（纯函数，不碰存储、不认识 store）
   utils/             纯逻辑（历史栈、数据清洗、AI 客户端、多格式导出、备份）
-server/              应用服务（Express）
-  db.js              SQLite 数据层（node:sqlite）
-  auth.js            scrypt 口令摘要 / 会话令牌 / 失败锁定
-  index.js           路由：账号、云端简历、PDF 导出、分享、AI 转发
-  render.js          playwright-core 驱动本机 Edge/Chrome 渲染 PDF
-  sanitize.js        入参白名单清洗（安全边界）
-  aiGuard.js         AI 转发的 SSRF 防线（协议 / 内网 / 变体地址校验）
-  imageProxy.js      远程图片代理（重定向逐跳复检的 SSRF 防线）
-  captcha.js         注册滑块验证码（HMAC 签名挑战）
-  semaphore.js       渲染并发信号量
+server/              应用服务（Express，全部为 .ts，由 node 类型剥离直接执行）
+  index.ts           路由与启动：账号、云端简历、PDF 导出、分享、AI 转发
+  requestGuards.ts   认证、来源校验与配额（依赖注入，可直测）
+  db.ts              SQLite 数据层（node:sqlite）
+  auth.ts            scrypt 口令摘要 / 会话令牌 / 失败锁定
+  render.ts          playwright-core 驱动本机 Edge/Chrome 渲染 PDF
+  sanitize.ts        入参白名单清洗（安全边界）
+  aiGuard.ts         AI 转发的 SSRF 防线（协议 / 内网 / 变体地址校验）
+  imageProxy.ts      远程图片代理（重定向逐跳复检的 SSRF 防线）
+  captcha.ts         注册滑块验证码（HMAC 签名挑战）
+  semaphore.ts       渲染并发信号量
 skills/              Agent Skill（AI 无界面操作）
   resume-workshop/   SKILL.md + 数据结构/API 参考 + 校验脚本 + 简历骨架
 tests/               Vitest 单测
