@@ -22,8 +22,20 @@
 
 import dns from 'node:dns/promises'
 
+/** 允许出网的判定结果：'' 表示放行，否则是拒绝原因 */
+export type BlockReason = string
+
+/**
+ * DNS 解析器：默认 node:dns 的 lookup。
+ * 测试注入替身即可覆盖「公网域名指向内网 IP」这类场景，不必真解析。
+ */
+export type LookupFn = (host: string, options: { all: true }) => Promise<Array<{ address: string }>>
+
+/** resolveAiEndpoint 的结果：成功给出规范化后的地址，失败给出可读原因 */
+export type EndpointResult = { ok: true; url: string } | { ok: false; message: string }
+
 /** IPv4 私有/保留段（返回命中描述，'' 表示公网可用） */
-export function ipv4BlockReason(n) {
+export function ipv4BlockReason(n: number): BlockReason {
   const a = n >>> 24
   const b = (n >>> 16) & 0xff
   if (a === 0) return '未指定地址'
@@ -38,8 +50,8 @@ export function ipv4BlockReason(n) {
 }
 
 /** IPv6（已展开成 8 组 16 位数）私有/保留段；IPv4 映射形态回落到 IPv4 判断 */
-export function ipv6BlockReason(g) {
-  const isZero = (from, to) => g.slice(from, to + 1).every((x) => x === 0)
+export function ipv6BlockReason(g: number[]): BlockReason {
+  const isZero = (from: number, to: number): boolean => g.slice(from, to + 1).every((x) => x === 0)
   if (isZero(0, 7)) return '未指定地址'
   if (isZero(0, 6) && g[7] === 1) return '环回地址'
   if ((g[0] & 0xfe00) === 0xfc00) return '私网地址'
@@ -55,7 +67,7 @@ export function ipv6BlockReason(g) {
 }
 
 /** 解析点分十进制 IPv4；格式非法返回 null（调用方 fail-closed） */
-export function parseIpv4(host) {
+export function parseIpv4(host: string): number | null {
   const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host)
   if (!m) return null
   const octets = m.slice(1).map(Number)
@@ -64,14 +76,14 @@ export function parseIpv4(host) {
 }
 
 /** 解析任意 IPv6 文本为 8 组 16 位数；格式非法返回 null */
-export function parseIpv6(text) {
+export function parseIpv6(text: string): number[] | null {
   const input = String(text || '').toLowerCase()
   const parts = input.split('::')
   if (parts.length > 2) return null
-  const toGroups = (side) =>
+  const toGroups = (side: string): Array<number | number[] | null> =>
     side === ''
       ? []
-      : side.split(':').map((seg) => {
+      : side.split(':').map((seg: string): number | number[] | null => {
           if (/^\d+\.\d+\.\d+\.\d+$/.test(seg)) {
             const n = parseIpv4(seg)
             return n === null ? null : [n >>> 16, n & 0xffff]
@@ -79,24 +91,25 @@ export function parseIpv6(text) {
           if (!/^[0-9a-f]{1,4}$/.test(seg)) return null
           return parseInt(seg, 16)
         })
-  const flat = (arr) => arr.flatMap((x) => (x === null ? [null] : x))
+  const flat = (arr: Array<number | number[] | null>): Array<number | null> =>
+    arr.flatMap((x) => (x === null ? [null] : x))
   const left = flat(toGroups(parts[0]))
   const right = flat(toGroups(parts[1] ?? ''))
   if (left.includes(null) || right.includes(null)) return null
   if (parts.length === 2) {
     if (left.length + right.length > 7) return null
     const middle = Array(8 - left.length - right.length).fill(0)
-    return [...left, ...middle, ...right]
+    // null 上面已排除，剩下的都是组号；断言只是把这个前提写给类型系统
+    return [...left, ...middle, ...right] as number[]
   }
-  return left.length === 8 ? left : null
+  return left.length === 8 ? (left as number[]) : null
 }
 
 /**
  * 判断一个地址字符串是否为不允许出网的地址。
- * @param {string} address IPv4/IPv6 文本（不带方括号）
- * @returns {string} '' 表示放行，否则返回拒绝原因
+ * @param address IPv4/IPv6 文本（不带方括号）
  */
-export function addressBlockReason(address) {
+export function addressBlockReason(address: string): BlockReason {
   const text = String(address || '')
   if (text.includes(':')) {
     const groups = parseIpv6(text)
@@ -111,12 +124,13 @@ const HOSTNAME_IPV6_RE = /^\[[0-9a-f:]+\]$/i
 
 /**
  * 校验并规范化 AI 服务地址。
- * @param {string} rawBaseUrl 用户填写的 base URL
- * @param {{ lookup?: (host: string, opts: object) => Promise<{address: string}[]> }} [deps]
- *   DNS 解析器，默认 node:dns/promises 的 lookup；测试可注入替身
- * @returns {Promise<{ ok: true, url: string } | { ok: false, message: string }>}
+ * @param rawBaseUrl 用户填写的 base URL（完全不可信）
+ * @param deps DNS 解析器，默认 node:dns/promises 的 lookup；测试可注入替身
  */
-export async function resolveAiEndpoint(rawBaseUrl, { lookup = dns.lookup } = {}) {
+export async function resolveAiEndpoint(
+  rawBaseUrl: string,
+  { lookup = dns.lookup as unknown as LookupFn }: { lookup?: LookupFn } = {},
+): Promise<EndpointResult> {
   const raw = String(rawBaseUrl || '').trim()
   if (!raw) return { ok: false, message: '请先填写 AI 服务地址' }
 
@@ -153,7 +167,7 @@ export async function resolveAiEndpoint(rawBaseUrl, { lookup = dns.lookup } = {}
     // 域名形态：解析出全部地址逐一校验，任何一个落到内网都拒绝。
     // IP 字面量已按位判完，绝不能落到这里——IPv6 字面量带方括号，
     // getaddrinfo 在 Linux 下会解析失败，导致公网地址被误拒。
-    let addrs
+    let addrs: Array<{ address: string }>
     try {
       addrs = await lookup(host, { all: true })
     } catch {
@@ -182,13 +196,16 @@ export const AI_RESPONSE_MAX_BYTES = 1024 * 1024
  * 返回超大 body 的服务器，就能把服务进程的内存打爆。套路与 imageProxy 的
  * readBodyWithCap 一致：边读边计数，超限即 cancel 断流。
  *
- * @param {Response} response fetch 的响应对象
- * @param {number} [maxBytes] 响应体上限
- * @returns {Promise<unknown>} 解析出的 JSON（非法 JSON 上抛，由调用方兜底）
+ * @param response fetch 的响应对象
+ * @param maxBytes 响应体上限
+ * @returns 解析出的 JSON（非法 JSON 上抛，由调用方兜底）
  */
-export async function readJsonWithCap(response, maxBytes = AI_RESPONSE_MAX_BYTES) {
-  const reader = response.body.getReader()
-  const chunks = []
+export async function readJsonWithCap(
+  response: Response,
+  maxBytes: number = AI_RESPONSE_MAX_BYTES,
+): Promise<unknown> {
+  const reader = response.body!.getReader()
+  const chunks: Uint8Array[] = []
   let received = 0
   for (;;) {
     const { done, value } = await reader.read()

@@ -20,12 +20,31 @@ import {
   TITLE_MARKERS,
   TITLE_STYLES,
 } from '../src/data/presets.ts'
+import type { SectionType } from '../src/types/resume.ts'
 
-/** 模块类型白名单，需与 src/data/defaultResume.js 的 SECTION_TYPES 保持一致 */
-const SECTION_TYPES = ['grid', 'entries', 'skills', 'text']
+/** 模块类型白名单，需与 src/data/defaultResume.ts 的 SECTION_TYPES 保持一致 */
+const SECTION_TYPES: readonly SectionType[] = ['grid', 'entries', 'skills', 'text']
 
-const valuesOf = (list) => list.map((item) => item.value)
-const idsOf = (list) => list.map((item) => item.id)
+/** 清洗结果：ok 时带出白名单结构，不 ok 时给出可读原因 */
+export type SanitizeResult = { ok: true; value: SanitizedResume } | { ok: false; error: string }
+
+/** 清洗后的简历：字段集合由本文件的白名单唯一定义 */
+export interface SanitizedResume {
+  version: 2
+  template: string
+  theme: Record<string, unknown>
+  basics: Record<string, unknown>
+  sections: Array<Record<string, unknown>>
+}
+
+/** 单个字段的清洗函数：任意输入 → 该字段的合法取值 */
+type FieldSanitizer = (value: unknown) => unknown
+
+/** 一组字段的规格：键集合就是保留白名单，未列出的键一律丢弃 */
+type FieldSpec = Record<string, FieldSanitizer>
+
+const valuesOf = (list: Array<{ value: string }>): string[] => list.map((item) => item.value)
+const idsOf = (list: Array<{ id: string }>): string[] => list.map((item) => item.id)
 
 const ALLOW = {
   template: idsOf(TEMPLATES),
@@ -74,7 +93,7 @@ const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
  * 清洗文本：先去掉完整标签，再清掉落单的尖括号与控制字符。
  * 简历文本不需要任何 HTML，因此这里的处理是「删除」而非「转义」。
  */
-function cleanText(value, maxLength = LIMITS.text) {
+function cleanText(value: unknown, maxLength: number = LIMITS.text): string {
   if (value === null || value === undefined) return ''
   return (
     String(value)
@@ -87,66 +106,72 @@ function cleanText(value, maxLength = LIMITS.text) {
 }
 
 /** 枚举白名单，未命中时回退 */
-function pickEnum(value, allowed, fallback) {
-  return allowed.includes(value) ? value : fallback
+function pickEnum(value: unknown, allowed: readonly unknown[], fallback: string): string {
+  return allowed.includes(value) ? (value as string) : fallback
 }
 
-function clampNumber(value, min, max, fallback) {
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
   const num = Number(value)
   if (!Number.isFinite(num)) return fallback
   return Math.min(max, Math.max(min, num))
 }
 
-function cleanImage(value) {
+function cleanImage(value: unknown): string {
   if (typeof value !== 'string' || !value || value.length > LIMITS.image) return ''
   return DATA_IMAGE.test(value) ? value : ''
 }
 
-function cleanColor(value, fallback) {
+function cleanColor(value: unknown, fallback: string): string {
   return typeof value === 'string' && HEX_COLOR.test(value) ? value : fallback
 }
 
 /** 只保留白名单内的键，结构由服务端定义而不是照搬客户端 */
-function pickFields(source, spec) {
-  const target = {}
+function pickFields(source: unknown, spec: FieldSpec): Record<string, unknown> {
+  const target: Record<string, unknown> = {}
+  // 只遍历 spec 的键：客户端多传的字段在这里被丢掉
+  const bag = (source && typeof source === 'object' ? source : {}) as Record<string, unknown>
   for (const [key, sanitize] of Object.entries(spec)) {
-    target[key] = sanitize(source?.[key])
+    target[key] = sanitize(bag[key])
   }
   return target
 }
 
-const asText = (max) => (value) => cleanText(value, max)
+const asText =
+  (max: number): FieldSanitizer =>
+  (value) =>
+    cleanText(value, max)
 
-const GRID_ITEM_SPEC = {
+const GRID_ITEM_SPEC: FieldSpec = {
   icon: (value) => pickEnum(value, ALLOW.icon, 'none'),
   label: asText(LIMITS.shortText),
   value: asText(LIMITS.text),
 }
 
-const META_SPEC = {
+const META_SPEC: FieldSpec = {
   label: asText(LIMITS.shortText),
   value: asText(LIMITS.mediumText),
 }
 
-const BULLET_SPEC = {
+const BULLET_SPEC: FieldSpec = {
   text: asText(LIMITS.longText),
 }
 
-const SKILL_SPEC = {
+const SKILL_SPEC: FieldSpec = {
   name: asText(LIMITS.shortText),
   level: (value) => clampNumber(value, 0, 100, 80),
 }
 
-const LAYOUT_SPEC = {
+const LAYOUT_SPEC: FieldSpec = {
   align: (value) => pickEnum(value, ALLOW.sectionAlign, 'inherit'),
   indent: (value) => clampNumber(value, LAYOUT_RANGE.indent.min, LAYOUT_RANGE.indent.max, 0),
   extraGap: (value) => clampNumber(value, LAYOUT_RANGE.extraGap.min, LAYOUT_RANGE.extraGap.max, 0),
   columns: (value) => pickEnum(String(value ?? 'auto'), ALLOW.sectionColumns, 'auto'),
 }
 
-const take = (value, max) => (Array.isArray(value) ? value.slice(0, max) : [])
+const take = (value: unknown, max: number): unknown[] =>
+  Array.isArray(value) ? value.slice(0, max) : []
 
-function buildSectionBody(section) {
+function buildSectionBody(section: Record<string, unknown>): Record<string, unknown> {
   if (section.type === 'grid') {
     return {
       items: take(section.items, LIMITS.itemsPerSection).map((item) =>
@@ -158,16 +183,19 @@ function buildSectionBody(section) {
   if (section.type === 'entries') {
     return {
       showLogo: section.showLogo === true,
-      items: take(section.items, LIMITS.entriesPerSection).map((entry) => ({
-        time: cleanText(entry?.time, LIMITS.shortText),
-        org: cleanText(entry?.org, LIMITS.shortText),
-        role: cleanText(entry?.role, LIMITS.shortText),
-        logo: cleanImage(entry?.logo),
-        meta: take(entry?.meta, LIMITS.metaPerEntry).map((meta) => pickFields(meta, META_SPEC)),
-        bullets: take(entry?.bullets, LIMITS.bulletsPerEntry).map((bullet) =>
-          pickFields(bullet, BULLET_SPEC),
-        ),
-      })),
+      items: take(section.items, LIMITS.entriesPerSection).map((raw) => {
+        const entry = raw as Record<string, unknown>
+        return {
+          time: cleanText(entry.time, LIMITS.shortText),
+          org: cleanText(entry.org, LIMITS.shortText),
+          role: cleanText(entry.role, LIMITS.shortText),
+          logo: cleanImage(entry.logo),
+          meta: take(entry.meta, LIMITS.metaPerEntry).map((meta) => pickFields(meta, META_SPEC)),
+          bullets: take(entry.bullets, LIMITS.bulletsPerEntry).map((bullet) =>
+            pickFields(bullet, BULLET_SPEC),
+          ),
+        }
+      }),
     }
   }
 
@@ -186,8 +214,9 @@ function buildSectionBody(section) {
   return { content: cleanText(section.content, LIMITS.longText) }
 }
 
-function sanitizeSections(rawSections) {
-  return take(rawSections, LIMITS.sections).map((section) => {
+function sanitizeSections(rawSections: unknown): Array<Record<string, unknown>> {
+  return take(rawSections, LIMITS.sections).map((raw) => {
+    const section = raw as Record<string, unknown>
     const type = pickEnum(section?.type, SECTION_TYPES, 'text')
     return {
       type,
@@ -199,8 +228,11 @@ function sanitizeSections(rawSections) {
   })
 }
 
-function sanitizeTheme(rawTheme) {
-  const theme = rawTheme && typeof rawTheme === 'object' ? rawTheme : {}
+function sanitizeTheme(rawTheme: unknown): Record<string, unknown> {
+  const theme = (rawTheme && typeof rawTheme === 'object' ? rawTheme : {}) as Record<
+    string,
+    unknown
+  >
   return {
     accent: cleanColor(theme.accent, '#000000'),
     text: cleanColor(theme.text, '#2b2f36'),
@@ -223,9 +255,14 @@ function sanitizeTheme(rawTheme) {
   }
 }
 
-function sanitizeBasics(rawBasics) {
-  const basics = rawBasics && typeof rawBasics === 'object' ? rawBasics : {}
-  const pos = basics.avatarPos && typeof basics.avatarPos === 'object' ? basics.avatarPos : {}
+function sanitizeBasics(rawBasics: unknown): Record<string, unknown> {
+  const basics = (rawBasics && typeof rawBasics === 'object' ? rawBasics : {}) as Record<
+    string,
+    unknown
+  >
+  const pos = (
+    basics.avatarPos && typeof basics.avatarPos === 'object' ? basics.avatarPos : {}
+  ) as Record<string, unknown>
   return {
     name: cleanText(basics.name, LIMITS.name),
     jobTitle: cleanText(basics.jobTitle, LIMITS.shortText),
@@ -246,14 +283,14 @@ function sanitizeBasics(rawBasics) {
 
 /**
  * 清洗客户端提交的简历数据。
- * @param {unknown} raw 请求体里的 resume
- * @returns {{ ok: true, value: object } | { ok: false, error: string }}
+ * @param raw 请求体里的 resume（完全不可信）
  */
-export function sanitizeResume(raw) {
+export function sanitizeResume(raw: unknown): SanitizeResult {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return { ok: false, error: '简历数据格式不正确' }
   }
-  if (!Array.isArray(raw.sections)) {
+  const source = raw as Record<string, unknown>
+  if (!Array.isArray(source.sections)) {
     return { ok: false, error: '缺少 sections 字段' }
   }
 
@@ -261,11 +298,11 @@ export function sanitizeResume(raw) {
     ok: true,
     value: {
       version: 2,
-      template: pickEnum(raw.template, ALLOW.template, 'classic'),
-      theme: sanitizeTheme(raw.theme),
-      basics: sanitizeBasics(raw.basics),
+      template: pickEnum(source.template, ALLOW.template, 'classic'),
+      theme: sanitizeTheme(source.theme),
+      basics: sanitizeBasics(source.basics),
       // id 一律由渲染端生成，不接受客户端提供，避免重复 key
-      sections: sanitizeSections(raw.sections),
+      sections: sanitizeSections(source.sections),
     },
   }
 }
@@ -277,7 +314,7 @@ export function sanitizeResume(raw) {
  * cleanText 为了保留简历正文的换行而放行 \r\n\t，文件名不能沿用这个策略，
  * 否则就留下了响应头注入的口子（虽然下游还有 encodeURIComponent 兜底）。
  */
-export function sanitizeFilename(value) {
+export function sanitizeFilename(value: unknown): string {
   const cleaned = String(value ?? '')
     // 全部控制字符一律去掉，包括 CR / LF / TAB
     .replace(/[\u0000-\u001F\u007F]/g, ' ')
