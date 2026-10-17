@@ -4,11 +4,12 @@
  * 拖拽排序交给 vue-draggable-plus，带位移动画并支持触屏；
  * 每张卡片由 ModuleCard 承载，本组件只负责列表编排与新增。
  */
-import { computed, ref, shallowRef } from 'vue'
+import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 import { VueDraggable } from 'vue-draggable-plus'
 
 import ModuleCard from '@/components/editor/ModuleCard.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
+import { usePaperJump } from '@/composables/usePaperJump'
 import { SECTION_PRESETS, SECTION_TYPES } from '@/data/defaultResume'
 import { useResumeStore } from '@/stores/resume'
 
@@ -52,6 +53,49 @@ function addFromPreset() {
 function addSection() {
   expand(store.addSection(addingType.value))
 }
+
+/** 卡片上闪一下的描边（跳转落点提示），动画结束即摘掉以便再次触发 */
+const flashId = shallowRef('')
+let flashTimer = null
+
+const { targetId, requestSeq, consume } = usePaperJump()
+
+/**
+ * 把卡片滚到可见位置。
+ * 用 scrollMode: 'if-needed' —— 卡片已经在视野里就完全不动，
+ * 避免「明明看得见却猛跳一下」；否则居中，上下都留出上下文。
+ */
+function revealCard(id) {
+  const el = document.querySelector(`.ed-card[data-section-id="${CSS.escape(id)}"]`)
+  if (!el) return
+  el.scrollIntoView?.({
+    block: 'center',
+    inline: 'nearest',
+    behavior: 'smooth',
+    scrollMode: 'if-needed',
+  })
+  flashId.value = id
+  if (flashTimer !== null) clearTimeout(flashTimer)
+  flashTimer = setTimeout(() => {
+    flashId.value = ''
+  }, 700)
+}
+
+/*
+ * 响应纸面点击。watch 的是 requestSeq 而不是 targetId：
+ * 连点同一个模块时 id 不变，只有序号会变。
+ */
+watch(requestSeq, async () => {
+  const id = targetId.value
+  if (!id) return
+  consume()
+  // 模块可能已被删除；隐藏模块没有卡片，不跳
+  const section = store.sections.find((item) => item.id === id)
+  if (!section || !section.visible) return
+  expand(id)
+  await nextTick()
+  revealCard(id)
+})
 </script>
 
 <template>
@@ -78,6 +122,7 @@ function addSection() {
         :index="index"
         :total="store.sections.length"
         :open="isOpen(section.id)"
+        :flash="flashId === section.id"
         @toggle="toggle(section.id)"
         @remove="removeSection(section)"
       />

@@ -19,6 +19,7 @@ import SelectionToolbar from '@/components/preview/SelectionToolbar.vue'
 import { useAvatarDrag } from '@/composables/useAvatarDrag'
 import { usePageMetrics } from '@/composables/usePageMetrics'
 import { usePaperSelection } from '@/composables/usePaperSelection'
+import { usePaperJump } from '@/composables/usePaperJump'
 import { usePaperZoom } from '@/composables/usePaperZoom'
 import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
@@ -54,6 +55,32 @@ const {
   onPaperPointerDown: onSectionPointerDown,
   syncToolbar,
 } = usePaperSelection(paperRef, scrollRef, zoom)
+const { focusSection } = usePaperJump()
+
+/**
+ * 纸面模块的操作提示。
+ *
+ * 光标是 grab（拖动排序仍是纸面上的主要直接操作），但这会让「点一下就能去改」
+ * 变得不可见，因此挂个 title 把两个操作都讲清楚。
+ * 统一在纸张渲染后由本组件挂到各模板的模块上：12 个模板各写一遍必然会走样，
+ * 而且这个提示属于预览区的交互，不属于模板自身的结构。
+ *
+ * 代价是光标停在纸张空白处也会显示该提示。相比逐模板改造的维护成本，这个取舍更划算；
+ * 若以后觉得碍事，改成在 12 个模板里各写一次即可。
+ */
+const SECTION_TIP = '点击跳到该模块的编辑卡片，按住拖动可调整顺序'
+
+/**
+ * 把提示挂到纸上每个模块。模板切换后 DOM 是新的，所以要重新挂。
+ * 只设 title、不动 DOM 结构，因此不会影响排版与打印（title 也不打印）。
+ */
+function applySectionTips() {
+  const paper = paperRef.value
+  if (!paper) return
+  for (const el of paper.querySelectorAll('.r-sec[data-sec-id]')) {
+    el.title = SECTION_TIP
+  }
+}
 
 const templateComponent = computed(() => resolveTemplate(store.resume.template))
 const paperStyle = computed(() => ({ ...store.pageStyle, '--zoom': zoom.value }))
@@ -78,9 +105,38 @@ function onPaperPointerDown(event) {
   onAvatarPointerDown(event)
 }
 
+/**
+ * 纸面点击：把「点哪个模块就在哪儿改」接起来。
+ *
+ * 普通点击 = 只选中该模块并跳到它的编辑卡片。
+ * 按住 Ctrl/Cmd 时**直接返回，不跳也不动选中集** —— usePaperSelection 的
+ * pressSection 已经在 pointerdown 里做了加选/去选；这里若再 toggle 一次，
+ * 两次切换互相抵消，多选会彻底失效（此前踩过）。
+ *
+ * 三处守卫缺一不可：
+ *  1. secDragging —— 框选或整组拖拽结束时也会派发 click，此时不该跳转；
+ *  2. event.detail > 1 —— 双击的第二次点击不重复跳；
+ *  3. 命中 .r-sec[data-sec-id] —— 点到页头、空白或头像时忽略。
+ * 注意模块正文里有链接与图片，点到它们同样按模块处理，不会误跳。
+ */
+function onPaperClick(event) {
+  if (secDragging.value) return
+  if (event.detail > 1) return
+  if (event.ctrlKey || event.metaKey) return
+
+  const hit = event.target.closest?.('.r-sec[data-sec-id]')
+  if (!hit) return
+  const id = hit.dataset.secId
+  if (!id) return
+
+  selection.replace([id])
+  focusSection(id)
+}
+
 /** 页数、头像边界与多选工具条位置都必须在 DOM 稳定后测量 */
 async function refreshLayout() {
   await refresh()
+  applySectionTips()
   syncLimits()
   syncToolbar()
 }
@@ -189,7 +245,9 @@ async function compressToOnePage() {
         :data-marker="store.theme.titleMarker"
         :data-line="store.theme.titleBottom"
         :data-shape="store.basics.avatarShape"
+        :data-sec-tip="SECTION_TIP"
         @pointerdown="onPaperPointerDown"
+        @click="onPaperClick"
       >
         <component :is="templateComponent" :resume="store.resume" :selected-ids="selection.ids" />
       </div>

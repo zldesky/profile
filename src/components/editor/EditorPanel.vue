@@ -2,13 +2,24 @@
 /**
  * 右侧编辑面板外壳，负责「内容 / 设计」两个页签的切换。
  */
-import { shallowRef } from 'vue'
+import { shallowRef, watch } from 'vue'
 
 import ContentPanel from '@/components/editor/ContentPanel.vue'
 import DesignPanel from '@/components/editor/DesignPanel.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
+import { usePaperJump } from '@/composables/usePaperJump'
 
 const tab = shallowRef('content')
+
+/*
+ * 点纸面模块时自动切到「内容」页签：目标卡片在那一栏里，
+ * 不切的话用户会觉得「点了没反应」。
+ * 响应的是 requestSeq 而非 targetId —— 连点同一模块时 id 不变。
+ */
+const { requestSeq } = usePaperJump()
+watch(requestSeq, () => {
+  tab.value = 'content'
+})
 </script>
 
 <template>

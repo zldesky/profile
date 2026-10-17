@@ -709,6 +709,12 @@ textarea {
   cursor: grab;
 }
 
+/*
+ * 「点击可跳到编辑卡片」的提示文案走 title 属性，由 PreviewPane 的
+ * applySectionTips() 在模板渲染后挂上（CSS 的 title 属性无人支持，
+ * 不能在这里用 attr() 下发）。
+ */
+
 .r-sec.is-sec-selected {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
