@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { sanitizeFilename, sanitizeResume } from '../server/sanitize.js'
+import { sanitizeFilename, sanitizeResume } from '../server/sanitize.ts'
 
 /**
  * sanitize 是安全边界：所有注入、超限、伪造枚举的攻击面都在这里收口。

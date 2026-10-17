@@ -11,6 +11,9 @@
     "checkJs": false,
     "skipLibCheck": true,
     "isolatedModules": true,
+    // server 由 node 直接执行（v22 的类型剥离），相对导入必须写全 .ts 扩展名，
+    // 否则运行时解析不到；该选项只在 noEmit 下可用，正好符合本项目的用法
+    "allowImportingTsExtensions": true,
     "useDefineForClassFields": true,
     "resolveJsonModule": true,
     "noUnusedLocals": false,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { createCaptcha, VIEW_HEIGHT, VIEW_WIDTH } from '../server/captcha.js'
+import { createCaptcha, VIEW_HEIGHT, VIEW_WIDTH } from '../server/captcha.ts'
 
 /** 固定缺口的实例：x/y 注入为确定值，测试才能算出「正确答案」 */
 function fixedCaptcha(overrides = {}) {

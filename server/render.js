@@ -16,7 +16,7 @@
  */
 import { chromium } from 'playwright-core'
 
-import { createSemaphore } from './semaphore.js'
+import { createSemaphore } from './semaphore.ts'
 
 /** 需与前端 stores/resume.js 中的 STORAGE_KEY 保持一致 */
 const STORAGE_KEY = 'resume-studio-v1'

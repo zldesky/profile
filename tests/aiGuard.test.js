@@ -5,7 +5,7 @@ import {
   addressBlockReason,
   readJsonWithCap,
   resolveAiEndpoint,
-} from '../server/aiGuard.js'
+} from '../server/aiGuard.ts'
 
 describe('resolveAiEndpoint：AI 转发端点守卫', () => {
   it('合法的 https 地址返回规范化的端点（去尾斜杠）', async () => {

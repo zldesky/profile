@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url'
 
 import express from 'express'
 
-import { readJsonWithCap, resolveAiEndpoint } from './aiGuard.js'
+import { readJsonWithCap, resolveAiEndpoint } from './aiGuard.ts'
 import {
   createLoginGuard,
   createPasswordGuard,
@@ -32,10 +32,10 @@ import {
   readPassword,
   validateCredentials,
   verifyPassword,
-} from './auth.js'
-import { createCaptcha } from './captcha.js'
+} from './auth.ts'
+import { createCaptcha } from './captcha.ts'
 import { CATEGORY_KEYS, createDatabase } from './db.js'
-import { fetchRemoteImage } from './imageProxy.js'
+import { fetchRemoteImage } from './imageProxy.ts'
 import {
   closeBrowser,
   ensureBrowser,
@@ -43,7 +43,7 @@ import {
   getRenderStats,
   renderResumePdf,
 } from './render.js'
-import { sanitizeFilename, sanitizeResume } from './sanitize.js'
+import { sanitizeFilename, sanitizeResume } from './sanitize.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT) || 3001

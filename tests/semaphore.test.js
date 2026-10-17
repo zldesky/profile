@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { createSemaphore } from '../server/semaphore.js'
+import { createSemaphore } from '../server/semaphore.ts'
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5))
 

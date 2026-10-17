@@ -7,7 +7,7 @@ import {
   parseCookies,
   validateCredentials,
   verifyPassword,
-} from '../server/auth.js'
+} from '../server/auth.ts'
 
 describe('口令摘要', () => {
   it('正确密码通过，错误密码与畸形摘要一律拒绝', () => {

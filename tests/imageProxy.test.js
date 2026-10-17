@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { MAX_IMAGE_BYTES, fetchRemoteImage, isPublicIp } from '../server/imageProxy.js'
+import { MAX_IMAGE_BYTES, fetchRemoteImage, isPublicIp } from '../server/imageProxy.ts'
 
 describe('isPublicIp：内网与保留段拦截', () => {
   const blocked = [
