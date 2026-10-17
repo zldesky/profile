@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
 import { beforeEach, describe, expect, it } from 'vitest'
-import { createDatabase, deriveCategory } from '../server/db.js'
+import { createDatabase, deriveCategory } from '../server/db.ts'
 
 /** 每个用例独享一个内存库，互不污染 */
 let db

@@ -34,7 +34,7 @@ import {
   verifyPassword,
 } from './auth.ts'
 import { createCaptcha } from './captcha.ts'
-import { CATEGORY_KEYS, createDatabase } from './db.js'
+import { CATEGORY_KEYS, createDatabase } from './db.ts'
 import { fetchRemoteImage } from './imageProxy.ts'
 import {
   closeBrowser,

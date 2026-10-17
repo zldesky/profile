@@ -17,13 +17,130 @@ import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+/* ---------------- 导出类型 ---------------- */
+
+/** 用户行：密码只存 scrypt 摘要，绝不落明文 */
+export interface UserRecord {
+  id: number
+  username: string
+  password_hash: string
+  role: string
+  created_at: number
+}
+
+/** 会话查询返回的公开字段（不含密码摘要） */
+export interface PublicUser {
+  id: number
+  username: string
+  role: string
+}
+
+/** 会话行：令牌只存库，Cookie 里那份丢了可随时吊销 */
+export interface SessionRecord {
+  token: string
+  user_id: number
+  expires_at: number
+}
+
+/** 合集分页与「我的分享」用的摘要（不含简历正文） */
+export interface CollectionItem {
+  id: string
+  name: string
+  jobTitle: string
+  template: string
+  accent: string
+  category: string
+  createdAt: number
+}
+
+/** 「我的分享」列表项：比合集摘要多一个是否已公开列出 */
+export interface UserShareItem {
+  id: string
+  name: string
+  jobTitle: string
+  listed: boolean
+  createdAt: number
+  expiresAt: number
+}
+
+/** SELECT 出来的行：SQL 列名是蛇形，对外统一转驼峰 */
+interface ShareListRow {
+  id: string
+  data: string
+  created_at: number
+  expires_at: number
+  listed: number
+}
+
+interface CollectionRow {
+  id: string
+  data: string
+  created_at: number
+  category: string
+}
+
+export interface DatabaseOptions {
+  /** 库文件路径；传 ':memory:' 用于测试 */
+  filePath?: string
+}
+
+/** 打开数据库后暴露的全部操作。路由层只依赖这个形状 */
+export interface Database {
+  createUser: (
+    username: string,
+    passwordHash: string,
+  ) => { id: number; username: string; role: string }
+  findUserByUsername: (username: string) => UserRecord | undefined
+  findUserById: (id: number | string) => PublicUser | undefined
+  isAdminUser: (id: number | string) => boolean
+  createSession: (userId: number, token: string, ttlMs?: number) => string
+  findSession: (token: string) => SessionRecord | null
+  deleteSession: (token: string) => void
+  purgeExpiredSessions: () => number
+  getResume: (userId: number) => { resume: unknown; updatedAt: number } | null
+  saveResume: (userId: number, resumeObject: unknown) => { updatedAt: number }
+  getConfig: (key: string) => unknown
+  setConfig: (key: string, value: unknown) => void
+  createShare: (
+    id: string,
+    userId: number | null,
+    resumeObject: unknown,
+    ttlMs: number,
+    listed?: boolean,
+  ) => { id: string; createdAt: number; expiresAt: number }
+  getShare: (
+    id: string,
+  ) => {
+    id: string
+    userId: number | null
+    resume: unknown
+    createdAt: number
+    expiresAt: number
+  } | null
+  deleteShare: (id: string, userId: number | null) => boolean
+  purgeExpiredShares: () => number
+  listCollection: (options?: {
+    limit?: number
+    offset?: number
+    category?: string | null
+  }) => CollectionItem[]
+  countCollection: (options?: { category?: string | null }) => number
+  listUserShares: (userId: number) => UserShareItem[]
+  collectionFacets: () => Array<{ key: string; count: number }>
+  quotaUsed: (subject: string, day: string) => number
+  quotaConsume: (subject: string, day: string) => number
+  quotaRefund: (subject: string, day: string) => void
+  quotaDaysUsed: (day: string) => number
+  close: () => void
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 /** 会话有效期：30 天不活跃才过期，过期行在登录时惰性清理 */
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 /** 合集分类：关键词按序首个命中生效，无命中归入 misc（其他） */
-const CATEGORY_RULES = [
+const CATEGORY_RULES: Array<[string, string[]]> = [
   [
     'tech',
     [
@@ -68,9 +185,9 @@ export const CATEGORY_KEYS = new Set([...CATEGORY_RULES.map(([key]) => key), 'mi
 /**
  * 按求职意向推导合集分类。
  * 拉丁字母统一小写后做子串匹配；空值与未命中一律 misc。
- * @param {string} jobTitle 简历求职意向 / 目标岗位
+ * @param jobTitle 简历求职意向 / 目标岗位
  */
-export function deriveCategory(jobTitle) {
+export function deriveCategory(jobTitle: unknown): string {
   const text = String(jobTitle ?? '').toLowerCase()
   if (!text.trim()) return 'misc'
   for (const [key, words] of CATEGORY_RULES) {
@@ -81,11 +198,11 @@ export function deriveCategory(jobTitle) {
 
 /**
  * 打开（或创建）数据库。
- * @param {object} [options]
- * @param {string} [options.filePath] 库文件路径；传 ':memory:' 用于测试
- * @returns {{ db: DatabaseSync, createUser, findUserByUsername, createSession, findSession, deleteSession, purgeExpiredSessions, getResume, saveResume, quotaUsed, quotaConsume, quotaRefund, quotaDaysUsed, close }}
+ * @param options.filePath 库文件路径；传 ':memory:' 用于测试
  */
-export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.db') } = {}) {
+export function createDatabase({
+  filePath = path.join(__dirname, '.data', 'app.db'),
+}: DatabaseOptions = {}): Database {
   if (filePath !== ':memory:') {
     // 目录不存在会让 SQLite 直接抛错，先建好
     mkdirSync(path.dirname(filePath), { recursive: true })
@@ -178,25 +295,29 @@ export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.d
    * 创建用户。用户名冲突（大小写不敏感）会抛出 SQLite 唯一约束错误，
    * 由调用方转成用户可读的提示。首个注册的账号即实例管理员。
    */
-  function createUser(username, passwordHash) {
-    const role = countUsers.get().total === 0 ? 'admin' : 'member'
+  function createUser(
+    username: string,
+    passwordHash: string,
+  ): { id: number; username: string; role: string } {
+    const total = (countUsers.get() as { total: number } | undefined)?.total ?? 0
+    const role = total === 0 ? 'admin' : 'member'
     const result = insertUser.run(username, passwordHash, role, Date.now())
     return { id: Number(result.lastInsertRowid), username, role }
   }
 
   /** 登录用：按用户名取完整行（含密码摘要与角色）；未注册返回 undefined */
-  function findUserByUsername(username) {
-    return selectUserByName.get(String(username))
+  function findUserByUsername(username: string): UserRecord | undefined {
+    return selectUserByName.get(String(username)) as UserRecord | undefined
   }
 
   /** 会话态查询用：按 id 取公开字段（不含密码摘要） */
-  function findUserById(id) {
-    return selectUserById.get(id)
+  function findUserById(id: number | string): PublicUser | undefined {
+    return selectUserById.get(id) as PublicUser | undefined
   }
 
   /** 是否管理员（供 requireAdmin 判定；仅认会话对应的用户行） */
-  function isAdminUser(id) {
-    return selectUserById.get(Number(id))?.role === 'admin'
+  function isAdminUser(id: number | string): boolean {
+    return (selectUserById.get(Number(id)) as PublicUser | undefined)?.role === 'admin'
   }
 
   /* ---------------- 会话 ---------------- */
@@ -210,15 +331,15 @@ export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.d
   const deleteSessionStmt = db.prepare('DELETE FROM sessions WHERE token = ?')
   const deleteExpiredSessions = db.prepare('DELETE FROM sessions WHERE expires_at < ?')
 
-  function createSession(userId, token, ttlMs = SESSION_TTL_MS) {
+  function createSession(userId: number, token: string, ttlMs: number = SESSION_TTL_MS): string {
     const now = Date.now()
     insertSession.run(token, userId, now, now + ttlMs)
     return token
   }
 
   /** 未过期才返回会话；过期行视为不存在（顺带清掉，不让死会话堆积） */
-  function findSession(token) {
-    const row = selectSession.get(String(token || ''))
+  function findSession(token: string): SessionRecord | null {
+    const row = selectSession.get(String(token || '')) as SessionRecord | undefined
     if (!row) return null
     if (row.expires_at <= Date.now()) {
       deleteSessionStmt.run(row.token)
@@ -227,11 +348,11 @@ export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.d
     return row
   }
 
-  function deleteSession(token) {
+  function deleteSession(token: string): void {
     deleteSessionStmt.run(String(token || ''))
   }
 
-  function purgeExpiredSessions() {
+  function purgeExpiredSessions(): number {
     return Number(deleteExpiredSessions.run(Date.now()).changes)
   }
 
@@ -243,19 +364,16 @@ export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.d
   `)
   const selectResume = db.prepare('SELECT data, updated_at FROM resumes WHERE user_id = ?')
 
-  /**
-   * 保存简历快照（整体覆盖，最后写入者胜出）。
-   * @returns {{ updatedAt: number }}
-   */
-  function saveResume(userId, resumeObject) {
+  /** 保存简历快照（整体覆盖，最后写入者胜出） */
+  function saveResume(userId: number, resumeObject: unknown): { updatedAt: number } {
     const updatedAt = Date.now()
     upsertResume.run(userId, JSON.stringify(resumeObject), updatedAt)
     return { updatedAt }
   }
 
   /** 无快照时返回 null，由路由层决定是回落到示例还是提示 */
-  function getResume(userId) {
-    const row = selectResume.get(userId)
+  function getResume(userId: number): { resume: unknown; updatedAt: number } | null {
+    const row = selectResume.get(userId) as { data: string; updated_at: number } | undefined
     if (!row) return null
     try {
       // SQL 列名是蛇形的 updated_at，对外统一转驼峰
@@ -281,25 +399,25 @@ export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.d
   )
 
   /** 当日已用次数；day 由调用方生成（本机时区自然日），库只管计数 */
-  function quotaUsed(subject, day) {
-    const row = selectQuota.get(subject, day)
+  function quotaUsed(subject: string, day: string): number {
+    const row = selectQuota.get(subject, day) as { used: number } | undefined
     return row ? row.used : 0
   }
 
   /** 计数 +1 并返回最新值。同步执行，单线程下不存在超发 */
-  function quotaConsume(subject, day) {
+  function quotaConsume(subject: string, day: string): number {
     upsertQuota.run(subject, day)
     return quotaUsed(subject, day)
   }
 
   /** 渲染失败归还额度，不让用户为服务端问题买单 */
-  function quotaRefund(subject, day) {
+  function quotaRefund(subject: string, day: string): void {
     refundQuotaStmt.run(subject, day)
   }
 
   /** 全站当日总量，作为成本兜底的依据 */
-  function quotaDaysUsed(day) {
-    return Number(sumQuotaByDay.get(day).total)
+  function quotaDaysUsed(day: string): number {
+    return Number((sumQuotaByDay.get(day) as { total: number }).total)
   }
 
   /* ---------------- 简历分享 ---------------- */
@@ -316,12 +434,19 @@ export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.d
   /**
    * 保存一份分享快照。id 冲突（极小概率）由调用方换号重试。
    * 合集分类按求职意向自动推导，分享者无需额外选择。
-   * @param {boolean} [listed] 是否同时展示到公开简历合集（默认仅链接可访问）
-   * @returns {{ id: string, createdAt: number, expiresAt: number }}
+   * @param listed 是否同时展示到公开简历合集（默认仅链接可访问）
    */
-  function createShare(id, userId, resumeObject, ttlMs, listed = false) {
+  function createShare(
+    id: string,
+    userId: number | null,
+    resumeObject: unknown,
+    ttlMs: number,
+    listed = false,
+  ): { id: string; createdAt: number; expiresAt: number } {
     const now = Date.now()
-    const category = deriveCategory(resumeObject?.basics?.jobTitle)
+    const category = deriveCategory(
+      (resumeObject as { basics?: { jobTitle?: unknown } })?.basics?.jobTitle,
+    )
     insertShare.run(
       String(id),
       userId,
@@ -335,8 +460,18 @@ export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.d
   }
 
   /** 公开读取。过期行视为不存在（顺带删除） */
-  function getShare(id) {
-    const row = selectShare.get(String(id || ''))
+  function getShare(
+    id: string,
+  ): {
+    id: string
+    userId: number | null
+    resume: unknown
+    createdAt: number
+    expiresAt: number
+  } | null {
+    const row = selectShare.get(String(id || '')) as
+      | { id: string; user_id: number | null; data: string; created_at: number; expires_at: number }
+      | undefined
     if (!row) return null
     if (row.expires_at <= Date.now()) {
       deleteExpiredShares.run(Date.now())
@@ -356,13 +491,13 @@ export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.d
   }
 
   /** 只允许分享者本人撤销；返回是否删到了行 */
-  function deleteShare(id, userId) {
+  function deleteShare(id: string, userId: number | null): boolean {
     if (!userId) return false
     return Number(deleteOwnedShare.run(String(id), userId).changes) > 0
   }
 
   /** 清理过期分享，挂在创建分享的调用路径上惰性执行 */
-  function purgeExpiredShares() {
+  function purgeExpiredShares(): number {
     return Number(deleteExpiredShares.run(Date.now()).changes)
   }
 
@@ -373,12 +508,14 @@ export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.d
   `)
 
   /** 当前用户未过期的分享摘要（最新在前），供「我的分享」管理 */
-  function listUserShares(userId) {
-    return selectUserShares
-      .all(userId, Date.now())
-      .map((row) => {
+  function listUserShares(userId: number): UserShareItem[] {
+    // node:sqlite 的行类型是 Record<string, SQLOutputValue>，与具体行结构不重叠，
+    // 因此经 unknown 桥接：列名与结构由上面的 SELECT 语句保证
+    return (selectUserShares.all(userId, Date.now()) as unknown as ShareListRow[])
+      .map((row): UserShareItem | null => {
         try {
-          const basics = JSON.parse(row.data)?.basics || {}
+          const basics =
+            (JSON.parse(row.data) as { basics?: Record<string, unknown> })?.basics || {}
           return {
             id: row.id,
             name: String(basics.name ?? '').slice(0, 40),
@@ -391,7 +528,7 @@ export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.d
           return null
         }
       })
-      .filter(Boolean)
+      .filter((item): item is UserShareItem => item !== null)
   }
 
   /* ---------------- 应用配置（KV：管理后台的运行时配置存这里） ---------------- */
@@ -402,8 +539,8 @@ export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.d
   )
 
   /** 读配置：键不存在或 JSON 损坏返回 null，调用方按未配置处理 */
-  function getConfig(key) {
-    const row = selectConfig.get(String(key))
+  function getConfig(key: string): unknown {
+    const row = selectConfig.get(String(key)) as { value: string } | undefined
     if (!row) return null
     try {
       return JSON.parse(row.value)
@@ -413,7 +550,7 @@ export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.d
   }
 
   /** 写配置：整体覆盖，值须可 JSON 序列化 */
-  function setConfig(key, value) {
+  function setConfig(key: string, value: unknown): void {
     upsertConfigStmt.run(String(key), JSON.stringify(value))
   }
 
@@ -451,10 +588,15 @@ export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.d
    * 存量分享的分类回填：迁移刚发生时（category 列刚加上）跑一次。
    * 只把能推导出非 misc 的行改写；本来就是 misc 的行保持原样。
    */
-  function backfillCategories() {
-    for (const row of selectUncategorizedShares.iterate()) {
+  function backfillCategories(): void {
+    for (const row of selectUncategorizedShares.iterate() as Iterable<{
+      id: string
+      data: string
+    }>) {
       try {
-        const derived = deriveCategory(JSON.parse(row.data)?.basics?.jobTitle)
+        const derived = deriveCategory(
+          (JSON.parse(row.data) as { basics?: { jobTitle?: unknown } })?.basics?.jobTitle,
+        )
         if (derived !== 'misc') updateShareCategory.run(derived, row.id)
       } catch {
         /* 快照损坏的行保持 misc */
@@ -463,8 +605,12 @@ export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.d
   }
 
   /** 从分享快照提取合集卡片需要的摘要；快照损坏的行跳过不入列表 */
-  function collectionItemOf(row) {
-    let resume
+  function collectionItemOf(row: CollectionRow): CollectionItem | null {
+    let resume: {
+      basics?: Record<string, unknown>
+      theme?: { accent?: unknown }
+      template?: unknown
+    }
     try {
       resume = JSON.parse(row.data)
     } catch {
@@ -478,7 +624,7 @@ export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.d
       name: String(basics.name ?? '').slice(0, 40),
       jobTitle: String(basics.jobTitle ?? '').slice(0, 60),
       template: String(resume?.template ?? '').slice(0, 40),
-      accent: /^#[0-9a-fA-F]{6}$/.test(accent) ? accent : '',
+      accent: typeof accent === 'string' && /^#[0-9a-fA-F]{6}$/.test(accent) ? accent : '',
       category: row.category || 'misc',
       createdAt: row.created_at,
     }
@@ -488,30 +634,40 @@ export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.d
    * 合集分页：勾选展示且未过期的分享，最新在前，可按分类过滤。
    * 只返回摘要（不含简历正文），正文由客户端按 id 走公开的 /api/share/:id 取。
    */
-  function listCollection({ limit = 12, offset = 0, category = null } = {}) {
+  function listCollection({
+    limit = 12,
+    offset = 0,
+    category = null,
+  }: { limit?: number; offset?: number; category?: string | null } = {}): CollectionItem[] {
     const now = Date.now()
-    const cap = (v) => Math.max(0, Math.floor(v))
+    const cap = (v: number): number => Math.max(0, Math.floor(v))
     const rows = category
       ? selectCollectionPageByCategory.all(now, category, cap(limit), cap(offset))
       : selectCollectionPage.all(now, cap(limit), cap(offset))
-    return rows.map(collectionItemOf).filter(Boolean)
+    return (rows as unknown as CollectionRow[])
+      .map(collectionItemOf)
+      .filter((item): item is CollectionItem => item !== null)
   }
 
   /** 合集总数（可按分类），用于前端显示「还有 N 份」与翻页判断 */
-  function countCollection({ category = null } = {}) {
+  function countCollection({ category = null }: { category?: string | null } = {}): number {
     const total = category
-      ? countCollectionByCategory.get(Date.now(), category).total
-      : countCollectionStmt.get(Date.now()).total
+      ? (countCollectionByCategory.get(Date.now(), category) as { total: number }).total
+      : (countCollectionStmt.get(Date.now()) as { total: number }).total
     return Number(total)
   }
 
   /** 各分类的合集条数（只含有数分类，按固定顺序排列，misc 殿后） */
-  function collectionFacets() {
-    const counts = new Map(
-      selectCollectionFacets.all(Date.now()).map((row) => [row.category, Number(row.count)]),
+  function collectionFacets(): Array<{ key: string; count: number }> {
+    const counts = new Map<string, number>(
+      (selectCollectionFacets.all(Date.now()) as Array<{ category: string; count: number }>).map(
+        (row) => [row.category, Number(row.count)],
+      ),
     )
     const order = [...CATEGORY_RULES.map(([key]) => key), 'misc']
-    return order.filter((key) => counts.has(key)).map((key) => ({ key, count: counts.get(key) }))
+    return order
+      .filter((key) => counts.has(key))
+      .map((key) => ({ key, count: counts.get(key) as number }))
   }
 
   /* ---------------- 旧库数据回填（列已就位，语句已准备） ---------------- */
@@ -519,7 +675,7 @@ export function createDatabase({ filePath = path.join(__dirname, '.data', 'app.d
   // category 列刚加上时为存量分享跑一次回填；新写入的行在 createShare 里已带分类。
   if (needsCategoryBackfill) backfillCategories()
 
-  function close() {
+  function close(): void {
     db.close()
   }
 
