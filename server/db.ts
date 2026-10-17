@@ -108,9 +108,7 @@ export interface Database {
     ttlMs: number,
     listed?: boolean,
   ) => { id: string; createdAt: number; expiresAt: number }
-  getShare: (
-    id: string,
-  ) => {
+  getShare: (id: string) => {
     id: string
     userId: number | null
     resume: unknown
@@ -460,9 +458,7 @@ export function createDatabase({
   }
 
   /** 公开读取。过期行视为不存在（顺带删除） */
-  function getShare(
-    id: string,
-  ): {
+  function getShare(id: string): {
     id: string
     userId: number | null
     resume: unknown
