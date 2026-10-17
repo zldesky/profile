@@ -12,7 +12,7 @@
   gap: 6px;
   padding: 6px 12px;
   border: 1px solid var(--ed-line-2);
-  border-radius: 8px;
+  border-radius: var(--ed-radius-sm);
   background: var(--ed-surface);
   box-shadow: var(--ed-shadow-xs);
   color: var(--ed-text);
@@ -25,7 +25,7 @@
 }
 
 .ed-btn:hover {
-  border-color: #c2cad4;
+  border-color: var(--ed-line-3);
   background: var(--ed-fill-2);
   color: var(--ed-ink);
 }
@@ -109,7 +109,7 @@
   height: 28px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--ed-radius-seg-inner);
   background: transparent;
   color: var(--ed-text-3);
   cursor: pointer;
@@ -136,7 +136,7 @@
   min-width: 0;
   padding: 6px 9px;
   border: 1px solid var(--ed-line-2);
-  border-radius: 8px;
+  border-radius: var(--ed-radius-sm);
   background: var(--ed-surface);
   box-shadow: var(--ed-shadow-xs);
   color: var(--ed-ink);
@@ -194,11 +194,11 @@
 
 /* 软校验警告态：琥珀色提示，不阻止输入（见 utils/validators.js） */
 .ed-input.is-warn {
-  border-color: #f79009;
+  border-color: var(--ed-warn);
 }
 
 .ed-input.is-warn:focus {
-  border-color: #f79009;
+  border-color: var(--ed-warn);
   box-shadow: 0 0 0 3px rgba(247, 144, 9, 0.18);
 }
 
@@ -227,7 +227,7 @@
   height: 32px;
   padding: 2px;
   border: 1px solid var(--ed-line-2);
-  border-radius: 8px;
+  border-radius: var(--ed-radius-sm);
   background: var(--ed-surface);
   cursor: pointer;
 }
@@ -312,7 +312,7 @@
   flex: 1 1 auto;
   padding: 6px 8px;
   border: 1px solid var(--ed-line-2);
-  border-radius: 7px;
+  border-radius: var(--ed-radius-seg-inner);
   background: var(--ed-surface);
   box-shadow: var(--ed-shadow-xs);
   color: inherit;
@@ -347,7 +347,7 @@
   width: 26px;
   height: 26px;
   border: 1px solid rgba(16, 24, 40, 0.12);
-  border-radius: 8px;
+  border-radius: var(--ed-radius-sm);
   cursor: pointer;
   transition: 0.15s;
 }
@@ -404,7 +404,7 @@
 .ed-drag {
   display: flex;
   align-items: center;
-  color: #c6ccd6;
+  color: var(--ed-line-3);
   cursor: grab;
 }
 
@@ -417,7 +417,7 @@
   min-width: 0;
   padding: 4px 6px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--ed-radius-sm);
   background: transparent;
   color: var(--ed-ink);
   font: inherit;
@@ -436,7 +436,7 @@
 }
 
 .ed-card.is-hidden .ed-card-title {
-  color: #b8bfc9;
+  color: var(--ed-text-5);
 }
 
 .ed-card-body {
@@ -450,7 +450,7 @@
   margin-bottom: 9px;
   padding: 9px;
   border: 1px solid var(--ed-line-soft);
-  border-radius: 9px;
+  border-radius: var(--ed-radius-seg-outer);
   background: var(--ed-fill-2);
 }
 
@@ -488,7 +488,7 @@
 .ed-empty {
   padding: 16px;
   border: 1px dashed var(--ed-line-2);
-  border-radius: 9px;
+  border-radius: var(--ed-radius-seg-outer);
   color: var(--ed-text-4);
   font-size: 12.5px;
   text-align: center;
@@ -515,7 +515,7 @@
 }
 
 .ed-count {
-  color: #b8bfc9;
+  color: var(--ed-text-5);
   font-weight: 400;
 }
 
@@ -598,7 +598,7 @@
   overflow: hidden;
   padding: 0;
   border: 1px dashed var(--ed-line-2);
-  border-radius: 8px;
+  border-radius: var(--ed-radius-sm);
   background: var(--ed-fill-2);
   color: var(--ed-text-4);
   cursor: pointer;
@@ -625,7 +625,7 @@
 .panel-body,
 .stage-scroll {
   scrollbar-width: thin;
-  scrollbar-color: #cbd2db transparent;
+  scrollbar-color: var(--ed-line-3) transparent;
 }
 
 .panel-body::-webkit-scrollbar,
@@ -638,13 +638,13 @@
 .stage-scroll::-webkit-scrollbar-thumb {
   border: 3px solid transparent;
   border-radius: 999px;
-  background: #cbd2db;
+  background: var(--ed-line-3);
   background-clip: padding-box;
 }
 
 .panel-body::-webkit-scrollbar-thumb:hover,
 .stage-scroll::-webkit-scrollbar-thumb:hover {
-  background: #aab3bf;
+  background: var(--ed-text-5);
   background-clip: padding-box;
 }
 
@@ -662,7 +662,7 @@
   z-index: 99;
   max-width: 460px;
   padding: 9px 16px;
-  border-radius: 10px;
+  border-radius: var(--ed-radius-md);
   background: var(--ed-ink);
   box-shadow: var(--ed-shadow-lg);
   color: #fff;

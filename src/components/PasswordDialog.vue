@@ -115,14 +115,14 @@ function submit() {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(16, 24, 40, 0.42);
+  background: var(--ed-overlay);
 }
 
 .pw-card {
   width: 100%;
   max-width: 390px;
   padding: 18px 18px 16px;
-  border-radius: 16px;
+  border-radius: var(--ed-radius-xl);
   background: var(--ed-surface);
   box-shadow: var(--ed-shadow-lg);
 }
@@ -130,7 +130,7 @@ function submit() {
 .pw-title {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   margin: 0 0 8px;
   color: var(--ed-ink);
   font-size: 14.5px;
@@ -167,7 +167,7 @@ function submit() {
   height: 26px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--ed-radius-sm);
   background: transparent;
   color: var(--ed-text-4);
   cursor: pointer;

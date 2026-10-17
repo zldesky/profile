@@ -171,7 +171,7 @@ function onCaptchaExhausted() {
   margin-bottom: 18px;
   padding: 3px;
   border: 1px solid var(--ed-line-soft);
-  border-radius: 9px;
+  border-radius: var(--ed-radius-seg-outer);
   background: var(--ed-fill);
 }
 
@@ -179,7 +179,7 @@ function onCaptchaExhausted() {
   flex: 1;
   padding: 7px 0;
   border: none;
-  border-radius: 7px;
+  border-radius: var(--ed-radius-seg-inner);
   background: transparent;
   color: var(--ed-text-2);
   font: inherit;
@@ -201,7 +201,7 @@ function onCaptchaExhausted() {
 .auth-form {
   display: flex;
   flex-direction: column;
-  gap: 13px;
+  gap: 12px;
 }
 
 .auth-field {

@@ -88,14 +88,14 @@ function onFailed() {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(16, 24, 40, 0.42);
+  background: var(--ed-overlay);
 }
 
 .cd-card {
   width: 100%;
   max-width: 348px;
   padding: 16px 18px 18px;
-  border-radius: 16px;
+  border-radius: var(--ed-radius-xl);
   background: var(--ed-surface);
   box-shadow: var(--ed-shadow-lg);
 }
@@ -122,7 +122,7 @@ function onFailed() {
   height: 26px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--ed-radius-sm);
   background: transparent;
   color: var(--ed-text-4);
   cursor: pointer;

@@ -51,14 +51,14 @@ watch(
   /* 顶部一抹品牌色晕光 + 向下过渡的浅灰，比纯色背景更有产品落地页的完成度 */
   background:
     radial-gradient(900px 420px at 50% -120px, var(--ed-brand-ring), transparent 70%),
-    linear-gradient(180deg, #f7f8fa 0%, #eef1f4 100%);
+    linear-gradient(180deg, var(--ed-fill-2) 0%, var(--ed-fill-3) 100%);
 }
 
 .auth-card {
   width: 100%;
   max-width: 380px;
   padding: 28px 26px 22px;
-  border-radius: 16px;
+  border-radius: var(--ed-radius-xl);
   background: var(--ed-surface);
   box-shadow: var(--ed-shadow-lg);
 }
@@ -80,7 +80,7 @@ watch(
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: 9px;
+  border-radius: var(--ed-radius-sm);
   background: linear-gradient(135deg, var(--ed-brand-grad-hi) 0%, var(--ed-brand-strong) 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.25),

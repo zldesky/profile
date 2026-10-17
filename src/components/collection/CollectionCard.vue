@@ -128,7 +128,7 @@ async function load() {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--ed-line-soft);
-  border-radius: 14px;
+  border-radius: var(--ed-radius-xl);
   background: var(--ed-surface);
   overflow: hidden;
   text-decoration: none;
@@ -152,7 +152,7 @@ async function load() {
   align-items: flex-start;
   justify-content: center;
   overflow: hidden;
-  background-color: #f3f4f6;
+  background-color: var(--ed-fill);
   background-image: radial-gradient(rgba(16, 24, 40, 0.075) 1px, transparent 1.6px);
   background-size: 24px 24px;
 }
@@ -185,7 +185,7 @@ async function load() {
 .cc-meta {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   padding: 10px 12px 11px;
   border-top: 1px solid var(--ed-line-soft);
 }

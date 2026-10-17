@@ -232,7 +232,7 @@ const expiryText = computed(() => {
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--ed-radius-sm);
   background: linear-gradient(135deg, var(--ed-brand-grad-hi) 0%, var(--ed-brand-strong) 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.25),

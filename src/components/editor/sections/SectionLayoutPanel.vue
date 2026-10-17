@@ -107,7 +107,7 @@ function resetLayout() {
 .layout-panel {
   margin-bottom: 10px;
   padding-bottom: 10px;
-  border-bottom: 1px dashed #eef0f4;
+  border-bottom: 1px dashed var(--ed-fill-3);
 }
 
 .layout-toggle {

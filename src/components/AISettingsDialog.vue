@@ -332,7 +332,7 @@ watch(isOpen, async (open) => {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(16, 24, 40, 0.42);
+  background: var(--ed-overlay);
 }
 
 .ai-card {
@@ -341,7 +341,7 @@ watch(isOpen, async (open) => {
   max-height: calc(100vh - 40px);
   overflow-y: auto;
   padding: 18px 20px 16px;
-  border-radius: 16px;
+  border-radius: var(--ed-radius-xl);
   background: var(--ed-surface);
   box-shadow: var(--ed-shadow-lg);
   outline: none;
@@ -369,7 +369,7 @@ watch(isOpen, async (open) => {
   height: 26px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--ed-radius-sm);
   background: transparent;
   color: var(--ed-text-4);
   cursor: pointer;
@@ -413,7 +413,7 @@ watch(isOpen, async (open) => {
   gap: 6px;
   margin: 0 0 10px;
   padding: 7px 9px;
-  border-radius: 8px;
+  border-radius: var(--ed-radius-sm);
   background: var(--ed-warn-tint);
   color: var(--ed-warn);
   font-size: 12px;

@@ -212,7 +212,7 @@ function onKeydown(event: KeyboardEvent) {
   width: 280px;
   padding: 10px 12px 8px;
   border: 1px solid var(--ed-line-2);
-  border-radius: 10px;
+  border-radius: var(--ed-radius-md);
   background: var(--ed-surface);
   box-shadow: var(--ed-shadow-lg);
 }
@@ -243,7 +243,7 @@ function onKeydown(event: KeyboardEvent) {
   height: 20px;
   padding: 0;
   border: none;
-  border-radius: 5px;
+  border-radius: var(--ed-radius-xs);
   background: transparent;
   color: var(--ed-text-4);
   cursor: pointer;
@@ -258,7 +258,7 @@ function onKeydown(event: KeyboardEvent) {
   width: 100%;
   padding: 6px 9px;
   border: 1px solid var(--ed-line-2);
-  border-radius: 8px;
+  border-radius: var(--ed-radius-sm);
   background: var(--ed-surface);
   color: var(--ed-ink);
   font: inherit;

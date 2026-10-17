@@ -166,7 +166,7 @@ function apply() {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(16, 24, 40, 0.42);
+  background: var(--ed-overlay);
 }
 
 .pl-card {
@@ -175,7 +175,7 @@ function apply() {
   max-height: calc(100vh - 40px);
   overflow-y: auto;
   padding: 18px 20px 16px;
-  border-radius: 16px;
+  border-radius: var(--ed-radius-xl);
   background: var(--ed-surface);
   box-shadow: var(--ed-shadow-lg);
   outline: none;
@@ -206,7 +206,7 @@ function apply() {
   height: 26px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--ed-radius-sm);
   background: transparent;
   color: var(--ed-text-4);
   cursor: pointer;
@@ -233,7 +233,7 @@ function apply() {
   margin: 0 0 12px;
   padding: 10px 12px;
   border: 1px dashed var(--ed-line-2);
-  border-radius: 9px;
+  border-radius: var(--ed-radius-sm);
   background: var(--ed-fill-2);
   color: var(--ed-text-2);
   font-size: 12.5px;

@@ -61,6 +61,61 @@
   --ed-shadow-md: 0 4px 8px -2px rgba(16, 24, 40, 0.12), 0 2px 4px -2px rgba(16, 24, 40, 0.06);
   --ed-shadow-lg: 0 20px 24px -4px rgba(16, 24, 40, 0.1), 0 8px 8px -4px rgba(16, 24, 40, 0.05);
   --ed-paper-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 12px 32px -8px rgba(16, 24, 40, 0.16);
+
+  /*
+   * 中性色的补充档位。
+   *
+   * 起因是一次审计：组件里散着 46 种未走令牌的颜色字面量（约 100 处），其中大量是
+   * 「几乎一样」的灰 —— 边框有 #c2cad4 / #c8ced8 / #cbd2db / #d3d9e3 / #d5dae2，
+   * 文字有 #8b93a1 / #9ca3af / #aab3bf / #b8bfc9 / #6b7280。
+   * 单个看都合理，并排看就「说不清哪里不齐」。这里按用途补三档，把近似的收敛进来：
+   *  - --ed-line-3    比 --ed-line-2 重一档，用于需要更明确分隔的地方（如卡片外框）
+   *  - --ed-text-5    比 --ed-text-4 轻一档，用于更弱的辅助信息（角标、禁用态）
+   *  - --ed-fill-3    比 --ed-fill 深一档，用于轨道/占位这类「底」
+   */
+  --ed-line-3: #cbd2db;
+  --ed-text-5: #aab3bf;
+  --ed-fill-3: #e6e9ef;
+  --ed-overlay: rgba(16, 24, 40, 0.42);
+
+  /*
+   * 成功态四档。原来散在验证码组件里的四个绿各自成篇（#e8f6ee / #d3efdd / #bfe3cd / #2e9e5b），
+   * 收敛时一度被并成同一个 tint，把「底色 / 已滑过部分 / 描边 / 文字」的层次压平了 ——
+   * 四档本来就是刻意拉的梯度，只是没有名字。这里补上名字，层次保持不变：
+   *  - tint 最浅，轨道底色
+   *  - fill 次浅，已滑过部分的填充
+   *  - line 中间，完成态的描边
+   *  - ok   最深，文字与手柄等需要明确存在感的元素
+   */
+  --ed-ok-tint: #e8f6ee;
+  --ed-ok-fill: #d3efdd;
+  --ed-ok-line: #bfe3cd;
+  --ed-ok: #2e9e5b;
+
+  /*
+   * 圆角阶梯。
+   *
+   * 审计发现「同类角色、不同圆角」是最扎眼的不一致：分段控制器 .panel-tabs / .auth-tabs /
+   * .ed-sub 都是 9px，而它们的内部按钮分别是 7px / 9px / 8px；图标按钮 .ed-icon-btn 是 7px
+   * 而输入框是 8px —— 7 与 8 的差别看不出来，但一排控件并排就是不齐。
+   * 这里按角色定档，不再逐处拍数字：
+   *  - xs 4px   极小色块、缩略图内部的示意线条
+   *  - sm 8px   输入框、小按钮、图标按钮（控件的最小档）
+   *  - md 10px  浮层、面板、卡片
+   *  - lg 12px  较大的容器
+   *  - xl 16px  弹窗卡片、页面级容器
+   *  - pill     胶囊（标签、开关、进度条）
+   */
+  --ed-radius-xs: 4px;
+  --ed-radius-sm: 8px;
+  --ed-radius-md: 10px;
+  --ed-radius-lg: 12px;
+  --ed-radius-xl: 16px;
+  --ed-radius-pill: 999px;
+  /* 分段控制器的内外圈：外圈比内圈大一档，视觉上才「嵌」得进去 */
+  --ed-radius-seg-outer: 9px;
+  --ed-radius-seg-inner: 7px;
+  /* 兼容既有写法：--ed-radius 等同于 md，逐步替换后可删 */
   --ed-radius: 10px;
 
   /*
@@ -429,7 +484,7 @@ textarea {
 }
 
 .r-lab {
-  color: #6b7280;
+  color: var(--ed-text-3);
   white-space: nowrap;
 }
 
@@ -558,7 +613,7 @@ textarea {
 }
 
 .r-time {
-  color: #6b7280;
+  color: var(--ed-text-3);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
@@ -619,7 +674,7 @@ textarea {
 }
 
 .r-bar-pct {
-  color: #6b7280;
+  color: var(--ed-text-3);
   font-variant-numeric: tabular-nums;
 }
 

@@ -239,7 +239,7 @@ async function revokeShareItem(item) {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(16, 24, 40, 0.42);
+  background: var(--ed-overlay);
 }
 
 .sh-card {
@@ -249,7 +249,7 @@ async function revokeShareItem(item) {
   max-height: calc(100vh - 40px);
   overflow-y: auto;
   padding: 18px 20px 16px;
-  border-radius: 16px;
+  border-radius: var(--ed-radius-xl);
   background: var(--ed-surface);
   box-shadow: var(--ed-shadow-lg);
   outline: none;
@@ -277,7 +277,7 @@ async function revokeShareItem(item) {
   height: 26px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--ed-radius-sm);
   background: transparent;
   color: var(--ed-text-4);
   cursor: pointer;
@@ -298,7 +298,7 @@ async function revokeShareItem(item) {
 .sh-check {
   display: flex;
   align-items: flex-start;
-  gap: 7px;
+  gap: 8px;
   margin-bottom: 12px;
   color: var(--ed-text-2);
   font-size: 12.5px;

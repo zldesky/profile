@@ -149,7 +149,7 @@ function lockedTitle(kind, name) {
   align-items: center;
   gap: 6px;
   padding: 5px 10px 5px 6px;
-  border: 1px solid #e3e6ec;
+  border: 1px solid var(--ed-fill-3);
   border-radius: 999px;
   background: #fff;
   font: inherit;
@@ -160,8 +160,8 @@ function lockedTitle(kind, name) {
 }
 
 .style-chip:hover {
-  border-color: #c2cad4;
-  color: #1f2329;
+  border-color: var(--ed-line-3);
+  color: var(--ed-ink);
 }
 
 .style-chip.is-active {
@@ -180,12 +180,12 @@ function lockedTitle(kind, name) {
 }
 
 .style-chip:disabled:hover {
-  border-color: #e3e6ec;
+  border-color: var(--ed-fill-3);
   color: #475467;
 }
 
 .tpl-card:disabled:hover {
-  border-color: #e3e6ec;
+  border-color: var(--ed-fill-3);
   box-shadow: none;
 }
 
@@ -199,7 +199,7 @@ function lockedTitle(kind, name) {
 .tpl-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 9px;
+  gap: 8px;
 }
 
 /*
@@ -212,7 +212,7 @@ function lockedTitle(kind, name) {
   overflow-y: auto;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
-  scrollbar-color: #d3d9e3 transparent;
+  scrollbar-color: var(--ed-line-3) transparent;
 }
 
 .tpl-scroll::-webkit-scrollbar {
@@ -225,21 +225,21 @@ function lockedTitle(kind, name) {
 
 .tpl-scroll::-webkit-scrollbar-thumb {
   border-radius: 3px;
-  background: #d3d9e3;
+  background: var(--ed-line-3);
 }
 
 .tpl-scroll::-webkit-scrollbar-thumb:hover {
-  background: #b9c3d4;
+  background: var(--ed-line-3);
 }
 
 .tpl-card {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
   padding: 8px;
-  border: 1px solid #e3e6ec;
-  border-radius: 10px;
+  border: 1px solid var(--ed-fill-3);
+  border-radius: var(--ed-radius-md);
   background: #fff;
   font: inherit;
   text-align: left;
@@ -248,7 +248,7 @@ function lockedTitle(kind, name) {
 }
 
 .tpl-card:hover {
-  border-color: #c2cad4;
+  border-color: var(--ed-line-3);
   box-shadow: 0 2px 10px rgba(20, 30, 50, 0.07);
 }
 
@@ -266,14 +266,14 @@ function lockedTitle(kind, name) {
 
 .tpl-meta strong {
   display: block;
-  color: #1f2329;
+  color: var(--ed-ink);
   font-size: 12.5px;
 }
 
 .tpl-meta span {
   display: block;
   margin-top: 2px;
-  color: #8b93a1;
+  color: var(--ed-text-4);
   font-size: 11px;
   line-height: 1.45;
 }
@@ -284,8 +284,8 @@ function lockedTitle(kind, name) {
   display: flex;
   height: 72px;
   overflow: hidden;
-  border: 1px solid #eceff4;
-  border-radius: 6px;
+  border: 1px solid var(--ed-fill-3);
+  border-radius: var(--ed-radius-sm);
   background: #fff;
 }
 
@@ -309,14 +309,14 @@ function lockedTitle(kind, name) {
   align-items: center;
   gap: 4px;
   padding-bottom: 4px;
-  border-bottom: 1px solid #eceff4;
+  border-bottom: 1px solid var(--ed-fill-3);
 }
 
 .thumb-head .name {
   width: 34%;
   height: 5px;
   border-radius: 2px;
-  background: #c8ced8;
+  background: var(--ed-line-3);
 }
 
 .thumb-head .ava {
@@ -331,13 +331,13 @@ function lockedTitle(kind, name) {
 .thumb-lines {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
 .thumb-lines i {
   height: 3px;
   border-radius: 2px;
-  background: #e6e9ef;
+  background: var(--ed-fill-3);
 }
 
 .thumb-lines .w90 {
@@ -358,7 +358,7 @@ function lockedTitle(kind, name) {
 .thumb-col {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
 .thumb-col .bt {
@@ -372,7 +372,7 @@ function lockedTitle(kind, name) {
 .thumb-col .ln {
   height: 3px;
   border-radius: 2px;
-  background: #e6e9ef;
+  background: var(--ed-fill-3);
 }
 
 /* 左侧色栏 */
@@ -389,7 +389,7 @@ function lockedTitle(kind, name) {
 .thumb--twocol .thumb-col:first-child {
   flex: 0 0 38%;
   padding-right: 5px;
-  border-right: 1px solid #eceff4;
+  border-right: 1px solid var(--ed-fill-3);
 }
 
 /* 时间轴 */
@@ -420,7 +420,7 @@ function lockedTitle(kind, name) {
 
 .thumb--minimal .thumb-col .bt {
   height: 3px;
-  background: #c8ced8;
+  background: var(--ed-line-3);
   opacity: 1;
 }
 
@@ -458,9 +458,9 @@ function lockedTitle(kind, name) {
 /* 卡片分区：每个模块包一层浅色卡片 */
 .thumb--cards .thumb-col {
   padding: 3px 4px;
-  border: 1px solid #e3e8f0;
+  border: 1px solid var(--ed-fill-3);
   border-radius: 3px;
-  background: #f6f8fb;
+  background: var(--ed-fill-2);
 }
 
 /* 右侧色栏：色栏翻到右边 */
@@ -507,7 +507,7 @@ function lockedTitle(kind, name) {
   bottom: 0;
   left: calc(50% - 0.5px);
   width: 1px;
-  background: #eceff4;
+  background: var(--ed-fill-3);
 }
 
 /* 自由定制：通栏色带页头 + 可调比例的双栏 */
@@ -535,6 +535,6 @@ function lockedTitle(kind, name) {
 .thumb--custom .thumb-col:first-child {
   flex: 0 0 34%;
   padding-right: 5px;
-  border-right: 1px solid #eceff4;
+  border-right: 1px solid var(--ed-fill-3);
 }
 </style>

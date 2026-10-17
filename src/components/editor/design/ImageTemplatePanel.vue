@@ -159,9 +159,9 @@ function importFromUrl() {
 .img-summary {
   margin-top: 8px;
   padding: 7px 9px;
-  border-radius: 8px;
-  background: #f2f7f2;
-  color: #256b43;
+  border-radius: var(--ed-radius-sm);
+  background: var(--ed-ok-tint);
+  color: var(--ed-ok);
   font-size: 12px;
   line-height: 1.55;
 }

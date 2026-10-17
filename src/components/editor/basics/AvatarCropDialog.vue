@@ -226,14 +226,14 @@ async function confirmCrop() {
   width: 100%;
   max-width: 340px;
   padding: 18px 18px 16px;
-  border-radius: 12px;
+  border-radius: var(--ed-radius-lg);
   background: #fff;
   box-shadow: 0 18px 48px rgba(15, 23, 42, 0.22);
 }
 
 .cr-title {
   margin: 0 0 12px;
-  color: #1f2329;
+  color: var(--ed-ink);
   font-size: 14.5px;
   font-weight: 600;
 }
@@ -242,8 +242,8 @@ async function confirmCrop() {
   position: relative;
   overflow: hidden;
   margin: 0 auto;
-  border-radius: 6px;
-  background: #eceff4;
+  border-radius: var(--ed-radius-sm);
+  background: var(--ed-fill-3);
   /* 触屏拖动时不触发页面滚动 */
   touch-action: none;
   user-select: none;
@@ -271,13 +271,13 @@ async function confirmCrop() {
 
 .cr-zoom-label {
   flex: 0 0 auto;
-  color: #5b6472;
+  color: var(--ed-text-3);
   font-size: 12px;
 }
 
 .cr-hint {
   margin: 10px 0 14px;
-  color: #8b93a1;
+  color: var(--ed-text-4);
   font-size: 12px;
   line-height: 1.55;
 }

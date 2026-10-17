@@ -262,7 +262,7 @@ function onCropCancel() {
   overflow: hidden;
   padding: 0;
   border: 1px dashed var(--ed-line-2);
-  border-radius: 10px;
+  border-radius: var(--ed-radius-md);
   background: var(--ed-fill-2);
   color: var(--ed-text-4);
   cursor: pointer;

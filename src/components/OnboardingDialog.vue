@@ -104,7 +104,7 @@ function next() {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(16, 24, 40, 0.42);
+  background: var(--ed-overlay);
 }
 
 .ob-card {
@@ -114,7 +114,7 @@ function next() {
   max-height: calc(100vh - 40px);
   overflow-y: auto;
   padding: 22px 24px 18px;
-  border-radius: 16px;
+  border-radius: var(--ed-radius-xl);
   background: var(--ed-surface);
   box-shadow: var(--ed-shadow-lg);
   text-align: center;
@@ -139,7 +139,7 @@ function next() {
   justify-content: center;
   width: 52px;
   height: 52px;
-  border-radius: 14px;
+  border-radius: var(--ed-radius-xl);
   background: linear-gradient(135deg, var(--ed-brand-grad-hi) 0%, var(--ed-brand-strong) 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.25),

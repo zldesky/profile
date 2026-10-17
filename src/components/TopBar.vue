@@ -500,7 +500,7 @@ function runImport(action) {
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--ed-radius-sm);
   background: linear-gradient(135deg, var(--ed-brand-grad-hi) 0%, var(--ed-brand-strong) 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.25),
@@ -555,7 +555,7 @@ function runImport(action) {
   min-width: 210px;
   padding: 6px;
   border: 1px solid var(--ed-line-soft);
-  border-radius: 10px;
+  border-radius: var(--ed-radius-md);
   background: var(--ed-surface);
   box-shadow: var(--ed-shadow-lg);
 }
@@ -619,7 +619,7 @@ function runImport(action) {
 }
 
 .save-state.warn::before {
-  background: #f79009;
+  background: var(--ed-warn);
 }
 
 /* 主按钮内的剩余额度角标 */
@@ -636,7 +636,7 @@ function runImport(action) {
 .user-chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   padding: 7px 4px;
   color: var(--ed-text-2);
   font-size: 12.5px;

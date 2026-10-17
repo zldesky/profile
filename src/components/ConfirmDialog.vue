@@ -68,14 +68,14 @@ useDialogA11y(isOpen, cardRef, () => emit('cancel'))
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(16, 24, 40, 0.42);
+  background: var(--ed-overlay);
 }
 
 .cf-card {
   width: 100%;
   max-width: 340px;
   padding: 18px 18px 16px;
-  border-radius: 16px;
+  border-radius: var(--ed-radius-xl);
   background: var(--ed-surface);
   box-shadow: var(--ed-shadow-lg);
 }

@@ -245,9 +245,9 @@ defineExpose({ refresh })
   position: relative;
   width: 100%;
   aspect-ratio: 2 / 1;
-  border-radius: 8px;
+  border-radius: var(--ed-radius-sm);
   overflow: hidden;
-  background: #eef1f5;
+  background: var(--ed-fill-3);
 }
 
 .sc-stage.is-failed {
@@ -276,7 +276,7 @@ defineExpose({ refresh })
   inset: 0;
   border: none;
   background: rgba(255, 255, 255, 0.88);
-  color: #5b6472;
+  color: var(--ed-text-3);
   font: inherit;
   font-size: 13px;
   cursor: pointer;
@@ -285,29 +285,29 @@ defineExpose({ refresh })
 .sc-track {
   position: relative;
   height: 40px;
-  border: 1px solid #e3e6ec;
-  border-radius: 8px;
-  background: #f5f7fa;
+  border: 1px solid var(--ed-fill-3);
+  border-radius: var(--ed-radius-sm);
+  background: var(--ed-fill-2);
   overflow: hidden;
 }
 
 .sc-track.is-done {
-  border-color: #bfe3cd;
-  background: #e8f6ee;
+  border-color: var(--ed-ok-line);
+  background: var(--ed-ok-tint);
 }
 
 .sc-track.is-failed {
-  border-color: #eab8b3;
+  border-color: var(--ed-danger);
 }
 
 .sc-fill {
   position: absolute;
   inset: 0 auto 0 0;
-  background: #e3ecf8;
+  background: var(--ed-brand-tint);
 }
 
 .sc-track.is-done .sc-fill {
-  background: #d3efdd;
+  background: var(--ed-ok-fill);
 }
 
 .sc-hint {
@@ -316,17 +316,17 @@ defineExpose({ refresh })
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #8b93a1;
+  color: var(--ed-text-4);
   font-size: 12.5px;
   user-select: none;
 }
 
 .sc-track.is-failed .sc-hint {
-  color: #c0392b;
+  color: var(--ed-danger);
 }
 
 .sc-track.is-done .sc-hint {
-  color: #2e9e5b;
+  color: var(--ed-ok);
 }
 
 .sc-handle {
@@ -338,8 +338,8 @@ defineExpose({ refresh })
   justify-content: center;
   height: 38px;
   padding: 0;
-  border: 1px solid #d5dae2;
-  border-radius: 8px;
+  border: 1px solid var(--ed-line-3);
+  border-radius: var(--ed-radius-sm);
   background: #fff;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.15);
   cursor: grab;
@@ -356,14 +356,14 @@ defineExpose({ refresh })
 }
 
 .sc-handle.is-done {
-  border-color: #2e9e5b;
-  background: #2e9e5b;
+  border-color: var(--ed-ok);
+  background: var(--ed-ok);
 }
 
 .sc-grip {
   width: 12px;
   height: 14px;
-  background-image: radial-gradient(circle, #b6bdc9 1.5px, transparent 1.6px);
+  background-image: radial-gradient(circle, var(--ed-line-3) 1.5px, transparent 1.6px);
   background-size: 6px 7px;
 }
 

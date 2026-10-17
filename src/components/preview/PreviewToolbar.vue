@@ -72,7 +72,7 @@ const emit = defineEmits(['zoom-in', 'zoom-out', 'fit', 'compress'])
   max-width: calc(100% - 24px);
   padding: 6px 8px;
   border: 1px solid var(--ed-line);
-  border-radius: 14px;
+  border-radius: var(--ed-radius-xl);
   background: rgba(255, 255, 255, 0.92);
   box-shadow: var(--ed-shadow-lg);
   backdrop-filter: blur(10px);

@@ -94,7 +94,7 @@ const groups = computed(() => {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(16, 24, 40, 0.42);
+  background: var(--ed-overlay);
 }
 
 .sc-card {
@@ -103,7 +103,7 @@ const groups = computed(() => {
   max-height: calc(100vh - 40px);
   overflow-y: auto;
   padding: 18px 20px 16px;
-  border-radius: 16px;
+  border-radius: var(--ed-radius-xl);
   background: var(--ed-surface);
   box-shadow: var(--ed-shadow-lg);
   outline: none;
@@ -131,7 +131,7 @@ const groups = computed(() => {
   height: 26px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--ed-radius-sm);
   background: transparent;
   color: var(--ed-text-4);
   cursor: pointer;
@@ -180,7 +180,7 @@ kbd {
   padding: 2px 6px;
   border: 1px solid var(--ed-line-2);
   border-bottom-width: 2px;
-  border-radius: 5px;
+  border-radius: var(--ed-radius-xs);
   background: var(--ed-fill-2);
   color: var(--ed-text-2);
   font-family: var(--ed-font);

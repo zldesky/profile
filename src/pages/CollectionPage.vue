@@ -304,7 +304,7 @@ async function openLogin() {
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--ed-radius-sm);
   background: linear-gradient(135deg, var(--ed-brand-grad-hi) 0%, var(--ed-brand-strong) 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.25),
@@ -334,7 +334,7 @@ async function openLogin() {
 .cl-user {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   max-width: 160px;
   padding: 7px 4px;
   color: var(--ed-text-2);
@@ -438,7 +438,7 @@ async function openLogin() {
 .cl-skeleton {
   aspect-ratio: 210 / 340;
   border: 1px solid var(--ed-line-soft);
-  border-radius: 14px;
+  border-radius: var(--ed-radius-xl);
   background: linear-gradient(100deg, var(--ed-fill) 40%, var(--ed-fill-2) 50%, var(--ed-fill) 60%);
   background-size: 200% 100%;
   animation: cl-shimmer 1.2s infinite;
@@ -461,7 +461,7 @@ async function openLogin() {
   gap: 10px;
   padding: 56px 20px;
   border: 1px dashed var(--ed-line-soft);
-  border-radius: 16px;
+  border-radius: var(--ed-radius-xl);
   background: var(--ed-surface);
   text-align: center;
 }
@@ -495,7 +495,7 @@ async function openLogin() {
   min-height: 320px;
   padding: 20px;
   border: 1px dashed var(--ed-brand-border);
-  border-radius: 14px;
+  border-radius: var(--ed-radius-xl);
   background: var(--ed-fill-2);
   text-align: center;
 }
@@ -578,7 +578,7 @@ async function openLogin() {
 .cl-footer-col {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 8px;
 }
 
 .cl-footer-col h4 {

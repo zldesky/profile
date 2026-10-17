@@ -503,7 +503,7 @@ const detailText = (patch) =>
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--ed-radius-sm);
   background: linear-gradient(135deg, var(--ed-brand-grad-hi) 0%, var(--ed-brand-strong) 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.25),
@@ -532,7 +532,7 @@ const detailText = (patch) =>
 .ad2-user {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   color: var(--ed-text-2);
   font-size: 12.5px;
 }
@@ -550,7 +550,7 @@ const detailText = (patch) =>
   gap: 12px;
   padding: 70px 20px;
   border: 1px dashed var(--ed-line-soft);
-  border-radius: 16px;
+  border-radius: var(--ed-radius-xl);
   background: var(--ed-surface);
   color: var(--ed-text-3);
   text-align: center;
@@ -596,7 +596,7 @@ const detailText = (patch) =>
   margin-bottom: 26px;
   padding: 18px 20px;
   border: 1px solid var(--ed-line-soft);
-  border-radius: 14px;
+  border-radius: var(--ed-radius-xl);
   background: var(--ed-surface);
 }
 
@@ -641,7 +641,7 @@ const detailText = (patch) =>
   flex: 0 0 auto;
   width: 18px;
   height: 18px;
-  border-radius: 6px;
+  border-radius: var(--ed-radius-sm);
   box-shadow: inset 0 0 0 1px rgba(16, 24, 40, 0.12);
 }
 
@@ -681,7 +681,7 @@ const detailText = (patch) =>
   margin-top: 14px;
   padding: 14px 16px 16px;
   border: 1px solid var(--ed-brand-border);
-  border-radius: 12px;
+  border-radius: var(--ed-radius-lg);
   background: var(--ed-fill-2);
 }
 
@@ -725,7 +725,7 @@ const detailText = (patch) =>
   height: 32px;
   padding: 2px;
   border: 1px solid var(--ed-line-2);
-  border-radius: 8px;
+  border-radius: var(--ed-radius-sm);
   background: var(--ed-surface);
   cursor: pointer;
 }
@@ -792,7 +792,7 @@ const detailText = (patch) =>
   bottom: 16px;
   padding: 10px 14px;
   border: 1px solid var(--ed-line-soft);
-  border-radius: 12px;
+  border-radius: var(--ed-radius-lg);
   background: var(--ed-surface);
   box-shadow: var(--ed-shadow-lg);
 }

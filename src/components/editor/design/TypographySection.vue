@@ -125,19 +125,19 @@ const currentFont = computed(() => FONTS[store.theme.fontKey] || FONTS.yahei)
   gap: 4px;
   margin: 8px 0 6px;
   padding: 10px 12px;
-  border: 1px solid #eceff4;
-  border-radius: 8px;
-  background: #fcfdfe;
+  border: 1px solid var(--ed-fill-3);
+  border-radius: var(--ed-radius-sm);
+  background: var(--ed-surface);
 }
 
 .fp-name {
-  color: #8b93a1;
+  color: var(--ed-text-4);
   font-size: 11px;
   letter-spacing: 0.4px;
 }
 
 .fp-sample {
-  color: #1f2329;
+  color: var(--ed-ink);
   font-size: 16px;
   line-height: 1.5;
 }

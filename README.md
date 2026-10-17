@@ -68,6 +68,12 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 
 `stores/resume` 已按职责拆成五个文件（见下方目录结构），`resume.ts` 只保留响应式状态与编排，不再直接读写 `localStorage`。拆出的模块都是「纯读写传入数据」的形态，因此 `resumeMutations` / `resumePersistence` / `resumeHistory` / `resumeDocuments` 各有独立单测，不必再经由 store 间接验证。
 
+**设计令牌（编辑器外壳）**：`src/styles/paper.css` 的 `:root` 是唯一出处 —— 颜色、圆角、阴影都从这里取。做过的收敛：散在各组件里的 **46 种颜色字面量（约 100 处）** 与 **24 种圆角** 归到令牌，`gap` 归到 2px 网格。三条约定：
+
+- **同类角色用同一档**。最容易走样的是圆角：分段控制器 `.panel-tabs` / `.auth-tabs` / `.ed-sub` 都是 9px，而内部按钮曾分别是 7px / 9px / 8px，图标按钮是 7px 而输入框是 8px —— 7 与 8 的差别看不出来，并排就是不齐。现在按角色定档（`--ed-radius-xs/sm/md/lg/xl/pill` + 分段控制器的内外圈）。
+- **简历纸张的配色不受这里影响**。模板组件（`src/templates/**`）里的 `#4b5563` / `#d1d5db` 等是**简历内容自身的配色**，跟着 `--accent` 主题走，刻意不接令牌 —— 否则改界面就会改到用户导出的简历。同理 `paper.css` 里 `--ed-brand*` 的 `#000000` 是默认值，运行时由 `applyChromeAccent` 按简历主色重算。
+- **语义色给完整梯度，不要随手拍一个**。成功态是四档（`--ed-ok-tint/fill/line/ok`）：底色、已滑过部分、描边、文字。收敛时曾把四档并成一个 tint，结果把验证码完成态的层次压平了 —— 梯度是刻意的，只是原先没有名字。
+
 - **格式与质量分工**：Prettier 管一切格式（无分号、单引号、100 列），ESLint 只管代码质量与 Vue 特有陷阱（响应性丢失、`v-html` 禁用、`key` 缺失等），风格规则由 `eslint-config-prettier` 关闭避免打架；
 - **提交门禁**：husky + lint-staged 在 commit 时对暂存文件自动格式化并修复 lint（首次克隆后跑一次 `npm install` 即自动启用）；
 - **配置分层**：`eslint.config.js` 按目录区分浏览器/Node 全局；`server/render.js` 的浏览器回调、`server/sanitize.js` 的控制字符正则都有注明原因的豁免，不让规则静默放过特例；

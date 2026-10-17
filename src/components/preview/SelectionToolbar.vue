@@ -53,10 +53,10 @@ const emit = defineEmits(['toggle-visible', 'gap', 'indent', 'clear'])
   z-index: 60;
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   padding: 4px 8px;
   border-radius: 999px;
-  background: #242a35;
+  background: var(--ed-ink);
   color: #fff;
   box-shadow: 0 6px 20px rgba(15, 22, 34, 0.28);
   transform: translateX(-50%);

@@ -62,7 +62,7 @@ watch(visible, (open) => {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(16, 24, 40, 0.42);
+  background: var(--ed-overlay);
 }
 
 .ad-card {
@@ -71,7 +71,7 @@ watch(visible, (open) => {
   max-height: calc(100vh - 40px);
   overflow-y: auto;
   padding: 18px 20px 16px;
-  border-radius: 16px;
+  border-radius: var(--ed-radius-xl);
   background: var(--ed-surface);
   box-shadow: var(--ed-shadow-lg);
 }
@@ -98,7 +98,7 @@ watch(visible, (open) => {
   height: 26px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--ed-radius-sm);
   background: transparent;
   color: var(--ed-text-4);
   cursor: pointer;
