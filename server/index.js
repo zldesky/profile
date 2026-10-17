@@ -28,12 +28,17 @@ import {
   createSlidingWindowCounter,
   hashPassword,
   isLoopbackHost,
-  parseCookies,
   readPassword,
   validateCredentials,
   verifyPassword,
 } from './auth.ts'
 import { createCaptcha } from './captcha.ts'
+import {
+  BEARER_SUBJECT,
+  GLOBAL_SUBJECT,
+  SESSION_TTL_DAYS,
+  createRequestGuards,
+} from './requestGuards.ts'
 import { CATEGORY_KEYS, createDatabase } from './db.ts'
 import { fetchRemoteImage } from './imageProxy.ts'
 import {
@@ -54,11 +59,6 @@ const HOST = process.env.HOST || '127.0.0.1'
 /** 单用户每日导出上限；全站每日兜底是成本上限，应高于单用户上限之和的常态 */
 const USER_DAILY_LIMIT = Number(process.env.PDF_USER_DAILY_LIMIT) || 10
 const GLOBAL_DAILY_LIMIT = Number(process.env.PDF_DAILY_LIMIT) || 100
-/** 脚本口令（Bearer）使用者的配额主体 */
-const BEARER_SUBJECT = 'bearer'
-/** 全站配额在配额表里的主体键 */
-const GLOBAL_SUBJECT = '__global__'
-
 /** 分享链接有效期（天）与创建频率限制：防滥用刷库 */
 const SHARE_TTL_DAYS = Number(process.env.SHARE_TTL_DAYS) || 30
 /** 简历合集分页大小与游客可见条数；「登录查看更多」由服务端截断，前端只做展示 */
@@ -95,20 +95,6 @@ const captcha = createCaptcha({ secret: process.env.CAPTCHA_SECRET })
  * 关闭时回退为跳转独立登录页。经 /api/health 下发给前端。
  */
 const AUTH_POPUP_ENABLED = !/^(off|false|0)$/i.test(String(process.env.AUTH_POPUP ?? '').trim())
-
-/** 会话令牌只存服务端，Cookie 里放随机令牌即可 */
-const SESSION_COOKIE = 'rs_session'
-const SESSION_TTL_DAYS = 30
-
-/**
- * 生成今天的键（本机时区自然日）。配额跨天自动失效：查询按 day 匹配，
- * 旧日期的行留在表里不影响计数，量大了再清理。
- */
-function todayKey() {
-  const now = new Date()
-  const pad = (value) => String(value).padStart(2, '0')
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
-}
 
 /** 用户不存在时也走一次 scrypt，抹平「用户不存在」与「密码错误」的耗时差 */
 const DUMMY_HASH = hashPassword(createSessionToken())
@@ -152,6 +138,19 @@ for (const raw of String(process.env.ALLOWED_ORIGINS || '').split(',')) {
     console.warn(`[server] ALLOWED_ORIGINS 中有非法来源，已忽略：${origin}`)
   }
 }
+
+/**
+ * 请求层的认证、来源校验与配额。实现已抽到 requestGuards.ts（那边有 38 例单测），
+ * 这里只负责把本进程的 db / 口令守卫 / 来源白名单注入进去。
+ * 必须在 ALLOWED_ORIGINS 之后创建 —— 它要读这个白名单。
+ */
+const guards = createRequestGuards({
+  db,
+  guard,
+  allowedOrigins: ALLOWED_ORIGINS,
+  userDailyLimit: USER_DAILY_LIMIT,
+  globalDailyLimit: GLOBAL_DAILY_LIMIT,
+})
 
 /** 渲染源探测结果缓存，避免每个请求都去探测 */
 const RENDER_URL_TTL = 5000
@@ -198,124 +197,6 @@ async function getRenderUrl() {
   return value
 }
 
-/**
- * 来源校验。
- *
- * 浏览器发起的跨站请求一定会带 Origin，因此拒绝未知来源即可阻断恶意页面
- * 调用本服务，也能挡住把域名解析到 127.0.0.1 的 DNS rebinding 攻击。
- * 不带 Origin 的请求（curl、脚本、服务内部调用）放行。
- */
-function checkOrigin(req, res, next) {
-  const origin = req.get('origin')
-  if (!origin || ALLOWED_ORIGINS.has(origin)) return next()
-  res.status(403).json({ ok: false, message: '请求来源不被允许' })
-}
-
-/** 为响应设置会话 Cookie。Secure 跟随实际协议，代理场景需 TRUST_PROXY=1 */
-function setSessionCookie(req, res, token) {
-  res.cookie(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: req.secure,
-    path: '/',
-    maxAge: SESSION_TTL_DAYS * 24 * 60 * 60 * 1000,
-  })
-}
-
-function clearSessionCookie(res) {
-  res.clearCookie(SESSION_COOKIE, { path: '/' })
-}
-
-/**
- * 从请求解析登录态。Cookie 里的令牌只对应服务端会话，
- * 库里查不到（过期、被吊销、伪造）一律视为未登录。
- */
-function readSessionUser(req) {
-  const token = parseCookies(req.get('cookie'))[SESSION_COOKIE]
-  if (!token) return null
-  const session = db.findSession(token)
-  if (!session) return null
-  return { token, userId: session.user_id, subject: `user:${session.user_id}` }
-}
-
-/**
- * 统一认证中间件：会话 Cookie 或脚本口令（Bearer）二选一。
- * 都不成立时区分「需要登录」与「口令错误」，前端按此分流处理。
- */
-function requireAuth(req, res, next) {
-  const session = readSessionUser(req)
-  if (session) {
-    req.auth = { kind: 'session', ...session }
-    return next()
-  }
-
-  // Bearer 是给脚本用的备用通道：只在显式设置口令时存在，
-  // 否则未设口令的 verify 会恒返回 ok，匿名请求就会全部冒充成脚本放行
-  if (guard.enabled) {
-    const result = guard.verify(readPassword(req))
-    if (result === 'ok') {
-      req.auth = { kind: 'bearer', userId: null, subject: BEARER_SUBJECT }
-      return next()
-    }
-
-    if (result === 'locked') {
-      const minutes = Math.max(1, Math.ceil(guard.lockedMs() / 60000))
-      res.status(429).json({ ok: false, message: `口令连续错误过多，请 ${minutes} 分钟后再试` })
-      return
-    }
-
-    if (result === 'bad') {
-      res.status(401).json({ ok: false, message: '访问口令不正确' })
-      return
-    }
-  }
-
-  res.status(401).json({ ok: false, loginRequired: true, message: '请先登录后使用' })
-}
-
-/** 管理员专用中间件：必须是会话登录且用户行 role = admin（脚本口令通道无角色） */
-function requireAdmin(req, res, next) {
-  if (req.auth?.kind === 'session' && db.isAdminUser(req.auth.userId)) return next()
-  res.status(403).json({ ok: false, adminRequired: true, message: '该操作仅限管理员账号' })
-}
-
-/** 请求日志：一行 JSON，只记 /api（静态资源没有排查价值还刷屏） */
-function requestLogger(req, res, next) {
-  if (!req.path.startsWith('/api')) return next()
-
-  const startedAt = Date.now()
-  res.on('finish', () => {
-    if (req.path === '/api/health') return
-    console.log(
-      JSON.stringify({
-        t: new Date().toISOString(),
-        method: req.method,
-        path: req.path,
-        status: res.statusCode,
-        ms: Date.now() - startedAt,
-      }),
-    )
-  })
-  next()
-}
-
-/** 取当前主体的配额状态 */
-function quotaStatus(subject) {
-  const day = todayKey()
-  const limit = subject === GLOBAL_SUBJECT ? GLOBAL_DAILY_LIMIT : USER_DAILY_LIMIT
-  const used = subject === GLOBAL_SUBJECT ? db.quotaDaysUsed(day) : db.quotaUsed(subject, day)
-  return { day, limit, used, remaining: Math.max(0, limit - used) }
-}
-
-/** 计数 +1；只扣不判，判定由调用方先做（同步执行，无竞态） */
-function quotaConsume(subject) {
-  db.quotaConsume(subject, todayKey())
-}
-
-function quotaRefund(subject) {
-  db.quotaRefund(subject, todayKey())
-}
-
 const app = express()
 
 // 必须在定义路由之前设置；'true' 与 '1' 都表示一层代理
@@ -327,7 +208,7 @@ if (process.env.TRUST_PROXY) {
 }
 
 app.disable('x-powered-by')
-app.use(requestLogger)
+app.use(guards.requestLogger)
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('Referrer-Policy', 'no-referrer')
@@ -335,14 +216,14 @@ app.use((req, res, next) => {
 })
 
 // 来源校验与认证都排在请求体解析之前：未通过校验的请求不该消耗内存去解析大 body
-app.use(checkOrigin)
+app.use(guards.checkOrigin)
 
 /**
  * 服务状态。不要求登录即可调用：前端必须先知道「登录态与额度」，
  * 才能决定渲染哪个界面。额度、渲染内核等信息只回给已认证的调用方。
  */
 app.get('/api/health', async (req, res) => {
-  const session = readSessionUser(req)
+  const session = guards.readSessionUser(req)
   const bearerOk = guard.enabled && guard.verify(readPassword(req)) === 'ok'
   const subject = session?.subject || (bearerOk ? BEARER_SUBJECT : null)
 
@@ -356,8 +237,8 @@ app.get('/api/health', async (req, res) => {
       : null,
     ...(subject
       ? {
-          quota: quotaStatus(subject),
-          globalQuota: quotaStatus(GLOBAL_SUBJECT),
+          quota: guards.quotaStatus(subject),
+          globalQuota: guards.quotaStatus(GLOBAL_SUBJECT),
           renderUrl: await getRenderUrl(),
           browser: getResolvedChannel() || null,
         }
@@ -426,7 +307,7 @@ app.post('/api/auth/register', (req, res, next) => {
     const user = db.createUser(username, hashPassword(password))
     const token = createSessionToken()
     db.createSession(user.id, token)
-    setSessionCookie(req, res, token)
+    guards.setSessionCookie(req, res, token)
     res.json({ ok: true, user: { id: user.id, username: user.username, role: user.role } })
   } catch (error) {
     // 用户名冲突体现为唯一约束错误（预检查仍有并发窗口，这里兜底转成可读提示）
@@ -469,7 +350,7 @@ app.post('/api/auth/login', (req, res) => {
   db.purgeExpiredSessions()
   const token = createSessionToken()
   db.createSession(user.id, token)
-  setSessionCookie(req, res, token)
+  guards.setSessionCookie(req, res, token)
   res.json({
     ok: true,
     user: { id: user.id, username: user.username, role: user.role || 'member' },
@@ -477,15 +358,17 @@ app.post('/api/auth/login', (req, res) => {
 })
 
 app.post('/api/auth/logout', (req, res) => {
-  const token = parseCookies(req.get('cookie'))[SESSION_COOKIE]
-  if (token) db.deleteSession(token)
-  clearSessionCookie(res)
+  // 用会话解析拿令牌，而不是自己再解析一次 Cookie：
+  // 解析规则（Cookie 名、解码、非法值处理）只保留在 requestGuards 一处
+  const session = guards.readSessionUser(req)
+  if (session?.token) db.deleteSession(session.token)
+  guards.clearSessionCookie(res)
   res.json({ ok: true })
 })
 
 /** 登录态查询。恒为 200：前端用它决定渲染哪个界面，未登录不是错误 */
 app.get('/api/auth/me', (req, res) => {
-  const session = readSessionUser(req)
+  const session = guards.readSessionUser(req)
   res.json({
     ok: true,
     authenticated: Boolean(session),
@@ -552,7 +435,7 @@ app.get('/api/styles', (req, res) => {
 })
 
 /** 管理后台读取完整配置（含未发布前为 null 的原始态） */
-app.get('/api/styles-admin', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/styles-admin', guards.requireAuth, guards.requireAdmin, (req, res) => {
   res.set('Cache-Control', 'no-store')
   res.json({ ok: true, config: db.getConfig('styleConfig') })
 })
@@ -561,7 +444,7 @@ app.get('/api/styles-admin', requireAuth, requireAdmin, (req, res) => {
  * 保存样式配置（全量覆盖）：风格预设列表 + 模板兼容矩阵。
  * 服务端只做结构与枚举校验，域逻辑（气质搭配）由后台维护者把关。
  */
-app.put('/api/styles-admin', requireAuth, requireAdmin, (req, res) => {
+app.put('/api/styles-admin', guards.requireAuth, guards.requireAdmin, (req, res) => {
   const { presets, matrix } = req.body || {}
 
   if (!Array.isArray(presets) || presets.length === 0 || presets.length > STYLE_PRESET_MAX) {
@@ -628,7 +511,7 @@ app.put('/api/styles-admin', requireAuth, requireAdmin, (req, res) => {
 
 /* ---------------- 云端简历（要求登录） ---------------- */
 
-app.get('/api/resume', requireAuth, (req, res) => {
+app.get('/api/resume', guards.requireAuth, (req, res) => {
   if (req.auth.kind !== 'session') {
     res.status(403).json({ ok: false, message: '脚本口令通道不提供简历存取' })
     return
@@ -637,7 +520,7 @@ app.get('/api/resume', requireAuth, (req, res) => {
   res.json({ ok: true, resume: stored?.resume ?? null, updatedAt: stored?.updatedAt ?? null })
 })
 
-app.put('/api/resume', requireAuth, (req, res) => {
+app.put('/api/resume', guards.requireAuth, (req, res) => {
   if (req.auth.kind !== 'session') {
     res.status(403).json({ ok: false, message: '脚本口令通道不提供简历存取' })
     return
@@ -668,7 +551,7 @@ function cacheKeyOf(resume, title) {
   return createHash('sha256').update(JSON.stringify({ resume, title })).digest('hex')
 }
 
-app.post('/api/pdf', requireAuth, async (req, res) => {
+app.post('/api/pdf', guards.requireAuth, async (req, res) => {
   const { resume, filename } = req.body || {}
 
   // 先校验再扣额度：参数不合法属于调用方问题，不应消耗当天配额
@@ -690,7 +573,7 @@ app.post('/api/pdf', requireAuth, async (req, res) => {
       'Content-Disposition',
       `attachment; filename*=UTF-8''${encodeURIComponent(safeName)}`,
     )
-    res.setHeader('X-Quota-Remaining', String(quotaStatus(req.auth.subject).remaining))
+    res.setHeader('X-Quota-Remaining', String(guards.quotaStatus(req.auth.subject).remaining))
     res.setHeader('X-Pdf-Cache', 'hit')
     res.send(cached.buffer)
     return
@@ -698,7 +581,7 @@ app.post('/api/pdf', requireAuth, async (req, res) => {
   if (cached) pdfCache.delete(key)
 
   const subject = req.auth.subject
-  const userQuota = quotaStatus(subject)
+  const userQuota = guards.quotaStatus(subject)
   if (userQuota.remaining <= 0) {
     res.status(429).json({
       ok: false,
@@ -708,7 +591,7 @@ app.post('/api/pdf', requireAuth, async (req, res) => {
     return
   }
 
-  const globalQuota = quotaStatus(GLOBAL_SUBJECT)
+  const globalQuota = guards.quotaStatus(GLOBAL_SUBJECT)
   if (globalQuota.remaining <= 0) {
     res.status(429).json({
       ok: false,
@@ -718,8 +601,8 @@ app.post('/api/pdf', requireAuth, async (req, res) => {
     return
   }
 
-  quotaConsume(subject)
-  quotaConsume(GLOBAL_SUBJECT)
+  guards.quotaConsume(subject)
+  guards.quotaConsume(GLOBAL_SUBJECT)
 
   try {
     const pdf = await renderResumePdf({
@@ -740,12 +623,12 @@ app.post('/api/pdf', requireAuth, async (req, res) => {
       'Content-Disposition',
       `attachment; filename*=UTF-8''${encodeURIComponent(safeName)}`,
     )
-    res.setHeader('X-Quota-Remaining', String(quotaStatus(subject).remaining))
+    res.setHeader('X-Quota-Remaining', String(guards.quotaStatus(subject).remaining))
     res.send(pdf)
   } catch (error) {
     // 渲染失败多数是服务端问题，归还额度
-    quotaRefund(subject)
-    quotaRefund(GLOBAL_SUBJECT)
+    guards.quotaRefund(subject)
+    guards.quotaRefund(GLOBAL_SUBJECT)
     console.error('[pdf] 渲染失败：', error)
     res.status(error.statusCode || 500).json({ ok: false, message: error.message || '渲染失败' })
   }
@@ -756,7 +639,7 @@ app.post('/api/pdf', requireAuth, async (req, res) => {
  * 前端直取会被 CORS 污染画布，由本机服务代取。
  * 任意 URL 抓取是高危能力，与导出同为登录后能力，目标校验见 imageProxy.js。
  */
-app.post('/api/image-proxy', requireAuth, async (req, res) => {
+app.post('/api/image-proxy', guards.requireAuth, async (req, res) => {
   const url = typeof req.body?.url === 'string' ? req.body.url.trim() : ''
   if (!url) {
     res.status(400).json({ ok: false, message: '缺少图片链接' })
@@ -782,7 +665,7 @@ function newShareId() {
   return randomBytes(5).toString('hex')
 }
 
-app.post('/api/share', requireAuth, (req, res) => {
+app.post('/api/share', guards.requireAuth, (req, res) => {
   if (req.auth.kind !== 'session') {
     res.status(403).json({ ok: false, message: '脚本口令通道不提供分享能力' })
     return
@@ -831,7 +714,7 @@ app.post('/api/share', requireAuth, (req, res) => {
 })
 
 /** 当前用户的分享列表（「我的分享」管理用：撤销、取消合集展示） */
-app.get('/api/share/mine', requireAuth, (req, res) => {
+app.get('/api/share/mine', guards.requireAuth, (req, res) => {
   if (req.auth.kind !== 'session') {
     res.status(403).json({ ok: false, message: '脚本口令通道不提供分享能力' })
     return
@@ -853,7 +736,7 @@ app.get('/api/share/:id', (req, res) => {
   })
 })
 
-app.delete('/api/share/:id', requireAuth, (req, res) => {
+app.delete('/api/share/:id', guards.requireAuth, (req, res) => {
   if (req.auth.kind !== 'session') {
     res.status(403).json({ ok: false, message: '脚本口令通道不提供分享能力' })
     return
@@ -877,7 +760,7 @@ app.delete('/api/share/:id', requireAuth, (req, res) => {
  * 摘要不含简历正文：正文由客户端按条目走公开的 /api/share/:id 拉取渲染。
  */
 app.get('/api/collection', (req, res) => {
-  const authenticated = Boolean(readSessionUser(req))
+  const authenticated = Boolean(guards.readSessionUser(req))
 
   const pageSize = Math.min(
     24,
@@ -913,7 +796,7 @@ app.get('/api/collection', (req, res) => {
  * Key 由前端每次随请求带来：转发即用即弃，不写库、不打日志；
  * base URL 的协议与内网校验见 aiGuard.js。
  */
-app.post('/api/ai/chat', requireAuth, async (req, res) => {
+app.post('/api/ai/chat', guards.requireAuth, async (req, res) => {
   const { baseUrl, apiKey, model, messages, temperature } = req.body || {}
 
   const endpoint = await resolveAiEndpoint(baseUrl)
