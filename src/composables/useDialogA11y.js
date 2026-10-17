@@ -22,8 +22,11 @@ let dialogSeq = 0
  *  2. Tab 在卡片内圈禁循环，Shift+Tab 反向，焦点不会漏到遮罩后面的编辑器；
  *  3. Esc 请求关闭（最上层弹窗响应），关闭后焦点归还给打开前的元素。
  *
+ * 本文件仍是 JS，因此把参数类型写在 JSDoc 里：调用方多为已迁 TS 的组件，
+ * 有这几行它们传错（例如传 getter 而不是 Ref）会在 typecheck 阶段被抓住。
+ *
  * @param {import('vue').Ref<boolean>} open 弹窗开关，与 v-if 同源
- * @param {import('vue').Ref<HTMLElement|null>} cardRef 弹窗卡片根元素（建议加 tabindex="-1"）
+ * @param {import('vue').Ref<HTMLElement | null>} cardRef 弹窗卡片根元素（建议加 tabindex="-1"）
  * @param {() => void} onClose 请求关闭的回调，语义与点关闭按钮一致
  */
 export function useDialogA11y(open, cardRef, onClose) {

@@ -1,14 +1,24 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 统一图标组件。
  * 线条图标用于简历正文，实心感图标用于编辑器操作区，两者共用 stroke 绘制风格。
  */
 import { computed } from 'vue'
 
+import type { IconName } from '@/types/resume'
+
 const props = defineProps({
+  /**
+   * 图标名。这里刻意收成 string 而不是 IconName：
+   * IconName 是「简历数据字段能用的 14 个图标」，而本组件还承载 plus/copy/eye 等
+   * 编辑器 UI 图标（共 39 个），两者是不同的集合。未知名字会回退到 none（见下方 paths）。
+   */
   name: { type: String, default: 'none' },
   size: { type: [Number, String], default: 16 },
 })
+
+/** 供其它已迁 TS 的模块引用「数据字段图标」这一子集 */
+export type SvgIconName = IconName
 
 /** 每个图标由若干 path / circle / rect 描述，统一 24x24 视图盒 */
 const ICONS = {
@@ -86,7 +96,8 @@ const ICONS = {
   lock: ['M6 11h12v9H6z', 'M9 11V8a3 3 0 0 1 6 0v3'],
 }
 
-const paths = computed(() => ICONS[props.name] || ICONS.none)
+/** 未收录的名字回退到 none；断言只是把「键空间就是 ICONS 自己」写给类型系统 */
+const paths = computed(() => ICONS[props.name as keyof typeof ICONS] || ICONS.none)
 const pixelSize = computed(() => `${props.size}px`)
 </script>
 

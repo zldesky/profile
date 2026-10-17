@@ -34,12 +34,29 @@ export default [
    * 而 flat config 里 js.recommended 与 vue/essential 都不匹配 .ts ——
    * 结果是所有 .ts 文件被静默跳过（显式传入只会得到 File ignored 警告），
    * 一旦有配置块覆盖到 .ts 又会直接报 Parsing error。两者都不是想要的状态。
-   * 这里只接管 .ts：.vue 目前都是 JS，等组件迁 TS 时再补 vue 的 TS 解析链。
    */
   ...tseslint.configs.recommended.map((config) => ({
     ...config,
     files: ['**/*.ts'],
   })),
+
+  {
+    /*
+     * 组件开始迁 TS 后，`<script setup lang="ts">` 里的 `import type` 会让
+     * vue-eslint-parser 直接报 Parsing error（它默认用 espree 解析 script 块）。
+     * 这里给 .vue 指定内层解析器为 @typescript-eslint/parser：
+     * 外层仍是 vue-eslint-parser（模板语法靠它），script 块交给 TS 解析器。
+     * 只设 parser、不带 TS 规则集，避免 .vue 的 JS 部分被 TS 规则误伤。
+     */
+    files: ['**/*.vue'],
+    languageOptions: {
+      parserOptions: {
+        parser: tseslint.parser,
+        extraFileExtensions: ['.vue'],
+        sourceType: 'module',
+      },
+    },
+  },
 
   {
     files: ['src/**'],

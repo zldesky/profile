@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 基本信息：姓名、求职职位，以及头像与联系方式两个子分区。
  */

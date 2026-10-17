@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 模块正文渲染器。
  * 按模块 type 输出不同结构，各模板共用，布局差异由外层模板组件决定。

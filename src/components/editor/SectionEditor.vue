@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 模块编辑器调度器。
  * 只做两件事：渲染位置面板，并按模块 type 选中对应的分段编辑器，
@@ -11,13 +11,12 @@ import GridSectionEditor from '@/components/editor/sections/GridSectionEditor.vu
 import SectionLayoutPanel from '@/components/editor/sections/SectionLayoutPanel.vue'
 import SkillsSectionEditor from '@/components/editor/sections/SkillsSectionEditor.vue'
 import TextSectionEditor from '@/components/editor/sections/TextSectionEditor.vue'
+import type { Section, SectionType } from '@/types/resume'
 
-const props = defineProps({
-  section: { type: Object, required: true },
-})
+const props = defineProps<{ section: Section }>()
 
 /** 模块类型 → 编辑器组件 */
-const EDITORS = {
+const EDITORS: Record<SectionType, unknown> = {
   grid: GridSectionEditor,
   entries: EntriesSectionEditor,
   skills: SkillsSectionEditor,

@@ -1,10 +1,10 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 通用确认弹窗：标题 + 说明 + 取消/确认双按钮。
  * 供退出登录这类需要一次确认的操作使用；Teleport 到 body，
  * 视觉与交互对齐 PasswordDialog / AuthDialog（遮罩点击即取消）。
  */
-import { useTemplateRef } from 'vue'
+import { computed, useTemplateRef } from 'vue'
 
 import { useDialogA11y } from '@/composables/useDialogA11y'
 
@@ -22,11 +22,9 @@ const props = defineProps({
 const emit = defineEmits(['confirm', 'cancel'])
 
 const cardRef = useTemplateRef('cardRef')
-useDialogA11y(
-  () => props.open,
-  cardRef,
-  () => emit('cancel'),
-)
+/** useDialogA11y 需要 Ref<boolean>，传 props.open（它是布尔值快照）不会跟随变化 */
+const isOpen = computed(() => props.open)
+useDialogA11y(isOpen, cardRef, () => emit('cancel'))
 </script>
 
 <template>

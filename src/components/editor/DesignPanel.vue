@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 设计页签。
  * 只做组合：模板、配色、排版、标题四个分区各自独立成组件，
