@@ -147,7 +147,19 @@ const guard = createPasswordGuard({ password: process.env.PDF_ACCESS_PASSWORD })
 
 /** 登录失败锁定与注册频率限制（内存态，重启清零；对爆破而言足够） */
 const loginGuard = createLoginGuard()
-const registerLimiter = createSlidingWindowCounter({ max: 5, windowMs: 60 * 60 * 1000 })
+/**
+ * 注册限频。默认每小时 5 次/IP，可用 REGISTER_LIMIT 调整。
+ *
+ * 做成可配有两个实际理由：家庭/公司网络下多人在同一出口 IP，5 次很容易误伤；
+ * 而集成测试要从同一 IP 造多个账号。取值做了上下界保护 ——
+ * 设成 0 或负数会让**所有人都无法注册**，那是个很难排查的部署故障，
+ * 所以下限固定为 1；上限只是防止把防线写成摆设。
+ */
+const REGISTER_LIMIT = Math.min(1000, Math.max(1, Number(process.env.REGISTER_LIMIT) || 5))
+const registerLimiter = createSlidingWindowCounter({
+  max: REGISTER_LIMIT,
+  windowMs: 60 * 60 * 1000,
+})
 
 /**
  * 注册用的滑块验证码。密钥缺省时每次启动随机生成：
@@ -155,6 +167,17 @@ const registerLimiter = createSlidingWindowCounter({ max: 5, windowMs: 60 * 60 *
  * 多实例部署才需要显式传 CAPTCHA_SECRET 保证签名一致。
  */
 const captcha = createCaptcha({ secret: process.env.CAPTCHA_SECRET })
+
+/**
+ * 注册滑块验证的开关（默认开启）。
+ *
+ * 给自托管留一条明确的路：内部部署、CI、集成测试常常不需要人机防线，
+ * 而没有一个正当开关时，那些场景只能去改代码或伪造令牌。
+ * 只影响**注册**这一步的校验；/api/captcha 与 /api/captcha/verify 仍然照常工作，
+ * 这样关掉后行为可预期，也不会让前端拿到 404。
+ * 供 CI / 集成测试使用：CAPTCHA_ENABLED=off。
+ */
+const CAPTCHA_REQUIRED = !/^(off|false|0)$/i.test(String(process.env.CAPTCHA_ENABLED ?? '').trim())
 
 /**
  * 登录/注册弹窗交互开关（AUTH_POPUP=off|false|0 关闭，默认开启）。
@@ -357,7 +380,7 @@ app.post('/api/auth/register', (req, res, next) => {
   }
 
   // 滑块验证放在限频之前：没通过验证的请求不去占用每小时注册额度
-  if (!captcha.consume(captchaToken)) {
+  if (CAPTCHA_REQUIRED && !captcha.consume(captchaToken)) {
     res.status(400).json({
       ok: false,
       captchaRequired: true,

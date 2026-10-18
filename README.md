@@ -53,27 +53,41 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 
 ## 常用脚本
 
-| 命令                        | 说明                                                                                                                                                 |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run dev`               | 仅启动前端（Vite，端口 5173）                                                                                                                        |
-| `npm run dev:all`           | 前端 + 应用服务一起启动，退出时同时结束                                                                                                              |
-| `npm run build`             | 构建产物到 `dist/`                                                                                                                                   |
-| `npm run pdf`               | 启动应用服务（托管 `dist/` 静态站点 + `/api`，端口 3001）                                                                                            |
-| `npm test`                  | 运行 Vitest 单测（389 例：鉴权与会话守卫、来源校验、配额、数据清洗、SSRF 防线、导出、简历 store 及其拆解出的持久化/快照/多文档/模块树、AI 客户端等） |
-| `npm run lint`              | ESLint 检查（代码质量与 Vue 陷阱）                                                                                                                   |
-| `npm run lint:fix`          | ESLint 自动修复                                                                                                                                      |
-| `npm run format`            | Prettier 格式化 src / server / tests / 根配置                                                                                                        |
-| `npm run format:check`      | 只校验不改动（CI 用）                                                                                                                                |
-| `npm run audit:ui`          | **真实浏览器度量**（对比度 / 点击目标 / 文本溢出 / 键盘焦点）。默认审 `/editor`；带 URL 审首页，加 `--shots` 出截图。需先起服务                      |
-| `npm run audit:interaction` | 交互态：键盘焦点可见性、悬停反馈（真的按 Tab / 真的移鼠标）                                                                                          |
-| `npm run audit:el`          | 量单个元素的盒子与真实命中区，如 `npm run audit:el -- .ed-check`                                                                                     |
-| `npm run audit:login`       | 造一个已登录会话令牌，配合 `npm run audit:ui -- --token <令牌>`                                                                                      |
-| `npm run audit:session`     | 诊断会话令牌是否真的生效                                                                                                                             |
-| `npm run audit:perf`        | 4G 手机档下的加载性能（长任务、启动里程碑、传输量）                                                                                                  |
-| `npm run audit:mobile`      | 移动端布局：顶栏高度、逐行按钮、横向溢出定位                                                                                                         |
-| `npm run audit:trace`       | 录启动 trace 并按阶段聚合，定位「那 1 秒被谁占了」                                                                                                   |
-| `npm run audit:shot`        | 给公开页面（首页 / 合集 / 登录）截图并量栅格与缩略图缩放比                                                                                           |
-| `npm run audit:dialog`      | 打开指定弹窗并截图，如 `npm run audit:dialog -- "AI 补充导入"`                                                                                       |
+| 命令                        | 说明                                                                                                                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm run dev`               | 仅启动前端（Vite，端口 5173）                                                                                                                                                  |
+| `npm run dev:all`           | 前端 + 应用服务一起启动，退出时同时结束                                                                                                                                        |
+| `npm run build`             | 构建产物到 `dist/`                                                                                                                                                             |
+| `npm run pdf`               | 启动应用服务（托管 `dist/` 静态站点 + `/api`，端口 3001）                                                                                                                      |
+| `npm test`                  | 运行 Vitest 测试（498 例：**含 /api 集成测试**，以及鉴权与会话守卫、来源校验、配额、数据清洗、SSRF 防线、导出、简历 store 及其拆解出的持久化/快照/多文档/模块树、AI 客户端等） |
+| `npm run lint`              | ESLint 检查（代码质量与 Vue 陷阱）                                                                                                                                             |
+| `npm run lint:fix`          | ESLint 自动修复                                                                                                                                                                |
+| `npm run format`            | Prettier 格式化 src / server / tests / 根配置                                                                                                                                  |
+| `npm run format:check`      | 只校验不改动（CI 用）                                                                                                                                                          |
+| `npm run audit:ui`          | **真实浏览器度量**（对比度 / 点击目标 / 文本溢出 / 键盘焦点）。默认审 `/editor`；带 URL 审首页，加 `--shots` 出截图。需先起服务                                                |
+| `npm run audit:interaction` | 交互态：键盘焦点可见性、悬停反馈（真的按 Tab / 真的移鼠标）                                                                                                                    |
+| `npm run audit:el`          | 量单个元素的盒子与真实命中区，如 `npm run audit:el -- .ed-check`                                                                                                               |
+| `npm run audit:login`       | 造一个已登录会话令牌，配合 `npm run audit:ui -- --token <令牌>`                                                                                                                |
+| `npm run audit:session`     | 诊断会话令牌是否真的生效                                                                                                                                                       |
+| `npm run audit:perf`        | 4G 手机档下的加载性能（长任务、启动里程碑、传输量）                                                                                                                            |
+| `npm run audit:mobile`      | 移动端布局：顶栏高度、逐行按钮、横向溢出定位                                                                                                                                   |
+| `npm run audit:trace`       | 录启动 trace 并按阶段聚合，定位「那 1 秒被谁占了」                                                                                                                             |
+| `npm run audit:shot`        | 给公开页面（首页 / 合集 / 登录）截图并量栅格与缩略图缩放比                                                                                                                     |
+| `npm run audit:dialog`      | 打开指定弹窗并截图，如 `npm run audit:dialog -- "AI 补充导入"`                                                                                                                 |
+
+### /api 集成测试（`tests/api.test.js`）
+
+起**真实服务进程**、发**真实 HTTP 请求**，而不是在进程内 import app。原因有二：`server/index.ts` 不导出 app（导入即 `listen`），以及真进程会走到同一份 `.env`、中间件顺序、来源校验、会话守卫、SQLite 建表与迁移 —— 把 app 抽出来单测会漏掉这些接缝，而接缝恰恰最容易出问题。
+
+覆盖：健康检查与公开元数据、注册/登录/会话/登出、受保护接口的匿名 401 与无权限 403、简历读写与清洗、**简历按用户隔离（越权读别人的简历是数据泄露）**、分享的创建/匿名读取/删除/归属、CSRF 与请求体上限。
+
+三条自我约束写在 `tests/api/harness.js` 的注释里，都是「测得不真」的常见来源：
+
+1. **必须用临时数据库**：`DB_PATH` 指向 `os.tmpdir()`，绝不碰开发用的 `.data/app.db`；收尾连同 `-wal` / `-shm` 一起删，并挂了退出兜底清扫（启动失败时目录也不会留下）。已验证真实库文件的修改时间在整轮测试前后不变。
+2. **必须手工维护 cookie**：Node 的 `fetch` 不像浏览器那样自动保存 cookie。忘了带的话所有受保护接口都返 401，「守卫生效」的断言会**一路假通过**，而真实登录流程根本没被验证。harness 的 client 因此自带 cookie jar。
+3. **登录失败次数要克制**：登录锁定阈值是 10 次/IP+用户名，测试用不同用户名把失败次数分散开，避免一条测试把后面全锁死。
+
+为此给服务端补了两个**正当的配置项**（都写进了 `.env.example`，默认值不变）：`CAPTCHA_ENABLED=off` 跳过注册滑块校验、`REGISTER_LIMIT` 调整注册限频（默认 5/小时/IP，下限固定为 1 —— 设成 0 会让所有人都无法注册，那是很难排查的部署故障）。**这两个开关都只影响注册这一步**：默认配置下注册仍被验证码挡住，已单独实测确认。
 
 ### 界面审计（`tools/`）
 
@@ -254,7 +268,9 @@ server/              应用服务（Express，全部为 .ts，由 node 类型剥
   semaphore.ts       渲染并发信号量
 skills/              Agent Skill（AI 无界面操作）
   resume-workshop/   SKILL.md + 数据结构/API 参考 + 校验脚本 + 简历骨架
-tests/               Vitest 单测
+tests/               Vitest 测试
+  api.test.js         /api 集成测试（起真实服务进程，发真实 HTTP）
+  api/harness.js      集成测试宿主：临时数据库 + 随机端口 + cookie jar
 ```
 
 ## 数据与安全要点

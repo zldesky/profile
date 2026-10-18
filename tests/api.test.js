@@ -1,0 +1,339 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+import { makeClient, startApi, stopApi, uniqueUser } from './api/harness.js'
+
+/**
+ * /api 集成测试：起真实服务进程、发真实 HTTP 请求。
+ *
+ * 为什么不在进程内 import app：`server/index.ts` 不导出 app，导入即 listen；
+ * 而且真进程会走到同一份 .env、中间件顺序、来源校验、会话守卫、SQLite 建表与迁移 ——
+ * 把 app 抽出来单测会漏掉这些接缝，接缝恰恰最容易出问题。
+ *
+ * 三条自我约束（都是「测得不真」的常见来源）：
+ *  1. **必须用临时数据库**：harness 把 DB_PATH 指到 os.tmpdir()，绝不碰开发数据。
+ *  2. **必须手工带 cookie**：Node 的 fetch 不像浏览器那样自动保存 cookie，
+ *     忘了带的话所有受保护接口都返 401，「守卫生效」的断言会一路假通过，
+ *     而真实登录流程根本没被验证。harness 的 client 维护 cookie jar。
+ *  3. **登录失败次数要克制**：登录锁定阈值是 10 次/IP+用户名，
+ *     用不同用户名把失败次数分散开，避免一条测试把后面全锁死。
+ */
+let api
+let base
+
+beforeAll(async () => {
+  api = await startApi()
+  base = api.base
+}, 30000)
+
+afterAll(async () => {
+  await stopApi()
+})
+
+/** 注册一个新用户并返回已登录的 client */
+async function registerUser(prefix = 'u') {
+  const client = makeClient(base)
+  const username = uniqueUser(prefix)
+  const res = await client.post('/api/auth/register', { username, password: 'password123' })
+  expect(res.status, `注册失败：${res.text}`).toBe(200)
+  expect(res.json.ok).toBe(true)
+  return { client, username, user: res.json.user }
+}
+
+describe('健康检查与公开元数据', () => {
+  it('GET /api/health 可用且不回传敏感配置', async () => {
+    const res = await fetch(`${base}/api/health`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.ok).toBe(true)
+
+    // 口令/密钥这类东西绝不能出现在健康检查里
+    const text = JSON.stringify(body)
+    expect(text).not.toMatch(/PDF_ACCESS_PASSWORD/i)
+    expect(text).not.toMatch(/CAPTCHA_SECRET/i)
+  })
+
+  it('GET /api/captcha 下发挑战，但不泄露答案 x', async () => {
+    const res = await fetch(`${base}/api/captcha`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.ok).toBe(true)
+    expect(typeof body.id).toBe('string')
+    // 只给 pieceY（纵向位置），横向答案是让用户拖出来的。
+    // 若这里出现 x / answerX，滑块验证就形同虚设 —— 这条断言守着它。
+    expect(body).not.toHaveProperty('x')
+    expect(body).not.toHaveProperty('answerX')
+    expect(typeof body.pieceY).toBe('number')
+  })
+
+  it('POST /api/captcha/verify 拒绝错误答案', async () => {
+    const challenge = await (await fetch(`${base}/api/captcha`)).json()
+    const res = await fetch(`${base}/api/captcha/verify`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: challenge.id, x: -9999 }),
+    })
+    expect(res.status).toBe(400)
+    expect((await res.json()).ok).toBe(false)
+  })
+
+  it('GET /api/styles 公开可读（前端启动就要用）', async () => {
+    const res = await fetch(`${base}/api/styles`)
+    expect(res.status).toBe(200)
+  })
+
+  it('GET /api/collection 公开可读（官网合集）', async () => {
+    const res = await fetch(`${base}/api/collection`)
+    expect(res.status).toBe(200)
+    expect((await res.json()).ok).toBe(true)
+  })
+})
+
+describe('注册与凭据校验', () => {
+  it('注册成功后即登录（带会话 cookie）', async () => {
+    const { client } = await registerUser('reg')
+    const me = await client.get('/api/auth/me')
+    expect(me.status).toBe(200)
+    expect(me.json.user?.username).toBeTruthy()
+  })
+
+  it('用户名不合规返回 400 且给出可读原因', async () => {
+    const client = makeClient(base)
+    const res = await client.post('/api/auth/register', { username: '!', password: 'password123' })
+    expect(res.status).toBe(400)
+    expect(res.json.message).toMatch(/用户名/)
+  })
+
+  it('密码短于 8 位返回 400', async () => {
+    const client = makeClient(base)
+    const res = await client.post('/api/auth/register', {
+      username: uniqueUser('short'),
+      password: '123',
+    })
+    expect(res.status).toBe(400)
+    expect(res.json.message).toMatch(/密码/)
+  })
+
+  it('重复用户名返回 409（不能被当成成功）', async () => {
+    const { username } = await registerUser('dup')
+    const other = makeClient(base)
+    const res = await other.post('/api/auth/register', { username, password: 'password123' })
+    expect(res.status).toBe(409)
+    expect(res.json.ok).toBe(false)
+  })
+})
+
+describe('登录、会话与登出', () => {
+  it('登录成功后可访问受保护接口，登出后失效', async () => {
+    const { username } = await registerUser('sess')
+
+    const client = makeClient(base)
+    const login = await client.post('/api/auth/login', { username, password: 'password123' })
+    expect(login.status).toBe(200)
+    expect(login.json.ok).toBe(true)
+
+    expect((await client.get('/api/resume')).status).toBe(200)
+
+    const out = await client.post('/api/auth/logout')
+    expect(out.status).toBe(200)
+
+    // 登出后会话必须真的失效，而不是只清了前端状态
+    expect((await client.get('/api/resume')).status).toBe(401)
+  })
+
+  it('密码错误返回 401', async () => {
+    const { username } = await registerUser('bad')
+    const client = makeClient(base)
+    const res = await client.post('/api/auth/login', { username, password: 'wrongpassword' })
+    expect(res.status).toBe(401)
+    expect(res.json.ok).toBe(false)
+  })
+
+  it('不存在的用户名也返回 401（不泄露账号是否存在）', async () => {
+    const client = makeClient(base)
+    const res = await client.post('/api/auth/login', {
+      username: uniqueUser('nobody'),
+      password: 'password123',
+    })
+    expect(res.status).toBe(401)
+    // 与「密码错误」用同一条文案，避免枚举用户名
+    expect(res.json.message).toBe('用户名或密码不正确')
+  })
+})
+
+describe('守卫：受保护接口对匿名一律 401', () => {
+  const PROTECTED = [
+    ['GET', '/api/resume'],
+    ['PUT', '/api/resume'],
+    ['POST', '/api/share'],
+    ['GET', '/api/share/mine'],
+    ['POST', '/api/pdf'],
+    ['POST', '/api/image-proxy'],
+    ['POST', '/api/ai/chat'],
+  ]
+
+  for (const [method, path] of PROTECTED) {
+    it(`${method} ${path} 匿名返回 401`, async () => {
+      const res = await fetch(`${base}${path}`, {
+        method,
+        headers: { 'content-type': 'application/json' },
+        body: method === 'GET' ? undefined : '{}',
+      })
+      expect(res.status).toBe(401)
+    })
+  }
+
+  it('GET /api/styles-admin 普通用户返回 403（不是 401）', async () => {
+    const { client } = await registerUser('member')
+    const res = await client.get('/api/styles-admin')
+    // 已认证但无权限 → 403；与匿名的 401 区分开
+    expect(res.status).toBe(403)
+  })
+})
+
+describe('简历读写', () => {
+  const RESUME = {
+    template: 'classic',
+    basics: { name: '张三', jobTitle: '前端工程师' },
+    sections: [{ id: 's1', type: 'text', title: '自我评价', content: '熟悉 Vue 3' }],
+  }
+
+  it('新账号读到的简历为空，而不是报错', async () => {
+    const { client } = await registerUser('empty')
+    const res = await client.get('/api/resume')
+    expect(res.status).toBe(200)
+    expect(res.json.ok).toBe(true)
+    expect(res.json.resume).toBeNull()
+  })
+
+  it('写入后能原样读回关键字段', async () => {
+    const { client } = await registerUser('rw')
+    const put = await client.put('/api/resume', { resume: RESUME })
+    expect(put.status).toBe(200)
+    expect(put.json.ok).toBe(true)
+    expect(typeof put.json.updatedAt).toBe('number')
+
+    const got = await client.get('/api/resume')
+    expect(got.json.resume.basics.name).toBe('张三')
+    expect(got.json.resume.sections).toHaveLength(1)
+  })
+
+  it('缺 sections 返回 400（脏数据不该进库）', async () => {
+    const { client } = await registerUser('bad')
+    const res = await client.put('/api/resume', { resume: { basics: { name: 'x' } } })
+    expect(res.status).toBe(400)
+    expect(res.json.ok).toBe(false)
+  })
+
+  it('服务端会清洗：丢弃客户端提交的模块 id，改由渲染端生成', async () => {
+    const { client } = await registerUser('clean')
+    await client.put('/api/resume', {
+      resume: {
+        ...RESUME,
+        sections: [{ id: 'client-supplied', type: 'text', title: '模块', content: 'x' }],
+      },
+    })
+    const got = await client.get('/api/resume')
+    // 注释里写明「id 一律由渲染端生成，不接受客户端提供」，这里守住它
+    expect(got.json.resume.sections[0]).not.toHaveProperty('id', 'client-supplied')
+  })
+
+  it('简历是按用户隔离的：另一个账号读不到', async () => {
+    const a = await registerUser('iso-a')
+    const b = await registerUser('iso-b')
+
+    await a.client.put('/api/resume', { resume: { ...RESUME, basics: { name: '甲的简历' } } })
+
+    const gotB = await b.client.get('/api/resume')
+    // 这是最要紧的一条：越权读到别人的简历是数据泄露
+    expect(gotB.json.resume).toBeNull()
+
+    const gotA = await a.client.get('/api/resume')
+    expect(gotA.json.resume.basics.name).toBe('甲的简历')
+  })
+})
+
+describe('分享', () => {
+  const RESUME = {
+    template: 'classic',
+    basics: { name: '分享者', jobTitle: '设计师' },
+    sections: [{ id: 's1', type: 'text', title: '自我评价', content: '内容' }],
+  }
+
+  it('创建分享后，匿名用户凭链接可读（分享只读页无需登录）', async () => {
+    const { client } = await registerUser('share')
+    const created = await client.post('/api/share', { resume: RESUME })
+    expect(created.status).toBe(200)
+    expect(created.json.ok).toBe(true)
+    const id = created.json.id
+    expect(typeof id).toBe('string')
+
+    // 刻意用裸 fetch（没有任何 cookie）验证匿名可读
+    const anon = await fetch(`${base}/api/share/${id}`)
+    expect(anon.status).toBe(200)
+    const body = await anon.json()
+    expect(body.ok).toBe(true)
+  })
+
+  it('不存在的分享 id 返回 404', async () => {
+    const res = await fetch(`${base}/api/share/definitely-not-a-real-id`)
+    expect(res.status).toBe(404)
+    expect((await res.json()).ok).toBe(false)
+  })
+
+  it('/api/share/mine 只列出自己的分享', async () => {
+    const a = await registerUser('mine-a')
+    const b = await registerUser('mine-b')
+
+    const made = await a.client.post('/api/share', { resume: RESUME })
+    const idA = made.json.id
+
+    const mineA = await a.client.get('/api/share/mine')
+    expect(mineA.json.items.map((x) => x.id)).toContain(idA)
+
+    // 乙的列表里不该出现甲的分享
+    const mineB = await b.client.get('/api/share/mine')
+    expect(mineB.json.items.map((x) => x.id)).not.toContain(idA)
+  })
+
+  it('删除分享后匿名读取返回 404', async () => {
+    const { client } = await registerUser('del')
+    const created = await client.post('/api/share', { resume: RESUME })
+    const id = created.json.id
+
+    const del = await client.delete(`/api/share/${id}`)
+    expect(del.status).toBe(200)
+
+    const anon = await fetch(`${base}/api/share/${id}`)
+    expect(anon.status).toBe(404)
+  })
+
+  it('简历格式不正确时返回 400，不创建分享', async () => {
+    const { client } = await registerUser('badshare')
+    const res = await client.post('/api/share', { resume: { nope: true } })
+    expect(res.status).toBe(400)
+    expect(res.json.ok).toBe(false)
+  })
+})
+
+describe('来源与请求体防线', () => {
+  it('伪造 Origin 的写请求被拒（CSRF 防线）', async () => {
+    const { client, username } = await registerUser('csrf')
+    const res = await client.post(
+      '/api/auth/login',
+      { username, password: 'password123' },
+      { origin: 'https://evil.example.com' },
+    )
+    // 不能带 cookie 成功执行写操作；具体码值由守卫决定，但必须不是 200
+    expect(res.status).not.toBe(200)
+  })
+
+  it('超过请求体上限的 JSON 被拒（不把内存交给客户端）', async () => {
+    const { client } = await registerUser('big')
+    // express.json 的 limit 是 8mb（实测确认，见 server/index.ts）。
+    // 第一版我用 6MB 断言「应当被拒」，结果服务端返 200 —— 那是**正确行为**，
+    // 错的是我的假设。这里改成真的越过上限。
+    const huge = { resume: { sections: [], padding: 'x'.repeat(9 * 1024 * 1024) } }
+    const res = await client.put('/api/resume', huge)
+    expect(res.status).toBeGreaterThanOrEqual(400)
+  })
+})
