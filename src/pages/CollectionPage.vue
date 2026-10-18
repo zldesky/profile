@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 简历合集（/collection）：官网公开的简历陈列页。
  *
@@ -18,6 +18,8 @@ import { useAuthDialog } from '@/composables/useAuthDialog'
 import { useToast } from '@/composables/useToast'
 import { CATEGORY_LABELS } from '@/data/presets'
 import { fetchCollection } from '@/utils/collectionApi'
+import type { StyleFacet } from '@/utils/collectionApi'
+import type { CollectionItem } from '@/types/resume'
 
 /** 与服务端 COLLECTION_PAGE_SIZE 的默认值一致 */
 const PAGE_SIZE = 12
@@ -29,11 +31,11 @@ const auth = useAuth()
 const authDialog = useAuthDialog()
 const { toast } = useToast()
 
-const state = shallowRef('loading') // loading | ready | error
+const state = shallowRef<'loading' | 'ready' | 'error'>('loading')
 const errorMessage = shallowRef('')
-const items = shallowRef([])
+const items = shallowRef<CollectionItem[]>([])
 const total = shallowRef(0)
-const categories = shallowRef([]) // 服务端 facets：[{ key, count }]
+const categories = shallowRef<StyleFacet[]>([]) // 服务端 facets
 const activeCategory = shallowRef('all')
 const guestLimited = shallowRef(false)
 const loadingMore = shallowRef(false)
@@ -75,7 +77,7 @@ async function load() {
   } catch (error) {
     if (id !== seq) return
     state.value = 'error'
-    errorMessage.value = error.message || '合集读取失败'
+    errorMessage.value = error instanceof Error ? error.message : '合集读取失败'
   }
 }
 
@@ -91,14 +93,14 @@ async function loadMore() {
     items.value = items.value.concat(data.items)
     total.value = data.total
   } catch (error) {
-    toast(error.message || '加载更多失败')
+    toast(error instanceof Error ? error.message : '加载更多失败')
   } finally {
     loadingMore.value = false
   }
 }
 
 /** 切换分类：同键不重拉，切换后从头加载 */
-function pickCategory(key) {
+function pickCategory(key: string) {
   if (key === activeCategory.value) return
   activeCategory.value = key
   load()
@@ -602,8 +604,17 @@ async function openLogin() {
   font-weight: 600;
 }
 
+/*
+ * 页脚三个导航链接原来只有 20px 高（width: fit-content 且无高度），
+ * 低于 24px 最小点击目标 —— 是合集页审计报出的 3 处之一。
+ * 用 inline-flex + min-height 直接给足高度，而不是用绝对定位伪元素扩命中区
+ * （后者在首页试过：命中区没扩成，反而撑出 scrollWidth 被判成文本溢出）。
+ */
 .cl-footer-col a {
+  display: inline-flex;
+  align-items: center;
   width: fit-content;
+  min-height: 24px;
   color: var(--ed-text-2);
   font-size: 12.5px;
   text-decoration: none;

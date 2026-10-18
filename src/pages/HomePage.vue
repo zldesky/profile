@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 产品首页（官网）。
  *
@@ -40,10 +40,16 @@ function fit() {
   zoom.value = Math.max(0.1, Math.min(byHeight, byWidth))
 }
 
-let observer = null
+/*
+ * 显式标类型 + 判空：`let observer = null` 在 TS 下推成 any，
+ * 且 previewRef.value 在挂载前是 null（observe 会抛）。
+ */
+let observer: ResizeObserver | null = null
 onMounted(() => {
+  const el = previewRef.value
+  if (!el) return
   observer = new ResizeObserver(fit)
-  observer.observe(previewRef.value)
+  observer.observe(el)
   fit()
 })
 onBeforeUnmount(() => observer?.disconnect())

@@ -30,6 +30,23 @@ const sessionToken = tokenFlag >= 0 ? argv[tokenFlag + 1] || '' : ''
 const url = argv.find((a) => a.startsWith('http')) || 'http://127.0.0.1:3001/editor'
 /** --shots 时截图到 tools/shots/。有些问题（排版怪、留白失衡）只能看，量不出来。 */
 const shots = argv.includes('--shots')
+
+/**
+ * 默认**跳过纸张内部**（`.paper`）。
+ *
+ * 为什么：纸里渲染的是简历内容本身，它的颜色由模板 / 主题决定，属于**用户内容**
+ * 而非应用 UI（早先就记过「模板作用域颜色是简历内容色，不该令牌化」）。
+ * 实测合集页缩略图里 MinimalTemplate 的 `.meta-key` #9ca3af 只有 2.54、
+ * `.sep` #d1d5db 只有 1.47 —— 这些是模板刻意的弱化处理，把它当作应用 UI 的
+ * 失败项来修，就等于替用户改了简历观感。
+ *
+ * 另外缩略图会缩到 ~46%，任何文字都会被算成小字号，判据本身也失真。
+ *
+ * 但**不能因此完全放弃这块覆盖**：打印出来的简历同样要看对比度。
+ * 所以留了 `--include-resume` 开关 —— 在真实纸张尺寸下单独审一次简历内容，
+ * 而不是把它混在应用 UI 的结论里，也不是不查。
+ */
+const includeResume = argv.includes('--include-resume')
 const shotDir = new URL('./shots/', import.meta.url).pathname.replace(/^\//, '')
 /** 桌面两档 + 手机一档；断点在 900px，所以要跨过它看 */
 const WIDTHS = [
@@ -49,7 +66,7 @@ const MIN_TAP = 24
  * 拿不到本模块作用域的常量（第一版就踩了这个，报 AA_TEXT is not defined）。
  */
 function collect(limits) {
-  const { AA_TEXT, AA_LARGE, MIN_TAP } = limits
+  const { includeResume, AA_TEXT, AA_LARGE, MIN_TAP } = limits
   const px = (v) => Number.parseFloat(v) || 0
 
   function parseColor(css) {
@@ -138,6 +155,8 @@ function collect(limits) {
     // 只取直接含文字的元素，避免父节点重复计入
     const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())
     if (!own || !visible(el)) continue
+    // 纸张内部是简历内容（见顶部 includeResume 说明），默认不按应用 UI 判
+    if (!includeResume && el.closest('.paper')) continue
     const s = getComputedStyle(el)
     const fg = parseColor(s.color)
     if (!fg) continue
@@ -292,7 +311,7 @@ for (const vp of WIDTHS) {
   })
   await page.waitForTimeout(500)
 
-  const data = await page.evaluate(collect, { AA_TEXT, AA_LARGE, MIN_TAP })
+  const data = await page.evaluate(collect, { includeResume, AA_TEXT, AA_LARGE, MIN_TAP })
 
   // 再切到「设计」页签量一轮（它同样是问题密集区），取两轮里更差的结果
   const design = await page.evaluate(() => {
@@ -304,7 +323,7 @@ for (const vp of WIDTHS) {
   })
   if (design) {
     await page.waitForTimeout(500)
-    const d = await page.evaluate(collect, { AA_TEXT, AA_LARGE, MIN_TAP })
+    const d = await page.evaluate(collect, { includeResume, AA_TEXT, AA_LARGE, MIN_TAP })
     // 合并两轮：按「元素+文本」去重
     const key = (x) => x.el + '|' + x.text
     const seen = new Set(data.contrast.map(key))

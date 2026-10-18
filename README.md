@@ -238,7 +238,7 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 | 维度                     | 现状                                                                                     |
 | ------------------------ | ---------------------------------------------------------------------------------------- |
 | `<script setup>` 写法    | **64 / 64 全部完成**（`export default`、`defineComponent`、`setup()` 返回对象均为 0 处） |
-| `lang="ts"`              | **58 / 64**（约 11,200 行）；剩余 6 个仍是 JS，约 3,800 行                               |
+| `lang="ts"`              | **60 / 64**（约 12,400 行）；剩余 4 个仍是 JS，约 2,600 行                               |
 | 这些 JS 组件受类型检查吗 | **不受**。`tsconfig.json` 里 `checkJs: false`，且 `include` 未纳入 `src/**/*.js`         |
 
 实测过「打开 `checkJs` 直接检查现有 JS 组件」这条路：会报 **644 处**错误，其中 289 处只是缺参数注解（`TS7006`）—— 说明这条路的前期噪音很大，**逐组件迁 TS 比全局开 `checkJs` 更可控**。所以策略是分批迁，而不是一次性打开开关。
@@ -278,7 +278,21 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 - **`ExperienceEntryEditor` 用上了可辨识联合**：props 由 `{ type: Object }` 改成 `section: EntriesSection`（`type` 字段是字面量 `'entries'`）。这正是联合类型的用法 —— 若只写宽泛的 `Section`，模板里取 `section.items` 就会报错，提醒「先确定是哪种模块」。另外 `polishTarget` 从 `null` 收成 `Bullet | null`。
 - **类型检查报出的多是真实的可空时序**，不是纯噪音：`recentre()` 读 `imgSize.value.width` 而 `applyScale()` 里已有同样的判空 —— 说明这条守卫当初就是漏写的；canvas 的 `getContext('2d')` 可能返回 null；`imgSize` 在图片加载完成前确实是 null。补守卫的同时把注释写清楚「为什么这里会是 null」。
 
-**剩余 6 个 JS 组件**：`AdminPage` 823 / `TopBar` 778 / `CollectionPage` 667 / `HomePage` 577 / `TemplatePicker` 540 / `SliderCaptcha` 398 —— 都是大件或状态机。主要机械成本是**模板内联处理器的 DOM 收窄**：`$event.target` 是 `EventTarget`，取 `.value` / `.checked` 需写成 `($event.target as HTMLInputElement)`（本轮实测替换 11 处）。另外分段编辑器的 `section` prop 应按可辨识联合收窄成 `EntriesSection` / `GridSection` / `SkillsSection` / `TextSection`，否则模板里取 `section.items` 会报错 —— 那正是联合类型在提醒「先确定是哪种模块」。
+**展示型页面已迁完**：`HomePage` / `CollectionPage`。**剩余 4 个**：`AdminPage` 823 / `TopBar` 778 / `TemplatePicker` 540 / `SliderCaptcha` 398 —— 都是大件或状态机。
+
+### 审计的一个判据修正：纸张内部不算应用 UI
+
+审 `CollectionPage` 时报出 **2 处对比度不足**：`span.meta-key`（#9ca3af，2.54）与 `span.sep`（#d1d5db，1.47）。它们都在**简历缩略图内部**。
+
+结论是**审计的判据错了，不是页面错了**：纸里渲染的是简历内容，颜色由模板 / 主题决定，属于**用户内容**而非应用 UI（早先就记过「模板作用域颜色是简历内容色，不该令牌化」）；把它当作应用 UI 的失败项来修，等于替用户改了简历观感。另外缩略图缩到 ~46%，任何文字都会被算成小字号，判据本身也失真。
+
+但**没有因此放弃这块覆盖**：打印出来的简历同样要看对比度。所以审计默认跳过 `.paper`，同时留了 `--include-resume` —— 需要时单独审一次简历内容的对比度，而不是混进应用 UI 的结论里，也不是不查。这样「0 处」的含义是明确的：**应用自身的 UI 没有对比度问题**。
+
+（这个改动也再次踩到脚本注释里第 1 条记的坑：`page.evaluate` 的函数体在浏览器里求值，`includeResume` 拿不到模块作用域常量，第一次跑就报 `includeResume is not defined`，必须作为参数传进去。）
+
+### 合集页查出并修掉 3 处点击目标
+
+页脚三个导航链接只有 **20px 高**（`width: fit-content` 且无高度），低于 24px 最小点击目标。这些链接先前的审计从没覆盖过（那时 `audit-ui` 默认目标还是编辑器），所以一直没被发现。修法与首页那次一样：`inline-flex` + `min-height: 24px`，**不用绝对定位伪元素**（那个在首页试过，命中区没扩成反而撑出 scrollWidth）。修完合集页三档全部归零。主要机械成本是**模板内联处理器的 DOM 收窄**：`$event.target` 是 `EventTarget`，取 `.value` / `.checked` 需写成 `($event.target as HTMLInputElement)`（本轮实测替换 11 处）。另外分段编辑器的 `section` prop 应按可辨识联合收窄成 `EntriesSection` / `GridSection` / `SkillsSection` / `TextSection`，否则模板里取 `section.items` 会报错 —— 那正是联合类型在提醒「先确定是哪种模块」。
 
 `stores/resume` 是本地优先的落盘中心（多文档槽位、历史快照、头像引用、超容量降级），迁移前先用 `tests/resumeStore.test.js` 立起不变量再改类型；该测试需要 `localStorage` 与 `window`/`document`，由 `tests/setup/browser-globals.js` 按需安装（**刻意不放进 vitest 的 setupFiles**：全局安装 `document` 会让 pdf.js 误判运行环境，导致 PDF 导入端到端测试失败）。
 
