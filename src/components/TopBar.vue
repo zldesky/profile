@@ -4,17 +4,19 @@
  * 数据导入导出与 PDF 导出逻辑分别在 useResumeFile / usePdfExport，
  * 本组件只负责按钮编排与状态展示。
  */
-import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef } from 'vue'
+import {
+  computed,
+  defineAsyncComponent,
+  onBeforeUnmount,
+  onMounted,
+  shallowRef,
+  useTemplateRef,
+} from 'vue'
 import { useRouter } from 'vue-router'
 
 import AuthDialog from '@/components/AuthDialog.vue'
-import CompletenessDialog from '@/components/CompletenessDialog.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
-import AiFillDialog from '@/components/AiFillDialog.vue'
-import JdMatchDialog from '@/components/JdMatchDialog.vue'
-import PasswordDialog from '@/components/PasswordDialog.vue'
-import ResumeManagerDialog from '@/components/ResumeManagerDialog.vue'
-import ShareDialog from '@/components/ShareDialog.vue'
+
 import SvgIcon from '@/components/SvgIcon.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useAuthDialog } from '@/composables/useAuthDialog'
@@ -25,6 +27,14 @@ import { TEMPLATES } from '@/data/presets'
 import { useResumeStore } from '@/stores/resume'
 import { formatTime } from '@/utils/helpers'
 import { parseResumePdf } from '@/utils/pdfImport'
+const CompletenessDialog = defineAsyncComponent(() => import('@/components/CompletenessDialog.vue'))
+const JdMatchDialog = defineAsyncComponent(() => import('@/components/JdMatchDialog.vue'))
+const ShareDialog = defineAsyncComponent(() => import('@/components/ShareDialog.vue'))
+const ResumeManagerDialog = defineAsyncComponent(
+  () => import('@/components/ResumeManagerDialog.vue'),
+)
+const AiFillDialog = defineAsyncComponent(() => import('@/components/AiFillDialog.vue'))
+const PasswordDialog = defineAsyncComponent(() => import('@/components/PasswordDialog.vue'))
 
 const props = defineProps({
   /** 窄屏两栏二选一，此按钮的含义随之改变 */
