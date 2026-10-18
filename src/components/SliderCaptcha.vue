@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 滑块拼图验证码。
  *
@@ -26,8 +26,22 @@ const MAX_X = VIEW_WIDTH - PIECE_SIZE
 /** 校验失败后红色提示的停留时长，让人看清再换下一张图 */
 const FAIL_PAUSE_MS = 900
 
-const stageEl = ref(null)
-const challenge = shallowRef(null)
+/**
+ * 挑战数据。服务端 /api/captcha 的响应：宽高、拼图块纵向位置与两张图。
+ * 就近声明所需形状（服务端是 TS，但这里是浏览器侧的类型边界）。
+ */
+interface CaptchaChallenge {
+  id: string
+  exp: number
+  width: number
+  height: number
+  pieceY: number
+  background: string
+  piece: string
+}
+
+const stageEl = ref<HTMLElement | null>(null)
+const challenge = shallowRef<CaptchaChallenge | null>(null)
 const state = shallowRef('loading') // loading | idle | dragging | verifying | failed | done
 /** 拼图块左上角的横向位置（视图盒坐标） */
 const dragX = ref(0)
@@ -35,13 +49,13 @@ const dragX = ref(0)
 const scale = ref(1)
 
 let requestSeq = 0
-let pointerId = null
+let pointerId: number | null = null
 let dragStartClientX = 0
 let dragStartX = 0
-let failedTimer = null
+let failedTimer: ReturnType<typeof setTimeout> | null = null
 
 function clearFailedTimer() {
-  if (failedTimer) {
+  if (failedTimer !== null) {
     clearTimeout(failedTimer)
     failedTimer = null
   }
@@ -82,8 +96,9 @@ async function refresh() {
 }
 
 function updateScale() {
+  // 模板 ref 挂载前为 null，此时 clientWidth 取不到（可选链结果是 undefined）
   const width = stageEl.value?.clientWidth
-  if (width > 0) scale.value = width / VIEW_WIDTH
+  if (typeof width === 'number' && width > 0) scale.value = width / VIEW_WIDTH
 }
 
 function onResize() {
@@ -101,7 +116,7 @@ onBeforeUnmount(() => {
   clearFailedTimer()
 })
 
-function onPointerDown(event) {
+function onPointerDown(event: PointerEvent) {
   if (props.disabled || !challenge.value || state.value !== 'idle') return
   updateScale()
   pointerId = event.pointerId
@@ -109,7 +124,8 @@ function onPointerDown(event) {
   dragStartX = dragX.value
   state.value = 'dragging'
   try {
-    event.currentTarget.setPointerCapture(pointerId)
+    const el = event.currentTarget
+    if (el instanceof HTMLElement) el.setPointerCapture(pointerId)
   } catch {
     // 捕获失败（指针已释放等）时退回 window 监听，拖动依旧可用
     window.addEventListener('pointermove', onPointerMove)
@@ -125,13 +141,13 @@ function detachFallback() {
   window.removeEventListener('pointercancel', onPointerCancel)
 }
 
-function onPointerMove(event) {
+function onPointerMove(event: PointerEvent) {
   if (state.value !== 'dragging' || event.pointerId !== pointerId) return
   const delta = (event.clientX - dragStartClientX) / scale.value
   dragX.value = Math.max(0, Math.min(MAX_X, dragStartX + delta))
 }
 
-function onPointerCancel(event) {
+function onPointerCancel(event: PointerEvent) {
   if (state.value !== 'dragging' || event.pointerId !== pointerId) return
   pointerId = null
   detachFallback()
@@ -139,8 +155,16 @@ function onPointerCancel(event) {
   dragX.value = 0
 }
 
-async function onPointerUp(event) {
+async function onPointerUp(event: PointerEvent) {
   if (state.value !== 'dragging' || event.pointerId !== pointerId) return
+  /*
+   * 先把当前挑战取出来再发请求。
+   * 原来是在 JSON.stringify 里现读 challenge.value.id：类型上是可空的，
+   * 而且真的有竞态 —— await fetch 期间 refresh() 可能把 challenge 置空，
+   * 那时再读就会抛错，被下面的 catch 当成「校验失败」，把一次正确的拖动判死。
+   */
+  const current = challenge.value
+  if (!current) return
   pointerId = null
   detachFallback()
 
@@ -157,7 +181,7 @@ async function onPointerUp(event) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        id: challenge.value.id,
+        id: current.id,
         x: Math.round(dragX.value * 10) / 10,
       }),
     })

@@ -29,7 +29,8 @@
     "audit:interaction": "node tools/audit-interaction.mjs",
     "audit:admin": "node tools/audit-admin.mjs",
     "verify:templates": "node tools/verify-templates.mjs",
-    "verify:dialogs": "node tools/verify-dialogs.mjs"
+    "verify:dialogs": "node tools/verify-dialogs.mjs",
+    "verify:captcha": "node tools/verify-captcha.mjs"
   },
   "lint-staged": {
     "*.{js,vue}": [
