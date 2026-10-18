@@ -8,7 +8,7 @@
  */
 import { chromium } from '../server/node_modules/playwright-core/index.mjs'
 
-const url = process.argv.find((a) => a.startsWith('http')) || 'http://127.0.0.1:3001/'
+const url = process.argv.find((a) => a.startsWith('http')) || 'http://127.0.0.1:3001/editor'
 const outFlag = process.argv.indexOf('--out')
 const outDir = outFlag >= 0 ? process.argv[outFlag + 1] : './tools/trace'
 const RUNS = Number(process.env.RUNS || 2)

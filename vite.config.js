@@ -38,9 +38,63 @@ function faviconCacheBust() {
   }
 }
 
+/**
+ * 给编辑器路由的依赖 chunk 提前注入 modulepreload。
+ *
+ * 起因是 4G 手机档的启动实测（CPU ×4、1.6 Mbps、150 ms 延迟）：主 bundle 2.8s 到位、
+ * 编辑器骨架 3.86s 才出现，而主线程 2.35s 就空闲了 —— 中间的等待不是 CPU 忙，是**串行下载**：
+ *
+ *   2820 ms  EditorPage.js (192 KB)
+ *   1915 ms  templates.js        ┐
+ *   1818 ms  shareApi.js         │ 这些小 chunk 都在 EditorPage 之后才被请求
+ *   1749 ms  AuthDialog.js       ┘ → 白白多等约 1 秒
+ *
+ * 原因：Vite 只为**入口**注入 preload；路由这类动态 import 的依赖，要等父 chunk 解析完
+ * 才由 `__vitePreload` 在运行时去取。用 <link rel="modulepreload"> 提前声明，浏览器就能
+ * 与主 bundle 并行下载。
+ *
+ * 只预热编辑器这一条路由：它是产品主体，也是唯一有这段等待的入口。其余页面（合集 / 登录 /
+ * 分享）首屏本来就轻，不值得为它们多付请求；不做「全量预热」也是同一理由 —— 那会把
+ * 用不到的 chunk 也拉下来。
+ *
+ * 文件名带内容哈希，所以必须**从构建产物里读**真实文件名，不能写死。
+ */
+function preloadEditorChunks() {
+  return {
+    name: 'preload-editor-chunks',
+    enforce: 'post',
+    generateBundle(_options, bundle) {
+      const html = bundle['index.html']
+      if (!html || typeof html.source !== 'string') return
+
+      const editorName = Object.keys(bundle).find((name) => /(^|\/)EditorPage-.*\.js$/.test(name))
+      if (!editorName) return
+
+      const chunk = bundle[editorName]
+      // 只取静态导入的依赖（imports）；动态 import 的是按需加载的弹窗，不该预热
+      const deps = (chunk.imports || []).map((name) => bundle[name]).filter(Boolean)
+
+      const links = [
+        `<link rel="modulepreload" crossorigin href="/${editorName}">`,
+        ...deps.map((d) => `<link rel="modulepreload" crossorigin href="/${d.fileName}">`),
+        // 路由自身的样式同样提前声明，避免样式到位前先闪一下无样式内容
+        ...Object.keys(bundle)
+          .filter((name) => /(^|\/)EditorPage-.*\.css$/.test(name))
+          .map((name) => `<link rel="stylesheet" crossorigin href="/${name}">`),
+      ]
+      if (!links.length) return
+
+      html.source = html.source.replace(
+        '</head>',
+        `  <!-- 编辑器路由的依赖 chunk，提前与主 bundle 并行下载（见 vite.config.js 注释） -->\n  ${links.join('\n  ')}\n  </head>`,
+      )
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [vue(), vueDevTools(), faviconCacheBust()],
+  plugins: [vue(), vueDevTools(), faviconCacheBust(), preloadEditorChunks()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

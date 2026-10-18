@@ -4,7 +4,7 @@
  */
 import { chromium } from '../server/node_modules/playwright-core/index.mjs'
 
-const url = process.argv.find((a) => a.startsWith('http')) || 'http://127.0.0.1:3001/'
+const url = process.argv.find((a) => a.startsWith('http')) || 'http://127.0.0.1:3001/editor'
 const WIDTHS = [390, 360, 320]
 
 const browser = await chromium.launch({ channel: 'msedge' })

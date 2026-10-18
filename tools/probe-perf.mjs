@@ -7,7 +7,7 @@
  */
 import { chromium } from '../server/node_modules/playwright-core/index.mjs'
 
-const url = process.argv.find((a) => a.startsWith('http')) || 'http://127.0.0.1:3001/'
+const url = process.argv.find((a) => a.startsWith('http')) || 'http://127.0.0.1:3001/editor'
 const RUNS = 3
 
 const browser = await chromium.launch({ channel: 'msedge' })
@@ -37,6 +37,33 @@ for (let i = 1; i <= RUNS; i += 1) {
 
   // 长任务（>50ms 的阻塞主线程工作）
   await page.addInitScript(() => {
+    /*
+     * 在页面脚本之前挂观察器，记录关键元素「何时出现」的相对时间。
+     * 之前是在 load 之后用 16ms 轮询探测 —— 在 CPU ×4 降速下轮询回调自己就被拖慢，
+     * 量出来的「编辑器骨架 3.4s」很可能大部分是探针的开销，而不是页面的真实耗时。
+     * 观察器只记录一次，之后断开，几乎不产生干扰。
+     */
+    window.__marks = {}
+    const record = () => {
+      const t = Math.round(performance.now())
+      if (window.__marks.panel === undefined && document.querySelector('.editor-panel')) {
+        window.__marks.panel = t
+      }
+      if (window.__marks.paper === undefined && document.querySelector('.paper')) {
+        window.__marks.paper = t
+      }
+      if (window.__marks.panel !== undefined && window.__marks.paper !== undefined) {
+        window.__marksObserver?.disconnect()
+      }
+    }
+    const start = () => {
+      window.__marksObserver = new MutationObserver(record)
+      window.__marksObserver.observe(document.documentElement, { childList: true, subtree: true })
+      record()
+    }
+    if (document.documentElement) start()
+    else document.addEventListener('DOMContentLoaded', start, { once: true })
+
     window.__longTasks = []
     try {
       new PerformanceObserver((list) => {
@@ -59,23 +86,7 @@ for (let i = 1; i <= RUNS; i += 1) {
    *  - 主线程空闲（无长任务，用短定时器探测）
    */
   const timeline = await page.evaluate(async () => {
-    const waitFor = (sel, limit = 8000) =>
-      new Promise((resolve) => {
-        const t = performance.now()
-        if (document.querySelector(sel)) return resolve(Math.round(t))
-        const timer = setInterval(() => {
-          if (document.querySelector(sel)) {
-            clearInterval(timer)
-            resolve(Math.round(performance.now()))
-          } else if (performance.now() - t > limit) {
-            clearInterval(timer)
-            resolve(null)
-          }
-        }, 16)
-      })
-    const panelAt = await waitFor('.editor-panel')
-    const paperAt = await waitFor('.paper')
-    // 探一次「主线程何时不再有长任务」：连续若干次 30ms 定时器都能准时触发
+    // 主线程空闲：连续若干次 30ms 定时器都能准时触发
     const idleAt = await new Promise((resolve) => {
       let ok = 0
       let last = performance.now()
@@ -90,7 +101,11 @@ for (let i = 1; i <= RUNS; i += 1) {
       }
       setTimeout(tick, 30)
     })
-    return { panelAt, paperAt, idleAt }
+    return {
+      panelAt: window.__marks?.panel ?? null,
+      paperAt: window.__marks?.paper ?? null,
+      idleAt,
+    }
   })
 
   await page.waitForTimeout(1200)
@@ -121,9 +136,35 @@ for (let i = 1; i <= RUNS; i += 1) {
   console.log(`  load 事件     : ${m.loadEvent} ms`)
   console.log(`  长任务        : ${m.longTasks.length} 个，合计 ${longTotal} ms ${m.longTasks.length ? '→ ' + m.longTasks.slice(0, 6).join(', ') : ''}`)
   console.log(`  资源传输总量  : ${m.transferKB} KB`)
+  // marks 为 null 时无从判断是「没渲染」还是「观察器没挂上」，所以把最终 DOM 状态一并报出
+  const dom = await page.evaluate(() => ({
+    panel: document.querySelectorAll('.editor-panel').length,
+    paper: document.querySelectorAll('.paper').length,
+    cards: document.querySelectorAll('.ed-card').length,
+    marks: JSON.stringify(window.__marks || null),
+  }))
+  console.log(`  结束时 DOM    : editor-panel=${dom.panel} paper=${dom.paper} ed-card=${dom.cards}  marks=${dom.marks}`)
   console.log(
     `  启动里程碑    : 编辑器骨架 ${tl.panelAt ?? '—'} ms · 纸面 ${tl.paperAt ?? '—'} ms · 主线程空闲 ${tl.idleAt ?? '—'} ms`,
   )
+
+  // 资源到达时间：面板出现前那段时间不是 CPU 忙（长任务仅 ~90ms），
+  // 所以要看清在等哪几个文件
+  const keyRes = await page.evaluate(() =>
+    performance
+      .getEntriesByType('resource')
+      .filter((r) => /\.(js|css)$/.test(r.name))
+      .map((r) => ({
+        name: r.name.split('/').pop(),
+        start: Math.round(r.startTime),
+        end: Math.round(r.responseEnd),
+        kb: Math.round((r.transferSize || 0) / 1024),
+      }))
+      .sort((a, b) => b.end - a.end)
+      .slice(0, 6),
+  )
+  console.log(`  关键资源到达（按完成时间倒序）：`)
+  for (const r of keyRes) console.log(`      ${String(r.end).padStart(5)} ms 起 ${String(r.start).padStart(5)}  ${String(r.kb).padStart(4)} KB  ${r.name}`)
 
   const top = resources
     .filter((r) => r.len > 0)

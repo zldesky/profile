@@ -7,7 +7,7 @@ import { chromium } from '../server/node_modules/playwright-core/index.mjs'
 const argv = process.argv.slice(2)
 const flag = argv.indexOf('--token')
 const token = flag >= 0 ? argv[flag + 1] || '' : ''
-const url = argv.find((a) => a.startsWith('http')) || 'http://127.0.0.1:3001/'
+const url = argv.find((a) => a.startsWith('http')) || 'http://127.0.0.1:3001/editor'
 
 const browser = await chromium.launch({ channel: 'msedge' })
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })

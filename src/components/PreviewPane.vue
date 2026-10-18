@@ -197,6 +197,29 @@ async function refreshLayout() {
   syncToolbar()
 }
 
+/**
+ * 把 refreshLayout 合并成「每帧最多一次」。
+ *
+ * 起因是启动性能实测：编辑器骨架要 3.4–3.8s 才出现，trace 显示 Layout 占 743ms，
+ * 而 JS 执行几乎可忽略。根因是 refreshLayout 会被挂载、深度 watch、缩放、resize
+ * 多处触发，而它内部有 4 组「读布局」操作（量纸高 / 挂 title / 量头像边界 / 量工具条）。
+ * 每一组读之前若刚发生过 DOM 变更，浏览器就得把整棵深 DOM 重排一遍 ——
+ * 短时间内触发 5 次就是 5 轮重排。
+ *
+ * 用 requestAnimationFrame 做闸门：一帧内多次请求只跑一次，
+ * 且必然等 DOM 稳定后执行（rAF 在渲染前，此时布局本来就是干净的）。
+ * 页数与工具条位置本来就只在稳定后才有意义，因此这不改变语义，只去掉重复。
+ */
+let layoutFrame = 0
+
+function scheduleLayout() {
+  if (layoutFrame) return
+  layoutFrame = requestAnimationFrame(() => {
+    layoutFrame = 0
+    void refreshLayout()
+  })
+}
+
 // 选中集变化后模块高亮随之增减，DOM 稳定后再贴工具条
 watch(
   () => selection.ids,
@@ -242,16 +265,18 @@ watch(() => store.printCss, applyPrintCss, { immediate: true })
 // fit() 与首次测量依赖已挂载的 DOM，无法用 immediate 替代
 onMounted(() => {
   fit()
-  refreshLayout()
+  scheduleLayout()
 })
 
 onBeforeUnmount(() => {
+  if (layoutFrame) cancelAnimationFrame(layoutFrame)
+  layoutFrame = 0
   document.getElementById(PRINT_STYLE_ID)?.remove()
 })
 
-watch(() => store.resume, refreshLayout, { deep: true })
-watch(zoom, refreshLayout)
-watch(resizeTick, refreshLayout)
+watch(() => store.resume, scheduleLayout, { deep: true })
+watch(zoom, scheduleLayout)
+watch(resizeTick, scheduleLayout)
 
 /**
  * 逐步收紧字号、行距与模块间距，直到内容落进一页为止。

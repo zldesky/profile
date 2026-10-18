@@ -8,7 +8,7 @@
 import { chromium } from '../server/node_modules/playwright-core/index.mjs'
 
 const selector = process.argv[2]
-const url = process.argv[3] || 'http://127.0.0.1:3001/'
+const url = process.argv[3] || 'http://127.0.0.1:3001/editor'
 
 const browser = await chromium.launch({ channel: 'msedge' })
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
