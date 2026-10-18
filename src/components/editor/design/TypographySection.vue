@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 字体与排版：字族选择、字号、行距、模块间距、页面留白。
  */
@@ -22,7 +22,7 @@ const currentFont = computed(() => FONTS[store.theme.fontKey] || FONTS.yahei)
       <select
         class="ed-select"
         :value="store.theme.fontKey"
-        @change="store.setTheme({ fontKey: $event.target.value })"
+        @change="store.setTheme({ fontKey: ($event.target as HTMLInputElement).value })"
       >
         <optgroup v-for="group in FONT_GROUPS" :key="group.name" :label="group.name">
           <option v-for="font in group.items" :key="font.value" :value="font.value">
@@ -47,7 +47,7 @@ const currentFont = computed(() => FONTS[store.theme.fontKey] || FONTS.yahei)
         max="1.2"
         step="0.01"
         :value="store.theme.fs"
-        @input="store.setTheme({ fs: Number($event.target.value) })"
+        @input="store.setTheme({ fs: Number(($event.target as HTMLInputElement).value) })"
       />
       <span class="ed-value">{{ Math.round(store.theme.fs * 100) }}%</span>
     </label>
@@ -61,7 +61,7 @@ const currentFont = computed(() => FONTS[store.theme.fontKey] || FONTS.yahei)
         max="2.1"
         step="0.05"
         :value="store.theme.lh"
-        @input="store.setTheme({ lh: Number($event.target.value) })"
+        @input="store.setTheme({ lh: Number(($event.target as HTMLInputElement).value) })"
       />
       <span class="ed-value">{{ store.theme.lh.toFixed(2) }}</span>
     </label>
@@ -75,7 +75,7 @@ const currentFont = computed(() => FONTS[store.theme.fontKey] || FONTS.yahei)
         max="1.6"
         step="0.05"
         :value="store.theme.gap"
-        @input="store.setTheme({ gap: Number($event.target.value) })"
+        @input="store.setTheme({ gap: Number(($event.target as HTMLInputElement).value) })"
       />
       <span class="ed-value">{{ store.theme.gap.toFixed(1) }}</span>
     </label>
@@ -89,7 +89,7 @@ const currentFont = computed(() => FONTS[store.theme.fontKey] || FONTS.yahei)
         max="24"
         step="1"
         :value="store.theme.mv"
-        @input="store.setTheme({ mv: Number($event.target.value) })"
+        @input="store.setTheme({ mv: Number(($event.target as HTMLInputElement).value) })"
       />
       <span class="ed-value">{{ store.theme.mv }}mm</span>
     </label>
@@ -103,7 +103,7 @@ const currentFont = computed(() => FONTS[store.theme.fontKey] || FONTS.yahei)
         max="24"
         step="1"
         :value="store.theme.mh"
-        @input="store.setTheme({ mh: Number($event.target.value) })"
+        @input="store.setTheme({ mh: Number(($event.target as HTMLInputElement).value) })"
       />
       <span class="ed-value">{{ store.theme.mh }}mm</span>
     </label>

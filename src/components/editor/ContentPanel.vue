@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 内容页签：锚点导航条 + 基本信息 + 模块列表。
  *
@@ -26,23 +26,29 @@ const anchors = computed(() => [
   ...store.sections.map((s) => ({ id: s.id, title: s.title, visible: s.visible })),
 ])
 
+/*
+ * 高亮计时器。声明提到 go() 之前：
+ * 原来它在 go() **后面**才 `let removeFlash = null`，而 go() 里先用了它。
+ * let 有暂时性死区，只是 go() 只在点击时被调用、那时模块早已求值完，
+ * 所以一直没炸 —— 属于「能跑但顺序不对」的写法。类型检查把它报了出来。
+ */
+let removeFlash: ReturnType<typeof setTimeout> | null = null
+
 /**
  * 滚动定位到锚点。要点：目标若在折叠卡片里会先失效，
  * 所以这里不展开内容，只定位卡片头 —— 展开交给用户自己操作。
  */
-function go(id) {
+function go(id: string) {
   const el = rootRef.value?.querySelector(`[data-section-id="${CSS.escape(id)}"]`)
   if (!el) return
   el.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
   // 短暂高亮目标卡片，让「点到了哪」有明确反馈；超时后移除，不影响常规样式
   el.classList.add('is-nav-flash')
-  clearTimeout(removeFlash)
+  if (removeFlash !== null) clearTimeout(removeFlash)
   removeFlash = setTimeout(() => el.classList.remove('is-nav-flash'), 1400)
   activeId.value = id
 }
-
-let removeFlash = null
 
 /** rAF 节流的滚动 spy：取视口顶部（页签下沿）之上最近的卡片 */
 let ticking = false
@@ -55,24 +61,24 @@ function onScroll() {
     if (!root) return
     const threshold = 90
     let current = 'basics'
-    root.querySelectorAll('[data-section-id]').forEach((el) => {
-      if (el.getBoundingClientRect().top <= threshold) current = el.dataset.sectionId
+    root.querySelectorAll<HTMLElement>('[data-section-id]').forEach((el) => {
+      if (el.getBoundingClientRect().top <= threshold) current = el.dataset.sectionId ?? current
     })
     activeId.value = current
   })
 }
 
-let scroller = null
+let scroller: Element | null | undefined = null
 
 onMounted(() => {
-  scroller = rootRef.value?.closest('.panel-body')
+  scroller = rootRef.value?.closest('.panel-body') ?? null
   scroller?.addEventListener('scroll', onScroll, { passive: true })
   onScroll()
 })
 
 onBeforeUnmount(() => {
   scroller?.removeEventListener('scroll', onScroll)
-  clearTimeout(removeFlash)
+  if (removeFlash !== null) clearTimeout(removeFlash)
 })
 </script>
 

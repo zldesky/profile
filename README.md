@@ -237,20 +237,30 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 | 维度                     | 现状                                                                                     |
 | ------------------------ | ---------------------------------------------------------------------------------------- |
 | `<script setup>` 写法    | **64 / 64 全部完成**（`export default`、`defineComponent`、`setup()` 返回对象均为 0 处） |
-| `lang="ts"`              | **20 / 64**；剩余 44 个仍是 JS，共约 12,300 行                                           |
+| `lang="ts"`              | **39 / 64**（约 5,800 行）；剩余 25 个仍是 JS，约 9,000 行                               |
 | 这些 JS 组件受类型检查吗 | **不受**。`tsconfig.json` 里 `checkJs: false`，且 `include` 未纳入 `src/**/*.js`         |
 
 实测过「打开 `checkJs` 直接检查现有 JS 组件」这条路：会报 **644 处**错误，其中 289 处只是缺参数注解（`TS7006`）—— 说明这条路的前期噪音很大，**逐组件迁 TS 比全局开 `checkJs` 更可控**。所以策略是分批迁，而不是一次性打开开关。
 
-**已迁的模板层（12/12）**：`src/templates/**` 全部转为 `<script setup lang="ts">`，props 由 `{ type: Object, required: true }` 改为 `defineProps<{ resume: Resume; selectedIds?: string[] }>()`。这一层值得优先迁：它在编辑器、分享页、官网合集**三处共用同一份数据**，用具体类型收口后，数据形状漂移会在这里报出来，而不是渲染成空白。
+**已迁的层**：`src/templates/**`（12/12）、`src/components/paper/**`（2/2）、`src/components/preview/**`（3/3）、`src/components/collection/**`（1/1），以及编辑器面板一层（`SectionList` / `ContentPanel` / `TitleSection` / `TypographySection` / `ImageTemplatePanel`）。
 
-迁移抓到的第一处真问题就在迁移过程中：`sectionLayoutStyle` 返回 `object`，模板里 `:style="sectionLayoutStyle(section)"` 直接报类型错误。已转成 `.ts` 并显式声明返回类型 `SectionLayoutStyle`（含 `--sec-align` 等自定义属性）——**这类"类型没写清楚、JS 里一直静默用着"的地方，只有真去迁才会浮出来**。
+模板层值得优先迁：它在编辑器、分享页、官网合集**三处共用同一份数据**，用具体类型收口后，数据形状漂移会在这里报出来，而不是渲染成空白。
+
+**迁移当场抓到三类真问题**（都不是看代码能发现的，且**都属静默失效**）：
+
+1. **`scrollMode: 'if-needed'` 不是合法属性**（`SectionList.vue`）。标准里只有 `behavior` / `block` / `inline`，浏览器**直接忽略未知属性** —— 注释承诺的「卡片已在视野就完全不动」从来没有生效过，一直是无条件滚动。长期没被发现的原因是：忽略它**不报错也不警告**。已改为自己判可见性，把承诺真正落实。
+2. **`sectionLayoutStyle` 返回 `object`**，模板里 `:style="sectionLayoutStyle(section)"` 直接报类型错误。已转 `.ts` 并显式声明返回类型 `SectionLayoutStyle`（含 `--sec-align` 等自定义属性）。
+3. **「先建对象再补键」**（`ImageTemplatePanel.vue`）：`const patch = { customLayout }` 之后 `patch.accent = ...`，TS 里 patch 被推断成 `{ customLayout }`，补键那行报错。运行结果一样，但已改成一次构造，更清楚表达「最多改这几项」。
+
+另外三处「能跑但顺序/类型不对」：`ContentPanel` 里 `removeFlash` 在声明前被使用（`let` 的 TDZ，只因 `go()` 只在点击时调用才一直没炸）；`CollectionCard` 的 `resizeObserver` 隐式 `any` 且 `observe(viewportRef.value)` 未判空；`PreviewToolbar` 的 `offset` 标成可选而模板在 `v-if` 内直接读 `offset.x`（类型系统看不到这层相关性，改为如实描述调用方为必填）。
+
+**一处我凭直觉写错的类型**：给 `ImageAnalysis.ratio` 写 `number`，理由是「百分比是数字」；实际 `nearestRatio` 返回的是离散字符串档位（`'28' | '34' | '40'`），`CustomLayout.ratio` 也声明为 `string`。类型检查当场纠正 —— **凭直觉写类型正是最容易错的地方**。
 
 **模板渲染验证（`npm run verify:templates`）**：模板迁 TS 改的是 props 声明，**编译不报错、类型也通过**，但万一把 prop 名或形状写错，模板会静默渲染成空白——单测（只验注册表）和构建都发现不了。所以逐个切一遍、数一数纸上有多少可见文字（12/12 通过，文字约 890 字、纸高 1123px，各模板 class 互不相同）。
 
 这个脚本自己也踩过一次坑，值得记：第一版想直接改 Pinia store（`#app.__vue_app__` → `$pinia`）来切模板，实测拿不到 pinia 实例，12 个模板全报 `apply=no-store`——**工具坏了，却看起来像 12 个模板都渲染失败**。改成黑盒点真实按钮后 12/12 通过。这与审计脚本那两次教训是同一类：**先怀疑工具，再怀疑被测对象**。
 
-**剩余 44 个 JS 组件**（按行数降序，`AdminPage` 824 / `TopBar` 779 / `CollectionPage` 668 最大）。主要机械成本是**模板内联处理器的 DOM 收窄**：`$event.target` 是 `EventTarget`，取 `.value` / `.checked` 需写成 `($event.target as HTMLInputElement)`。另外分段编辑器的 `section` prop 应按可辨识联合收窄成 `EntriesSection` / `GridSection` / `SkillsSection` / `TextSection`，否则模板里取 `section.items` 会报错 —— 那正是联合类型在提醒「先确定是哪种模块」。
+**剩余 25 个 JS 组件**，最大的是 `AdminPage` 824 / `TopBar` 779 / `CollectionPage` 668 / `PreviewPane` 420。主要机械成本是**模板内联处理器的 DOM 收窄**：`$event.target` 是 `EventTarget`，取 `.value` / `.checked` 需写成 `($event.target as HTMLInputElement)`（本轮实测替换 11 处）。另外分段编辑器的 `section` prop 应按可辨识联合收窄成 `EntriesSection` / `GridSection` / `SkillsSection` / `TextSection`，否则模板里取 `section.items` 会报错 —— 那正是联合类型在提醒「先确定是哪种模块」。
 
 `stores/resume` 是本地优先的落盘中心（多文档槽位、历史快照、头像引用、超容量降级），迁移前先用 `tests/resumeStore.test.js` 立起不变量再改类型；该测试需要 `localStorage` 与 `window`/`document`，由 `tests/setup/browser-globals.js` 按需安装（**刻意不放进 vitest 的 setupFiles**：全局安装 `document` 会让 pdf.js 误判运行环境，导致 PDF 导入端到端测试失败）。
 
@@ -314,3 +324,5 @@ tests/               Vitest 测试
 - 密码 scrypt 摘要存储，会话为服务端 Session + httpOnly Cookie，登录失败按「IP+用户名」锁定；注册另设滑块验证码与限频；
 - AI API Key 只存用户浏览器本地，`/api/ai/chat` 转发即用即弃，不落库不打日志；AI 转发与图片代理均带 SSRF 防线（`aiGuard.js` / `imageProxy.js`）；
 - 所有运行时数据集中在 `server/.data/`（SQLite 单文件），备份/迁移拷这一个目录即可。
+
+`PreviewPane` 刻意留在后面：它 420 行且逻辑密（就地编辑、框选、拖拽的编排），撞上本轮末尾赶工不划算。

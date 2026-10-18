@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 合集卡片：迷你 A4 实时预览 + 摘要信息。
  *
@@ -14,15 +14,16 @@ import { MM_TO_PX, PAGE, TEMPLATES } from '@/data/presets'
 import { resolveTemplate } from '@/templates'
 import { computePageStyle } from '@/utils/resumeStyle'
 import { fetchShare } from '@/utils/shareApi'
+import type { CollectionItem, Resume } from '@/types/resume'
 
-const props = defineProps({
-  /** /api/collection 条目：{ id, name, jobTitle, template, accent, createdAt } */
-  item: { type: Object, required: true },
-})
+const props = defineProps<{
+  /** /api/collection 条目 */
+  item: CollectionItem
+}>()
 
 const viewportRef = useTemplateRef('viewportRef')
-const resume = shallowRef(null)
-const state = shallowRef('loading') // loading | ready | error
+const resume = shallowRef<Resume | null>(null)
+const state = shallowRef<'loading' | 'ready' | 'error'>('loading')
 const zoom = shallowRef(0)
 
 const templateComponent = computed(() =>
@@ -40,9 +41,9 @@ const templateName = computed(
 const dateText = computed(() => formatDay(props.item.createdAt))
 
 /** 创建时间只露日期部分 */
-function formatDay(timestamp) {
+function formatDay(timestamp: number) {
   const d = new Date(timestamp)
-  const pad = (n) => String(n).padStart(2, '0')
+  const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
@@ -53,11 +54,19 @@ function fit() {
   zoom.value = Math.max(0.1, el.clientWidth / (PAGE.width * MM_TO_PX))
 }
 
-let resizeObserver = null
+/*
+ * 显式标类型：`let resizeObserver = null` 在 TS 下推成 any 之后，
+ * onMounted 里赋值、onBeforeUnmount 里 disconnect 都报「隐式 any」。
+ * 模板引用可能是 null（挂载前 / 卸载后），所以 observe 前要先判空 ——
+ * 这不只是为了让类型过关，也是真实存在的时序。
+ */
+let resizeObserver: ResizeObserver | null = null
 
 onMounted(() => {
+  const el = viewportRef.value
+  if (!el) return
   resizeObserver = new ResizeObserver(fit)
-  resizeObserver.observe(viewportRef.value)
+  resizeObserver.observe(el)
   fit()
   load()
 })

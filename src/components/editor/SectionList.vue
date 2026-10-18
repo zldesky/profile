@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 模块列表。
  * 拖拽排序交给 vue-draggable-plus，带位移动画并支持触屏；
@@ -12,15 +12,16 @@ import SvgIcon from '@/components/SvgIcon.vue'
 import { usePaperJump } from '@/composables/usePaperJump'
 import { SECTION_PRESETS, SECTION_TYPES } from '@/data/defaultResume'
 import { useResumeStore } from '@/stores/resume'
+import type { Section, SectionType } from '@/types/resume'
 
 const store = useResumeStore()
 
 // 数组整体替换，用 ref；两个下拉框选项是字符串，用 shallowRef
-const expandedIds = ref([])
-const addingType = shallowRef('entries')
+const expandedIds = ref<string[]>([])
+const addingType = shallowRef<SectionType>('entries')
 const presetKey = shallowRef('project')
 
-const isOpen = (id) => expandedIds.value.includes(id)
+const isOpen = (id: string) => expandedIds.value.includes(id)
 
 const typeHint = computed(() => SECTION_TYPES.find((t) => t.value === addingType.value)?.hint || '')
 
@@ -28,18 +29,18 @@ const presetHint = computed(
   () => SECTION_PRESETS.find((p) => p.key === presetKey.value)?.desc || '',
 )
 
-function toggle(id) {
+function toggle(id: string) {
   expandedIds.value = isOpen(id)
     ? expandedIds.value.filter((item) => item !== id)
     : [...expandedIds.value, id]
 }
 
-function expand(id) {
+function expand(id: string) {
   if (!isOpen(id)) expandedIds.value = [...expandedIds.value, id]
 }
 
 /** 删除模块：确认、清理展开状态、再改数据，避免留下悬空的展开项 */
-function removeSection(section) {
+function removeSection(section: Section) {
   if (!window.confirm(`确定删除模块「${section.title}」？该模块内容将一并移除。`)) return
   expandedIds.value = expandedIds.value.filter((item) => item !== section.id)
   store.removeSection(section.id)
@@ -56,24 +57,31 @@ function addSection() {
 
 /** 卡片上闪一下的描边（跳转落点提示），动画结束即摘掉以便再次触发 */
 const flashId = shallowRef('')
-let flashTimer = null
+let flashTimer: ReturnType<typeof setTimeout> | null = null
 
 const { targetId, requestSeq, consume } = usePaperJump()
 
 /**
  * 把卡片滚到可见位置。
- * 用 scrollMode: 'if-needed' —— 卡片已经在视野里就完全不动，
- * 避免「明明看得见却猛跳一下」；否则居中，上下都留出上下文。
+ *
+ * 卡片已经完整在视野里就**完全不动**，避免「明明看得见却猛跳一下」；
+ * 否则居中，上下都留出上下文。
+ *
+ * 这里原来写的是 `scrollMode: 'if-needed'`，但那**不是标准属性**
+ * （标准里只有 behavior / block / inline），浏览器直接忽略 ——
+ * 也就是说注释承诺的「已在视野就不动」从来没有生效过，一直是无条件滚动。
+ * 之所以很久没被发现：这个选项被忽略时**不报错也不警告**。
+ * 迁 TS 时类型检查把它报了出来。现在自己判可见性，把承诺真正落实。
  */
-function revealCard(id) {
+function revealCard(id: string) {
   const el = document.querySelector(`.ed-card[data-section-id="${CSS.escape(id)}"]`)
   if (!el) return
-  el.scrollIntoView?.({
-    block: 'center',
-    inline: 'nearest',
-    behavior: 'smooth',
-    scrollMode: 'if-needed',
-  })
+
+  const rect = el.getBoundingClientRect()
+  const fullyVisible = rect.top >= 0 && rect.bottom <= window.innerHeight
+  if (!fullyVisible) {
+    el.scrollIntoView?.({ block: 'center', inline: 'nearest', behavior: 'smooth' })
+  }
   flashId.value = id
   if (flashTimer !== null) clearTimeout(flashTimer)
   flashTimer = setTimeout(() => {

@@ -1,20 +1,35 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 预览区底部工具条：缩放、页数提示、头像坐标读数与「压缩到一页」。
  * 纯展示组件，所有操作通过事件上抛给 PreviewPane。
  */
 import SvgIcon from '@/components/SvgIcon.vue'
 
-defineProps({
-  zoom: { type: Number, required: true },
-  autoFit: { type: Boolean, default: false },
-  pageCount: { type: Number, required: true },
-  compressing: { type: Boolean, default: false },
-  dragging: { type: Boolean, default: false },
-  offset: { type: Object, default: () => ({ x: 0, y: 0 }) },
-})
+defineProps<{
+  /** 当前缩放比（1 表示 100%） */
+  zoom: number
+  /** 是否处于「适应窗口」；为 true 时缩放不写死，跟随舞台尺寸 */
+  autoFit?: boolean
+  pageCount: number
+  /** 正在执行「压缩到一页」，用于禁用重复触发 */
+  compressing?: boolean
+  /** 正在拖动头像，此时显示坐标读数 */
+  dragging?: boolean
+  /**
+   * 头像偏移读数（毫米）。
+   * 标成必填而不是可选：PreviewPane 每次渲染都传它（`:offset="offset"`），
+   * 而模板里在 `v-if="dragging"` 内读 `offset.x` —— 类型系统看不到这层相关性，
+   * 标可选会报「可能为 undefined」。用必填如实描述调用方，比在模板里到处加兜底更准。
+   */
+  offset: { x: number; y: number }
+}>()
 
-const emit = defineEmits(['zoom-in', 'zoom-out', 'fit', 'compress'])
+const emit = defineEmits<{
+  'zoom-in': []
+  'zoom-out': []
+  fit: []
+  compress: []
+}>()
 </script>
 
 <template>

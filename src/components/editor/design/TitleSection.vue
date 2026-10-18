@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 模块标题：主体样式、标记形状、标题内间距与底部装饰。
  */
@@ -56,7 +56,7 @@ const bottomLabel = computed(
         max="1.2"
         step="0.02"
         :value="store.theme.titleGap"
-        @input="store.setTheme({ titleGap: Number($event.target.value) })"
+        @input="store.setTheme({ titleGap: Number(($event.target as HTMLInputElement).value) })"
       />
       <span class="ed-value">{{ Number(store.theme.titleGap).toFixed(2) }}em</span>
     </label>
@@ -70,7 +70,7 @@ const bottomLabel = computed(
         max="1.6"
         step="0.05"
         :value="store.theme.titleMargin"
-        @input="store.setTheme({ titleMargin: Number($event.target.value) })"
+        @input="store.setTheme({ titleMargin: Number(($event.target as HTMLInputElement).value) })"
       />
       <span class="ed-value">{{ Number(store.theme.titleMargin).toFixed(2) }}em</span>
     </label>
@@ -107,7 +107,9 @@ const bottomLabel = computed(
           max="100"
           step="1"
           :value="store.theme.titleBottomWidth"
-          @input="store.setTheme({ titleBottomWidth: Number($event.target.value) })"
+          @input="
+            store.setTheme({ titleBottomWidth: Number(($event.target as HTMLInputElement).value) })
+          "
         />
         <span class="ed-value">{{ store.theme.titleBottomWidth }}%</span>
       </label>
@@ -121,7 +123,11 @@ const bottomLabel = computed(
           max="6"
           step="0.5"
           :value="store.theme.titleBottomThickness"
-          @input="store.setTheme({ titleBottomThickness: Number($event.target.value) })"
+          @input="
+            store.setTheme({
+              titleBottomThickness: Number(($event.target as HTMLInputElement).value),
+            })
+          "
         />
         <span class="ed-value">{{ store.theme.titleBottomThickness }}px</span>
       </label>
@@ -135,7 +141,9 @@ const bottomLabel = computed(
           max="16"
           step="1"
           :value="store.theme.titleBottomGap"
-          @input="store.setTheme({ titleBottomGap: Number($event.target.value) })"
+          @input="
+            store.setTheme({ titleBottomGap: Number(($event.target as HTMLInputElement).value) })
+          "
         />
         <span class="ed-value">{{ store.theme.titleBottomGap }}px</span>
       </label>
