@@ -25,7 +25,9 @@ const SESSION_COOKIE = 'rs_session'
 const argv = process.argv.slice(2)
 const tokenFlag = argv.indexOf('--token')
 const sessionToken = tokenFlag >= 0 ? argv[tokenFlag + 1] || '' : ''
-const url = argv.find((a) => a.startsWith('http')) || 'http://127.0.0.1:3001/'
+// 默认审编辑器（/editor）：/ 现在是营销首页，但需要天天体检的是编辑器。
+// 首页用 `npm run audit:ui -- http://127.0.0.1:3001/` 单独审。
+const url = argv.find((a) => a.startsWith('http')) || 'http://127.0.0.1:3001/editor'
 /** --shots 时截图到 tools/shots/。有些问题（排版怪、留白失衡）只能看，量不出来。 */
 const shots = argv.includes('--shots')
 const shotDir = new URL('./shots/', import.meta.url).pathname.replace(/^\//, '')
@@ -379,7 +381,7 @@ for (const v of report.viewports) {
   line(`  点击目标不达标(<${MIN_TAP}px，已复核真实可控区): ${v.small.length} 处`)
   for (const s of v.small.slice(0, 10)) line(`      盒子 ${s.w}×${s.h}  承载 label 高 ${s.labelH}  ${s.el}`)
   line(`  文本溢出    : ${v.overflowing.length} 处`)
-  for (const o of v.overflowing.slice(0, 8)) line(`      ${o.scrollW}>${o.clientW}  ${o.el}  「${o.text}」`)
+  for (const o of v.overflowing.slice(0, 8)) line(`      scrollW ${o.scrollW} > clientW ${o.clientW}  ${o.el}  「${o.text}」`)
   if (v.name === '桌面') {
     line(`  正文首选字体: ${v.bodyFont}`)
     line(`  令牌生效    :`)

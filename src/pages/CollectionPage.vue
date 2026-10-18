@@ -418,10 +418,22 @@ async function openLogin() {
   color: var(--ed-brand-deep);
 }
 
+/*
+ * 卡片最小宽度按「缩略图可读」倒推，而不是按「一屏塞几列」。
+ *
+ * 卡内是一整页 A4 实时预览（CollectionCard 按容器宽度算缩放）。实测：
+ * 原 230px 时 1440 视口排 4 列，卡片 276px、纸张缩放仅 35%，
+ * 正文在屏幕上不到 4px 高 —— 缩略图糊成灰噪点，而它正是这个页面的主角。
+ * 正文要约 10px 才不需要放大看，对应纸张缩放 40%+，即卡片宽 330px 以上。
+ *
+ * 代价是同一屏能看到的份数变少。这个取舍值得：作品集页面里
+ * 「看得清的那几张」比「挤在一起的很多张」更显专业，也让页面更像人工挑选过的。
+ * 列数不写死，交给 auto-fill 按各档宽度自然收敛。
+ */
 .cl-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 20px;
 }
 
 /* 骨架屏：合集加载期间的占位卡片 */
@@ -633,8 +645,9 @@ async function openLogin() {
   }
 
   .cl-grid {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 10px;
+    /* 与上面同一理由：最小宽度按缩略图可读性定，窄屏下自然落到 1–2 列 */
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 12px;
   }
 
   .cl-title {

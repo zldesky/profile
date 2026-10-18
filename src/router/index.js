@@ -1,43 +1,18 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
+import { routes } from './routes.js'
+
 /**
  * 编辑器本身不强制登录：匿名用户是「纯本地模式」，登录只是解锁
  * 云端同步与一键导出，因此路由层不做登录守卫，只把 /login 挡在已登录者之外。
+ *
+ * 路由表在 routes.js（纯配置，可在 Node 里直接断言）；本文件只负责把它接到
+ * 浏览器 history 上。这样拆是因为 createWebHistory 在模块求值时就读 location，
+ * 测试框架的 import 提升会让桩总是晚一步 —— 详见 routes.js 顶部注释。
  */
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  routes: [
-    {
-      path: '/',
-      name: 'editor',
-      component: () => import('@/pages/EditorPage.vue'),
-    },
-    {
-      path: '/login',
-      name: 'login',
-      component: () => import('@/pages/LoginPage.vue'),
-    },
-    {
-      // 分享只读页：拿链接的人无需登录
-      path: '/share/:id',
-      name: 'share',
-      component: () => import('@/pages/SharePage.vue'),
-    },
-    {
-      // 官网简历合集：游客可见前若干份，登录后解锁全部
-      path: '/collection',
-      name: 'collection',
-      component: () => import('@/pages/CollectionPage.vue'),
-    },
-    {
-      // 管理后台：仅管理员（页面内做登录与权限门卫）
-      path: '/admin',
-      name: 'admin',
-      component: () => import('@/pages/AdminPage.vue'),
-    },
-    // 单页应用没有其他深层链接，未知路径一律回编辑器
-    { path: '/:pathMatch(.*)*', redirect: { name: 'editor' } },
-  ],
+  routes,
 })
 
 export default router

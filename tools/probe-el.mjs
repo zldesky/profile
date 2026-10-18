@@ -46,6 +46,21 @@ const info = await page.evaluate(
           : '无 label',
         hitTop: fn(el, cx, r.top - 6),
         hitBottom: fn(el, cx, r.bottom + 6),
+        // 顺带报出这两个点上究竟是什么元素 —— 只说「未命中」不足以判断该改哪儿
+        atTop: (() => {
+          const h = document.elementFromPoint(cx, r.top - 6)
+          return h ? h.tagName.toLowerCase() + '.' + String(h.className || '').split(' ')[0] : 'null'
+        })(),
+        atBottom: (() => {
+          const h = document.elementFromPoint(cx, r.bottom + 6)
+          return h ? h.tagName.toLowerCase() + '.' + String(h.className || '').split(' ')[0] : 'null'
+        })(),
+        liBox: (() => {
+          const li = el.closest('li')
+          if (!li) return '无 li'
+          const lr = li.getBoundingClientRect()
+          return Math.round(lr.width) + '×' + Math.round(lr.height)
+        })(),
       }
     })
   },
@@ -55,7 +70,8 @@ const info = await page.evaluate(
 console.log(`探针 ${selector}  @390×844`)
 for (const i of info) {
   console.log(`  ${i.el}   盒子 ${i.box}   承载 label ${i.labelBox}`)
-  console.log(`    上方 6px: ${i.hitTop}    下方 6px: ${i.hitBottom}`)
+  console.log(`    上方 6px: ${i.hitTop}（实际元素 ${i.atTop}）   下方 6px: ${i.hitBottom}（实际元素 ${i.atBottom}）`)
+  console.log(`    外层 li 盒子: ${i.liBox}`)
 }
 if (!info.length) console.log('  （未找到该选择器，页面可能未渲染该元素）')
 await browser.close()
