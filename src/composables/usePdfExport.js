@@ -30,6 +30,15 @@ export function usePdfExport() {
 
   const exporting = shallowRef(false)
   /** 服务端返回的今日额度；null 表示服务未启动，或尚未通过口令校验 */
+
+  /**
+   * 服务端下发的导出额度。
+   * 用 JSDoc 引用服务端的 QuotaStatus（import type 导出会被擦除，不产生运行时依赖）：
+   * `shallowRef(null)` 在 TS 下推成 `Ref<null>`，调用方读 `.value.remaining` 就报
+   * 「never 上不存在」—— 与 usePaperSelection 的 bandRect 同一处理：
+   * 能用标注解决的事，不必把整个文件迁 TS。
+   * @type {import('vue').ShallowRef<import('../server/requestGuards.ts').QuotaStatus | null>}
+   */
   const quota = shallowRef(null)
   /** 服务是否要求口令 */
   const authRequired = shallowRef(false)

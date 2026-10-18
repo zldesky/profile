@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 管理后台（/admin，仅管理员）：编辑「模板 × 风格」SKU 运行时配置。
  *
@@ -18,6 +18,7 @@ import SvgIcon from '@/components/SvgIcon.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useAuthDialog } from '@/composables/useAuthDialog'
 import { useStyleConfig } from '@/composables/useStyleConfig'
+import type { StylePreset } from '@/types/resume'
 import { useToast } from '@/composables/useToast'
 import {
   FONTS,
@@ -34,32 +35,64 @@ const authDialog = useAuthDialog()
 const styleConfig = useStyleConfig()
 const { toast } = useToast()
 
-/** loading | ready | forbidden | error */
-const state = shallowRef('loading')
+/**
+ * 草稿里的一个风格：key 为空表示「新建、尚未定 key」。
+ * patch 与 StylePreset['patch'] 同源（Theme 的子集），不另起一套形状。
+ */
+interface DraftPreset {
+  key: string
+  name: string
+  patch: StylePreset['patch']
+  /**
+   * 本地新加、尚未保存的风格。
+   * 它此刻还没有正式 key（本地用 draft-<时间戳> 占位），保存时交给服务端生成 ——
+   * 这个标记原先只在代码里用，没写进形状，类型检查把它点了出来。
+   */
+  isNew?: boolean
+}
+
+/** 模板 id → 允许的风格 key 列表 */
+type DraftMatrix = Record<string, string[]>
+
+/** loading | ready | forbidden | error | anon */
+const state = shallowRef<'loading' | 'ready' | 'forbidden' | 'error' | 'anon'>('loading')
 const errorMessage = shallowRef('')
 const saving = shallowRef(false)
 
 /** 草稿态：保存前的一切编辑都发生在 draft 上 */
-const draftPresets = shallowRef([])
-const draftMatrix = shallowRef({})
+const draftPresets = shallowRef<DraftPreset[]>([])
+const draftMatrix = shallowRef<DraftMatrix>({})
 
 /** 编辑中的风格（null = 未在编辑）；key 为空表示新建 */
-const editing = shallowRef(null)
+const editing = shallowRef<DraftPreset | null>(null)
 
 const fontOptions = Object.entries(FONTS).map(([key, font]) => ({ key, name: font.name }))
 
 /** 内置默认作为编辑起点（服务器从未保存过时） */
-function draftFromBuiltin() {
+function draftFromBuiltin(): { presets: DraftPreset[]; matrix: DraftMatrix } {
   return {
     presets: STYLE_PRESETS.map((preset) => ({
       key: preset.key,
       name: preset.name,
       patch: { ...preset.patch },
     })),
+    // tpl.styles 在类型上是可选，这里已用 filter 保证存在；
+    // 展开处补 ?? [] 让类型系统也能确认（原写法靠 filter 的语义，TS 看不出来）
     matrix: Object.fromEntries(
-      TEMPLATES.filter((tpl) => tpl.styles).map((tpl) => [tpl.id, [...tpl.styles]]),
+      TEMPLATES.filter((tpl) => tpl.styles).map((tpl) => [tpl.id, [...(tpl.styles ?? [])]]),
     ),
   }
+}
+
+/**
+ * 服务端 /api/styles-admin 下发的风格条目。
+ * 响应体在客户端是 any，这里声明用到的字段即可 ——
+ * 与其它页面一致：在类型边界处就近声明，不把整个响应建成大接口。
+ */
+interface AdminPresetPayload {
+  key: string
+  name: string
+  patch: StylePreset['patch']
 }
 
 async function loadAdmin() {
@@ -86,13 +119,13 @@ async function loadAdmin() {
     if (!response.ok || !data?.ok) throw new Error(data?.message || '配置读取失败')
 
     if (data.config) {
-      draftPresets.value = data.config.presets.map((preset) => ({
+      draftPresets.value = (data.config.presets as AdminPresetPayload[]).map((preset) => ({
         key: preset.key,
         name: preset.name,
         patch: { ...preset.patch },
       }))
       draftMatrix.value = Object.fromEntries(
-        Object.entries(data.config.matrix || {}).map(([id, keys]) => [id, [...keys]]),
+        Object.entries(data.config.matrix || {}).map(([id, keys]) => [id, [...(keys as string[])]]),
       )
     } else {
       const base = draftFromBuiltin()
@@ -102,7 +135,7 @@ async function loadAdmin() {
     state.value = 'ready'
   } catch (error) {
     state.value = 'error'
-    errorMessage.value = error.message || '配置读取失败'
+    errorMessage.value = error instanceof Error ? error.message : '配置读取失败'
   }
 }
 
@@ -129,7 +162,7 @@ function startCreate() {
   }
 }
 
-function startEdit(preset) {
+function startEdit(preset: DraftPreset) {
   editing.value = { key: preset.key, name: preset.name, patch: { ...preset.patch } }
 }
 
@@ -139,16 +172,17 @@ function cancelEdit() {
 
 function saveDraft() {
   const draft = editing.value
+  if (!draft) return
   const name = draft.name.trim()
   if (!name) {
     toast('风格名称不能为空')
     return
   }
-  if (!/^#[0-9a-fA-F]{6}$/.test(draft.patch.accent)) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(draft.patch.accent ?? '')) {
     toast('主色须为 #RRGGBB 格式')
     return
   }
-  const existing = draftPresets.value.findIndex((preset) => preset.key === draft.key)
+  const existing = draftPresets.value.findIndex((preset) => preset.key === (draft.key ?? ''))
   if (existing >= 0) {
     draftPresets.value[existing] = { ...draft, name }
   } else {
@@ -159,7 +193,7 @@ function saveDraft() {
   toast(`风格「${name}」已加入草稿，点「保存全部」后生效`)
 }
 
-function removePreset(preset) {
+function removePreset(preset: DraftPreset) {
   if (draftPresets.value.length <= 1) {
     toast('至少保留一个风格')
     return
@@ -174,14 +208,14 @@ function removePreset(preset) {
 
 /* ---------------- 兼容矩阵编辑 ---------------- */
 
-function toggleCell(templateId, styleKey, allowed) {
+function toggleCell(templateId: string, styleKey: string, allowed: boolean) {
   const keys = new Set(draftMatrix.value[templateId] || [])
   if (allowed) keys.add(styleKey)
   else keys.delete(styleKey)
   draftMatrix.value[templateId] = [...keys]
 }
 
-function setRowAll(templateId, allowed) {
+function setRowAll(templateId: string, allowed: boolean) {
   draftMatrix.value[templateId] = allowed ? draftPresets.value.map((preset) => preset.key) : []
 }
 
@@ -220,7 +254,7 @@ async function saveAll() {
     const freshData = await fresh.json().catch(() => ({}))
     if (freshData?.ok && freshData.config) {
       styleConfig.applyLocal(
-        freshData.config.presets.map((preset) => ({
+        (freshData.config.presets as AdminPresetPayload[]).map((preset) => ({
           key: preset.key,
           name: preset.name,
           swatch: preset.patch?.accent,
@@ -233,7 +267,7 @@ async function saveAll() {
     await loadAdmin()
     toast('已保存，编辑器风格与矩阵已更新')
   } catch (error) {
-    toast(error.message || '保存失败')
+    toast(error instanceof Error ? error.message : '保存失败')
   } finally {
     saving.value = false
   }
@@ -252,11 +286,11 @@ async function openLogin() {
   if (!opened) router.push({ name: 'login' })
 }
 
-const detailText = (patch) =>
+const detailText = (patch: StylePreset['patch']) =>
   `${TITLE_STYLES.find((item) => item.value === patch.titleStyle)?.label || patch.titleStyle} · ${
     TITLE_MARKERS.find((item) => item.value === patch.titleMarker)?.label || patch.titleMarker
   } · ${TITLE_BOTTOM_STYLES.find((item) => item.value === patch.titleBottom)?.label || patch.titleBottom} · ${
-    FONTS[patch.fontKey]?.name || '默认字体'
+    FONTS[patch.fontKey ?? '']?.name || '默认字体'
   }`
 </script>
 
@@ -371,7 +405,7 @@ const detailText = (patch) =>
                     class="ad2-color-pick"
                     type="color"
                     :value="editing.patch.accent"
-                    @input="editing.patch.accent = $event.target.value"
+                    @input="editing.patch.accent = ($event.target as HTMLInputElement).value"
                   />
                 </span>
               </label>
@@ -447,7 +481,9 @@ const detailText = (patch) =>
                       class="ed-check"
                       type="checkbox"
                       :checked="(draftMatrix[tpl.id] || []).includes(preset.key)"
-                      @change="toggleCell(tpl.id, preset.key, $event.target.checked)"
+                      @change="
+                        toggleCell(tpl.id, preset.key, ($event.target as HTMLInputElement).checked)
+                      "
                     />
                   </td>
                   <td class="ad2-matrix-ops">

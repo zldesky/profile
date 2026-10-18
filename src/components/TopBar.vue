@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 顶部操作栏。
  * 数据导入导出与 PDF 导出逻辑分别在 useResumeFile / usePdfExport，
@@ -67,7 +67,7 @@ const toggleIcon = computed(() => {
 })
 
 const store = useResumeStore()
-const fileInput = useTemplateRef('fileInput')
+const fileInput = useTemplateRef<HTMLInputElement>('fileInput')
 
 const auth = useAuth()
 const { toast } = useToast()
@@ -156,33 +156,37 @@ const saveText = computed(() => {
 
 /** 每次选择前清空，保证连续选同一个文件也能触发 change */
 function pickFile() {
-  fileInput.value.value = ''
-  fileInput.value.click()
+  const input = fileInput.value
+  if (!input) return
+  input.value = ''
+  input.click()
 }
 
-function onFileChange(event) {
-  importFromFile(event.target.files?.[0])
+function onFileChange(event: Event) {
+  importFromFile((event.target as HTMLInputElement).files?.[0])
 }
 
 /** 导入菜单：JSON/备份 与 PDF 两条入口共用 */
 const importMenuOpen = shallowRef(false)
-const pdfInput = useTemplateRef('pdfInput')
+const pdfInput = useTemplateRef<HTMLInputElement>('pdfInput')
 /** PDF 解析在主线程外的 worker 里跑，但整包可能要一两秒，按钮给出忙态 */
 const pdfParsing = shallowRef(false)
 /** AI 补充导入弹窗开关 */
 const aiFillOpen = shallowRef(false)
 
 function pickPdf() {
-  pdfInput.value.value = ''
-  pdfInput.value.click()
+  const input = pdfInput.value
+  if (!input) return
+  input.value = ''
+  input.click()
 }
 
 /**
  * 导入 PDF 简历：浏览器端解析（文字层启发式），转成新文档交给用户核对。
  * 扫描件没有文字层会直接给出可读的错误提示。
  */
-async function onPdfChange(event) {
-  const file = event.target.files?.[0]
+async function onPdfChange(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0]
   if (!file) return
   if (pdfParsing.value) return
   pdfParsing.value = true
@@ -197,7 +201,8 @@ async function onPdfChange(event) {
         ? `已导入，请核对：${warnings[0]}${warnings.length > 1 ? ` 等 ${warnings.length} 项` : ''}`
         : 'PDF 已转为可编辑简历，请核对识别结果',
     )
-  } catch (error) {
+  } catch (rawError) {
+    const error = rawError as { message?: string }
     toast(error.message || 'PDF 解析失败')
   } finally {
     pdfParsing.value = false
@@ -205,8 +210,10 @@ async function onPdfChange(event) {
 }
 
 /** 点菜单外面收起导入 / 导出菜单 */
-function onDocPointerDown(event) {
-  if (!event.target.closest?.('.menu-wrap')) {
+function onDocPointerDown(event: PointerEvent) {
+  // target 是 EventTarget | null，且点到的可能是文本节点，所以先收窄成 Element
+  const target = event.target
+  if (!(target instanceof Element) || !target.closest('.menu-wrap')) {
     exportMenuOpen.value = false
     importMenuOpen.value = false
   }
@@ -216,7 +223,7 @@ onMounted(() => document.addEventListener('pointerdown', onDocPointerDown))
 onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocPointerDown))
 
 /** 从导出菜单触发一项导出后收起菜单 */
-function runExport(action) {
+function runExport(action: () => void) {
   exportMenuOpen.value = false
   action()
 }
@@ -226,7 +233,7 @@ function runExport(action) {
  * 动作收进函数而不是写在模板里，是为了避免模板里出现多语句行内表达式——
  * Prettier 换行后 Vue 编译器解析不了，会以语法错误中断构建。
  */
-function runImport(action) {
+function runImport(action: () => void) {
   importMenuOpen.value = false
   action()
 }

@@ -190,6 +190,15 @@ function onCaptchaExhausted() {
   transition: 0.15s;
 }
 
+/*
+ * 未选中的页签：悬停时把文字加深。
+ * 原来两个页签**连 :hover 都没有**（选中态也只做了背景与字重），
+ * 于是鼠标停在页签上毫无反馈 —— 交互态审计在把登录页纳入覆盖后报了 2 处。
+ */
+.auth-tab:hover {
+  color: var(--ed-ink);
+}
+
 .auth-tab.is-active {
   background: var(--ed-surface);
   color: var(--ed-brand-deep);
@@ -197,6 +206,18 @@ function onCaptchaExhausted() {
   box-shadow:
     0 1px 2px rgba(16, 24, 40, 0.12),
     0 0 1px rgba(16, 24, 40, 0.1);
+}
+
+/*
+ * 选中的页签也要有悬停反馈。
+ *
+ * 上面只把未选中态的文字加深，而选中态的文字已是最深的 --ed-brand-deep，
+ * 再深没有空间 —— 于是鼠标停在**当前选中的**页签上仍然没有变化。
+ * 改底色：用轨道色 --ed-fill，读起来像滑块被按住；它比白色更暗，
+ * 也不会像「把白底压灰」那样显脏。与编辑器面板的页签是同一处理。
+ */
+.auth-tab.is-active:hover {
+  background: var(--ed-fill);
 }
 
 .auth-form {
