@@ -30,7 +30,7 @@ import { DEFAULT_CUSTOM_LAYOUT } from '@/data/presets'
  * 模块按 type 区分渲染方式：
  *  - grid    键值网格（求职意向）
  *  - entries 条目列表，含时间、机构、职位、补充字段与要点（教育 / 工作 / 项目）
- *  - skills  技能键值 + 熟练度进度条
+ *  - skills  技能文字描述 + 技能名列表
  *  - text    段落文本（自我评价）
  */
 
@@ -43,7 +43,7 @@ export interface SectionTypeOption {
 export const SECTION_TYPES: SectionTypeOption[] = [
   { value: 'entries', label: '条目列表', hint: '适合教育、工作、项目经历' },
   { value: 'grid', label: '键值网格', hint: '适合求职意向等两列信息' },
-  { value: 'skills', label: '技能特长', hint: '支持文字描述与熟练度进度条' },
+  { value: 'skills', label: '技能特长', hint: '文字描述 + 技能名列表，可拖拽排序' },
   { value: 'text', label: '段落文本', hint: '适合自我评价、个人总结' },
 ]
 
@@ -240,7 +240,7 @@ export const SECTION_PRESETS: SectionPreset[] = [
     key: 'skill',
     title: '技能特长',
     type: 'skills',
-    desc: '技术栈、语言能力，进度条默认关闭',
+    desc: '技术栈、语言能力，建议按熟练程度排序',
   },
   {
     key: 'cert',

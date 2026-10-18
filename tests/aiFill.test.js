@@ -151,7 +151,7 @@ describe('归一化：每项都带 id（漏了纸面 key 会重复）', () => {
   })
 })
 
-describe('归一化：条目的取舍与熟练度', () => {
+describe('归一化：条目的取舍与技能名', () => {
   it('没有任何实质内容的「经历」被丢弃（模型偶尔返回空壳对象）', () => {
     const out = normalizeFillResult(
       { items: [{}, { org: '有机构' }] },
@@ -162,28 +162,33 @@ describe('归一化：条目的取舍与熟练度', () => {
     expect(out.items[0].org).toBe('有机构')
   })
 
-  it('熟练度夹在 0-100（纸上进度条宽度直接用它）', () => {
+  /*
+   * 熟练度已整套移除，AI 填充也不再产出 level。
+   * 这两条断言的要点是「模型多给了 level 也不该被采纳」——
+   * 比单纯删掉旧用例更能防止它悄悄回潮。
+   */
+  it('只取技能名，模型多给的 level 一律不采纳', () => {
     const out = normalizeFillResult(
       {
-        items: [
-          { name: 'A', level: 150 },
-          { name: 'B', level: -20 },
-          { name: 'C', level: 77.6 },
-        ],
+        items: [{ name: 'A', level: 150 }, { name: 'B' }, { name: 'C', level: '很高' }],
       },
       { kind: 'section', sectionType: 'skills' },
     )
 
-    expect(out.items.map((i) => i.level)).toEqual([100, 0, 78])
+    expect(out.items.map((i) => i.name)).toEqual(['A', 'B', 'C'])
+    // level 仍是数据模型里的字段（createSkill 会给默认值），
+    // 但不能是模型给的那个值 —— 三个条目应当拿到同一个出厂默认
+    expect(new Set(out.items.map((i) => i.level)).size).toBe(1)
   })
 
-  it('熟练度不是数字时给一个安全默认值，而不是 NaN', () => {
+  it('空名字的技能条目被丢弃（模型偶尔返回空壳）', () => {
     const out = normalizeFillResult(
-      { items: [{ name: 'A', level: '很高' }] },
+      { items: [{ name: '' }, { name: 'B' }] },
       { kind: 'section', sectionType: 'skills' },
     )
 
-    expect(Number.isFinite(out.items[0].level)).toBe(true)
+    expect(out.items).toHaveLength(1)
+    expect(out.items[0].name).toBe('B')
   })
 
   it('要点允许写成字符串数组或 {text} 对象数组', () => {

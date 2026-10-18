@@ -161,8 +161,7 @@ const bodySections = computed(() => sections.value.filter((s) => !railTypes.incl
 }
 
 /* 窄栏内改单列排布 */
-.rail :deep(.r-info-grid),
-.rail :deep(.r-bars) {
+.rail :deep(.r-info-grid) {
   grid-template-columns: 1fr;
   gap: 0.6em;
 }

@@ -59,13 +59,7 @@ export function resumeToMarkdown(resume) {
         .forEach((f) => lines.push(`- ${str(f.label) || '技能'}：${str(f.value)}`))
       ;(Array.isArray(section.items) ? section.items : [])
         .filter((s) => str(s?.name))
-        .forEach((s) =>
-          lines.push(
-            section.showBars
-              ? `- ${str(s.name)}（熟练度 ${Number(s.level) || 0}%）`
-              : `- ${str(s.name)}`,
-          ),
-        )
+        .forEach((s) => lines.push(`- ${str(s.name)}`))
     } else if (section.type === 'text') {
       const content = str(section.content)
       if (content) lines.push('', content)
@@ -121,11 +115,7 @@ export function resumeToPlainText(resume) {
         .forEach((f) => lines.push(`${str(f.label) || '技能'}：${str(f.value)}`))
       ;(Array.isArray(section.items) ? section.items : [])
         .filter((s) => str(s?.name))
-        .forEach((s) =>
-          lines.push(
-            section.showBars ? `${str(s.name)}（熟练度 ${Number(s.level) || 0}%）` : str(s.name),
-          ),
-        )
+        .forEach((s) => lines.push(str(s.name)))
     } else if (section.type === 'text') {
       const content = str(section.content)
       if (content) lines.push(content)

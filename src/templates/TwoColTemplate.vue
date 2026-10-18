@@ -144,8 +144,7 @@ const sideSections = computed(() => sections.value.filter((s) => !wideTypes.incl
 }
 
 /* 窄栏改为单列，避免信息被挤压 */
-.side :deep(.r-info-grid),
-.side :deep(.r-bars) {
+.side :deep(.r-info-grid) {
   grid-template-columns: 1fr;
   gap: 0.6em;
 }

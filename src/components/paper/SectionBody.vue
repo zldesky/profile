@@ -76,19 +76,11 @@ const gridFlow = computed(() => {
         >
         <span class="r-v" data-field="skillValue" :data-item-id="field.id">{{ field.value }}</span>
       </div>
-      <div v-if="section.showBars && section.items.length" class="r-bars">
-        <div v-for="skill in section.items" :key="skill.id">
-          <div class="r-bar-head">
-            <span data-field="skillName" :data-item-id="skill.id">{{ skill.name }}</span>
-            <span class="r-bar-pct" data-field="skillLevel" :data-item-id="skill.id">
-              {{ skill.level }}%
-            </span>
-          </div>
-          <div class="r-bar-track">
-            <span class="r-bar-fill" :style="{ width: `${skill.level}%` }"></span>
-          </div>
-        </div>
-      </div>
+      <!--
+        这里原先在 showBars 打开时渲染技能进度条。已整套移除：
+        简历里给技能打百分比既不精确也不加分。现在技能只走上方的文字描述。
+        showBars 字段保留在数据里（旧简历照常加载），只是不再被读取。
+      -->
     </template>
 
     <!-- 段落文本 -->

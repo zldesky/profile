@@ -61,7 +61,11 @@ export interface EntryItem extends Identified {
   bullets: Bullet[]
 }
 
-/** 技能条目（level 0~100，配 showBars 渲染进度条） */
+/**
+ * 技能条目。
+ * level（0~100）与所在模块的 showBars 是旧「熟练度进度条」的遗留字段：
+ * 该功能已整套移除，两者都保留未删（旧简历与旧备份照常加载），但不再被渲染或导出。
+ */
 export interface SkillItem extends Identified {
   name: string
   level: number
@@ -93,7 +97,7 @@ export interface SkillsSection extends Identified {
   title: string
   visible: boolean
   layout: SectionLayout
-  /** 熟练度进度条默认隐藏，仅在明确开启时渲染 */
+  /** 旧「熟练度进度条」的开关，已不再被读取（保留字段以兼容旧数据） */
   showBars: boolean
   /** 文字描述（如「技术栈：熟练使用…」） */
   fields: EntryMeta[]

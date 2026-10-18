@@ -304,37 +304,28 @@ describe('技能', () => {
     expect(resume.sections[3].items[0].name).toBe('JavaScript')
   })
 
-  it('熟练度以数值形式编辑，并夹在 0-100 内（纸上进度条直接用它）', () => {
+  /*
+   * 熟练度（skillLevel）整套已移除：纸面不再渲染百分比，也没有进度条可调，
+   * 所以锚点也一并撤掉 —— 这条断言「它不再是一个可编辑字段」，
+   * 比单纯删掉旧用例更有价值：万一以后又把 skillLevel 渲染回纸面，
+   * 会立刻在这里失败，而不是变成一处「点了没反应」的哑区。
+   */
+  it('熟练度不再是可编辑字段（该功能已整套移除）', () => {
     const resume = fixture()
-    const target = resolve(resume, { sectionId: 'sec-skills', field: 'skillLevel', itemId: 's1' })
 
-    expect(target.kind).toBe('number')
-    expect(target.value).toBe('80')
+    /*
+     * 直接调底层函数：本文件里的 resolve() 是「断言必须解析成功」的包装，
+     * 而这里要断言的恰好相反 —— 用它会得到一句误导性的
+     * 「未能解析字段 skillLevel: expected null not to be null」。
+     */
+    const target = resolveEditTarget(resume, {
+      sectionId: 'sec-skills',
+      field: 'skillLevel',
+      itemId: 's1',
+      entryId: '',
+    })
 
-    target.commit('95')
-    expect(resume.sections[3].items[0].level).toBe(95)
-
-    // 越界要夹住，否则进度条会画出纸外
-    target.commit('150')
-    expect(resume.sections[3].items[0].level).toBe(100)
-    target.commit('-20')
-    expect(resume.sections[3].items[0].level).toBe(0)
-  })
-
-  it('熟练度输入非数字时保持原值不动', () => {
-    const resume = fixture()
-    const target = resolve(resume, { sectionId: 'sec-skills', field: 'skillLevel', itemId: 's1' })
-
-    target.commit('abc')
-    expect(resume.sections[3].items[0].level).toBe(80)
-  })
-
-  it('带上「%」的输入也能解析（用户可能连符号一起改）', () => {
-    const resume = fixture()
-    const target = resolve(resume, { sectionId: 'sec-skills', field: 'skillLevel', itemId: 's1' })
-
-    target.commit('60%')
-    expect(resume.sections[3].items[0].level).toBe(60)
+    expect(target).toBe(null)
   })
 })
 

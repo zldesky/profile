@@ -39,10 +39,21 @@ describe('resumeToMarkdown', () => {
     expect(md.endsWith('\n')).toBe(true)
   })
 
-  it('技能模块开启进度条时附熟练度', () => {
+  /*
+   * 熟练度整套已移除，导出里不再附百分比。
+   * 这里特意把 showBars 打开再断言 —— 数据字段保留未删（旧简历照常加载），
+   * 所以必须确认「字段还在、但不再影响导出」，而不是只测默认关闭时的样子。
+   */
+  it('技能只导出技能名，即使数据里仍留着 showBars 与 level', () => {
     const resume = createResume()
-    resume.sections.find((s) => s.title === '技能特长').showBars = true
-    expect(resumeToMarkdown(resume)).toContain('- Vue / TypeScript（熟练度 92%）')
+    const skills = resume.sections.find((s) => s.title === '技能特长')
+    skills.showBars = true
+    skills.items[0].level = 92
+
+    const md = resumeToMarkdown(resume)
+    expect(md).toContain('- Vue / TypeScript')
+    expect(md).not.toContain('熟练度')
+    expect(md).not.toContain('92%')
   })
 })
 

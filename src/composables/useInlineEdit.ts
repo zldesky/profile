@@ -53,20 +53,10 @@ const FIELD_LABELS: Record<string, string> = {
   skillLabel: '标签',
   skillValue: '内容',
   skillName: '技能名',
-  skillLevel: '熟练度（0-100）',
 }
 
 /** 多行输入：正文与要点是成段的，单行框里改很难受 */
 const MULTILINE_FIELDS = new Set(['content', 'bulletText'])
-
-/**
- * 去掉显示用的后缀。
- * 网格与技能的标签在纸上是「标签：」，值就是纯值；回写时要把「：」补回去，
- * 否则用户改一次标签，冒号就永久消失了。
- */
-function stripSuffix(text: string, suffix: string): string {
-  return text.endsWith(suffix) ? text.slice(0, -suffix.length) : text
-}
 
 function findSection(resume: Resume, id: string): Section | undefined {
   return resume.sections.find((section) => section.id === id)
@@ -83,12 +73,7 @@ export function resolveEditTarget(resume: Resume, target: FieldTarget): EditTarg
   const label = FIELD_LABELS[target.field]
   if (!label) return null
 
-  const kind: FieldKind =
-    target.field === 'skillLevel'
-      ? 'number'
-      : MULTILINE_FIELDS.has(target.field)
-        ? 'multiline'
-        : 'text'
+  const kind: FieldKind = MULTILINE_FIELDS.has(target.field) ? 'multiline' : 'text'
   const base = { label, kind }
 
   /* ---------- 页头字段（不属于任何模块） ---------- */
@@ -195,22 +180,19 @@ export function resolveEditTarget(resume: Resume, target: FieldTarget): EditTarg
       }
     }
 
-    if (target.field === 'skillName' || target.field === 'skillLevel') {
+    /*
+     * 技能名可就地改。这里原先还处理 skillLevel（熟练度）——
+     * 整套熟练度已移除（纸面不再渲染百分比，也没有进度条可调），
+     * 所以那条分支一并删掉，而不是留着一条永远不会命中的死代码。
+     */
+    if (target.field === 'skillName') {
       const skill = section.items.find((s) => s.id === target.itemId)
       if (!skill) return null
-      const isLevel = target.field === 'skillLevel'
       return {
         ...base,
-        value: isLevel ? String(skill.level) : skill.name,
+        value: skill.name,
         commit: (next) => {
-          if (!isLevel) {
-            skill.name = next
-            return
-          }
-          // 熟练度是 0-100 的整数：纸上的进度条宽度直接用它，越界会画出纸外
-          const parsed = Number.parseInt(stripSuffix(next, '%'), 10)
-          if (Number.isNaN(parsed)) return
-          skill.level = Math.max(0, Math.min(100, parsed))
+          skill.name = next
         },
       }
     }

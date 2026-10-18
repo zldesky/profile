@@ -39,7 +39,7 @@ const SHAPES: Record<string, string> = {
   grid: '{"items":[{"label":"标签","value":"内容"}]}',
   entries:
     '{"items":[{"time":"起止时间","org":"机构或公司","role":"职位或专业","meta":[{"label":"补充标签","value":"内容"}],"bullets":["要点1","要点2"]}]}',
-  skills: '{"fields":[{"label":"技能分类","value":"说明"}],"items":[{"name":"技能名","level":80}]}',
+  skills: '{"fields":[{"label":"技能分类","value":"说明"}],"items":[{"name":"技能名"}]}',
   text: '{"content":"段落文本"}',
 }
 
@@ -258,12 +258,12 @@ export function normalizeFillResult(
           const o = rec(i)
           const name = str(o.name)
           if (!name) return null
-          const level = Number(o.level)
-          // 熟练度是 0-100 的整数，纸上的进度条宽度直接用它
-          const safeLevel = Number.isFinite(level)
-            ? Math.max(0, Math.min(100, Math.round(level)))
-            : 60
-          return createSkill({ name, level: safeLevel })
+          /*
+           * 只取技能名。这里原先还取 level 并按 0-100 夹住 ——
+           * 熟练度功能已整套移除，再让模型产出这个字段纯属多做无用功（还占提示词）。
+           * level 字段本身保留在数据模型里（旧简历照常加载），只是不再由 AI 填充。
+           */
+          return createSkill({ name })
         })
         .filter(Boolean)
       if (items.length) out.items = items

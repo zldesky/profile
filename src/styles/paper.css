@@ -5,7 +5,7 @@
  * 约定类名：
  *  .paper           A4 纸张容器（主题 CSS 变量在此声明）
  *  .r-title         模块标题（受 .paper[data-tstyle] 控制装饰样式）
- *  .r-sec / .r-entry / .r-kv / .r-bullets / .r-bars / .r-avatar ...
+ *  .r-sec / .r-entry / .r-kv / .r-bullets / .r-avatar ...
  *
  * 画布容器约定类名（打印时统一隐藏）：
  *  .editor-app / .editor-main / .editor-topbar / .editor-stage / .editor-panel / .editor-toast
@@ -689,39 +689,11 @@ textarea {
 
 /* ---------------- 技能进度条 ---------------- */
 
-.r-bars {
-  display: grid;
-  grid-template-columns: var(--bars-template, repeat(3, minmax(0, 1fr)));
-  gap: 1.2em;
-  margin-top: 0.85em;
-}
-
-.r-bar-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5em;
-  margin-bottom: 0.32em;
-}
-
-.r-bar-pct {
-  color: var(--ed-text-3);
-  font-variant-numeric: tabular-nums;
-}
-
-.r-bar-track {
-  height: 0.42em;
-  border-radius: 0.21em;
-  background: rgba(var(--accent-rgb), 0.16);
-  overflow: hidden;
-}
-
-.r-bar-fill {
-  display: block;
-  height: 100%;
-  border-radius: 0.21em;
-  background: var(--accent);
-}
+/*
+ * 技能进度条的样式（.r-bars / .r-bar-head / .r-bar-pct / .r-bar-track / .r-bar-fill）
+ * 随「熟练度」功能一并移除 —— 纸面不再渲染百分比，也没有进度条。
+ * showBars 与 level 字段保留在数据里（旧简历照常加载），但不再有对应的渲染路径。
+ */
 
 /* ---------------- 头像 ---------------- */
 
@@ -853,7 +825,6 @@ textarea {
 
 .on-dark .r-lab,
 .on-dark .r-k,
-.on-dark .r-bar-pct,
 .on-dark .r-time {
   color: rgba(255, 255, 255, 0.75);
 }
@@ -868,14 +839,6 @@ textarea {
 
 .on-dark .r-bullets li::before {
   background: rgba(255, 255, 255, 0.85);
-}
-
-.on-dark .r-bar-track {
-  background: rgba(255, 255, 255, 0.22);
-}
-
-.on-dark .r-bar-fill {
-  background: #fff;
 }
 
 .on-dark .r-avatar {

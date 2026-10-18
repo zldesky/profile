@@ -448,8 +448,7 @@ const wideSections = computed(() => sections.value.filter((s) => wideTypes.inclu
 }
 
 /* 窄栏内改单列排布 */
-.rail :deep(.r-info-grid),
-.rail :deep(.r-bars) {
+.rail :deep(.r-info-grid) {
   grid-template-columns: 1fr;
   gap: 0.6em;
 }
@@ -489,8 +488,7 @@ const wideSections = computed(() => sections.value.filter((s) => wideTypes.inclu
 }
 
 /* 窄栏改为单列，避免信息被挤压 */
-.is-split .side :deep(.r-info-grid),
-.is-split .side :deep(.r-bars) {
+.is-split .side :deep(.r-info-grid) {
   grid-template-columns: 1fr;
   gap: 0.6em;
 }

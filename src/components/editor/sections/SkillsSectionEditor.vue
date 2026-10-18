@@ -1,6 +1,11 @@
 <script setup lang="ts">
 /**
- * 技能特长编辑：文字描述字段 + 可选的熟练度进度条。
+ * 技能特长编辑：文字描述字段 + 技能名列表（可拖拽排序）。
+ *
+ * 这里原先还有「熟练度」——一个 0-100 的滑块，配合纸面的进度条与导出里的百分比。
+ * 已整套移除（界面 / 纸面 / 导出 / 就地编辑）：简历里给技能打百分比
+ * 既不精确也不加分，纯文字列表更利于网申系统解析。
+ * 数据里的 level 字段保留未删，旧简历与旧备份照常能加载，只是不再被使用。
  */
 import { computed } from 'vue'
 import { VueDraggable } from 'vue-draggable-plus'
@@ -82,27 +87,6 @@ const draggableSkills = computed<SkillItem[]>({
       <span>添加描述字段</span>
     </button>
 
-    <div class="ed-sub-title">
-      <span>熟练度</span>
-      <label class="ed-toggle">
-        <input
-          class="ed-check"
-          type="checkbox"
-          :checked="section.showBars"
-          @change="
-            store.updateSection(section.id, {
-              showBars: ($event.target as HTMLInputElement).checked,
-            })
-          "
-        />
-        <span>显示进度条</span>
-      </label>
-    </div>
-
-    <p v-if="!section.showBars" class="ed-hint">
-      进度条默认关闭，简历中只输出上方的文字描述。下方百分比会保留，随时可以重新开启。
-    </p>
-
     <VueDraggable v-model="draggableSkills" :animation="160" handle=".ed-drag" class="ed-sub-list">
       <div v-for="skill in section.items" :key="skill.id" class="ed-sub">
         <div class="ed-row">
@@ -123,20 +107,6 @@ const draggableSkills = computed<SkillItem[]>({
             <SvgIcon name="trash" :size="14" />
           </button>
         </div>
-        <div class="ed-row">
-          <input
-            class="ed-range"
-            type="range"
-            min="0"
-            max="100"
-            step="1"
-            :value="skill.level"
-            @input="
-              updateSkill(skill.id, { level: Number(($event.target as HTMLInputElement).value) })
-            "
-          />
-          <span class="ed-value">{{ skill.level }}%</span>
-        </div>
       </div>
     </VueDraggable>
 
@@ -145,6 +115,6 @@ const draggableSkills = computed<SkillItem[]>({
       <span>添加技能</span>
     </button>
 
-    <p class="ed-hint">投递大厂网申系统时可不填熟练度，纯文字更利于解析。</p>
+    <p class="ed-hint">建议只列技能名，按熟练程度从高到低排列，拖动左侧手柄可调整顺序。</p>
   </div>
 </template>

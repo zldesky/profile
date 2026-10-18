@@ -143,17 +143,6 @@ const selectedSet = computed(() => new Set(props.selectedIds ?? []))
   margin-top: calc(1.5em * var(--gap));
 }
 
-/* 进度条改为细线风格 */
-.tpl-minimal :deep(.r-bar-track) {
-  height: 0.24em;
-  border-radius: 0;
-  background: #e5e7eb;
-}
-
-.tpl-minimal :deep(.r-bar-fill) {
-  border-radius: 0;
-}
-
 .tpl-minimal :deep(.r-bullets li::before) {
   width: 0.26em;
   height: 0.26em;
