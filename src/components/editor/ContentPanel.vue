@@ -138,6 +138,19 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
+/*
+ * 当前所在模块的锚点也要有悬停反馈。
+ *
+ * 上面 `button:hover` 的浅色被这条更具体的 `.is-active` 盖住，于是鼠标停在
+ * 当前模块的锚点上没有任何变化（实测 :hover 匹配、计算样式不变）——
+ * 交互态审计 tools/audit-interaction.mjs 报出的就是这个。
+ * 只压暗背景、不动文字色：文字与底色是对比度配好的。用 color-mix 而非写死色值，
+ * 品牌色被 applyChromeAccent 换掉后依然成立。
+ */
+.panel-nav button.is-active:hover {
+  background: color-mix(in srgb, var(--ed-brand-tint) 94%, #000);
+}
+
 /* 已隐藏模块的锚点：视觉降一级，提示它不在纸面上 */
 .panel-nav button.is-hidden-sec {
   border-style: dashed;

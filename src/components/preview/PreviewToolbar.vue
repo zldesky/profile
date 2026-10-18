@@ -98,6 +98,23 @@ const emit = defineEmits(['zoom-in', 'zoom-out', 'fit', 'compress'])
   background: var(--ed-brand-tint);
 }
 
+/*
+ * 选中态也要有悬停反馈。
+ *
+ * 原来只有上面那条，于是「适应窗口」这类当前选中的按钮鼠标移上去完全没有变化 ——
+ * `.ed-btn:hover` 的浅色被这条更具体的规则盖住了（实测 :hover 匹配、计算样式不变）。
+ * 交互态审计 tools/audit-interaction.mjs 就是为发现这类问题写的。
+ *
+ * 只压暗背景、不动文字色：选中态的文字色与底色是配好的，改底色会动到对比度。
+ * 用 color-mix 而非写死色值，品牌色被 applyChromeAccent 换掉后依然成立。
+ *
+ * 写在组件内而不是 editor.css：`.editor-tools .ed-btn.is-active` 的特异性
+ * （0,3,0，另加 scoped 属性）高于全局那条，全局写法压不过它。
+ */
+.editor-tools .ed-btn.is-active:hover {
+  background: color-mix(in srgb, var(--ed-brand-tint) 94%, #000);
+}
+
 .zoom-value {
   min-width: 44px;
   color: var(--ed-text-2);

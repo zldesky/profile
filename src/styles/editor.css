@@ -54,6 +54,29 @@
   color: var(--ed-ink);
 }
 
+/*
+ * 选中态按钮的悬停反馈。
+ *
+ * 起因是交互态审计（tools/audit-interaction.mjs）报出的真问题：「适应窗口」「1 寸」这类
+ * 当前选中的分段项鼠标移上去**计算样式完全不变** —— 实测 `:hover` 确实匹配，
+ * 但 `.ed-btn.is-active` 的背景把 `.ed-btn:hover` 的浅色盖住了，用户看不出鼠标在哪一项上。
+ *
+ * 只压暗背景、不动文字色：选中态是 `--ed-brand-deep` 文字配 `--ed-brand-tint` 底，
+ * 两者的对比度是刻意配好的，改底色会连带影响文字可读性。用 color-mix 而非写死色值，
+ * 这样品牌色被 applyChromeAccent 换掉后依然成立。
+ *
+ * 这里靠 `.ed-btn.is-active:hover` 的特异性（0,3,0）压过 `.ed-btn.is-active`（0,2,0），
+ * 顺带覆盖只有 (0,2,1) 的 `.ed-seg button.is-active`。
+ * 反过来，选择器特异性比它更高的那两处**必须写在各自组件里**，全局压不过：
+ *  - `.editor-tools .ed-btn.is-active`（0,3,0 + scoped）→ PreviewToolbar.vue
+ *  - `.panel-tabs button.is-active`（0,2,1 + scoped，且选中态是白底）→ EditorPanel.vue
+ * 这是实测后逐个定位的，不是按「写一处覆盖全部」的想当然。
+ */
+.ed-btn.is-active:hover,
+.ed-seg button.is-active:hover {
+  background: color-mix(in srgb, var(--ed-brand-tint) 94%, #000);
+}
+
 .ed-btn:active {
   background: var(--ed-fill);
 }
@@ -79,6 +102,18 @@
   color: #fff;
 }
 
+/*
+ * 主按钮的悬停反馈。
+ *
+ * 上面那条 `:hover` 换了一套渐变，看着合理 —— 但实测发现默认主题下
+ * `--ed-brand-grad-hi` / `--ed-brand` / `--ed-brand-grad-lo` 全是 `#000000`
+ * （深色品牌一换，三档就同色），于是**计算出的渐变与静止态完全相同**，
+ * 鼠标移上去没有任何变化。主按钮是「一键导出 PDF」这类最关键的操作，
+ * 它没反馈比次要按钮没反馈严重得多。
+ *
+ * 所以用亮度滤镜而不是再调色阶：它不依赖品牌色，`#000` 压暗后仍与白字有对比，
+ * 浅色品牌同样成立。放在最后，压过上面的 background 声明互不冲突。
+ */
 .ed-btn-primary:hover {
   border-color: var(--ed-brand-deep);
   background: linear-gradient(
@@ -88,6 +123,12 @@
     var(--ed-brand-deep) 100%
   );
   color: #fff;
+  filter: brightness(0.92);
+}
+
+/* 按下时再暗一档，与悬停区分开 */
+.ed-btn-primary:active {
+  filter: brightness(0.86);
 }
 
 .ed-btn-primary:active {

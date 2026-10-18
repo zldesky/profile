@@ -103,6 +103,21 @@ watch(requestSeq, () => {
   font-weight: 600;
 }
 
+/*
+ * 选中的页签也要有悬停反馈。
+ *
+ * 上面 `button:hover` 只改文字色（--ed-text-2 → --ed-ink），而选中页签的文字
+ * 已经是 --ed-brand-deep，于是「鼠标停在当前选中的页签上」没有任何变化 ——
+ * 未选中的页签反而有。实测确认（:hover 匹配、计算样式不变）。
+ *
+ * 这里改底色而不是文字色：文字已经是最深一档，再深没有空间。
+ * 用轨道色 --ed-fill 作悬停底，读起来像滑块被按住；并且它比白色更暗，
+ * 不会像「把白底压灰」那样显得脏。
+ */
+.panel-tabs button.is-active:hover {
+  background: var(--ed-fill);
+}
+
 .panel-body {
   flex: 1 1 auto;
   min-height: 0;
