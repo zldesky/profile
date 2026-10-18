@@ -72,6 +72,7 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 | `npm run verify:captcha`    | 验证滑块验证码能加载并真的能拖动（注册必经环节）                                                                                                                               |
 | `npm run verify:paper`      | 纸面「点文字就地编辑」与「点模块跳转」：真的改值看纸面是否变                                                                                                                   |
 | `npm run verify:drag`       | 右侧面板模块卡片拖拽换序：真的拖，看顺序是否改变                                                                                                                               |
+| `npm run verify:selects`    | 下拉框统一性：源码级 import 守门 + dist 新鲜度 + 逐页量宽度 + 换值是否生效                                                                                                     |
 | `npm run audit:el`          | 量单个元素的盒子与真实命中区，如 `npm run audit:el -- .ed-check`                                                                                                               |
 | `npm run audit:login`       | 造一个已登录会话令牌，配合 `npm run audit:ui -- --token <令牌>`                                                                                                                |
 | `npm run audit:session`     | 诊断会话令牌是否真的生效                                                                                                                                                       |

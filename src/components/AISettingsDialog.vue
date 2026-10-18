@@ -13,6 +13,7 @@
  */
 import { computed, nextTick, shallowRef, useTemplateRef, watch } from 'vue'
 
+import BaseSelect from '@/components/BaseSelect.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { useDialogA11y } from '@/composables/useDialogA11y.ts'
 import { useToast } from '@/composables/useToast'
@@ -57,6 +58,19 @@ const fromDraft = shallowRef(false)
 const preset = computed(() => presetById(presetId.value))
 /** 当前服务商可选的内置模型；「自定义」预设没有候选，直接手填 */
 const modelOptions = computed(() => preset.value.models || [])
+
+/*
+ * 两处下拉的选项形状映射：
+ * - AI_PRESETS 用 { id, label }，BaseSelect 要 { value, label }；
+ * - modelOptions 是字符串数组，值即标签。
+ * 都在调用点映射，不动数据源本身。
+ */
+const presetOptions = computed(() =>
+  AI_PRESETS.map((item) => ({ value: item.id, label: item.label })),
+)
+const modelSelectOptions = computed(() =>
+  modelOptions.value.map((name) => ({ value: name, label: name })),
+)
 const isCustomPreset = computed(() => presetId.value === 'custom')
 
 /**
@@ -221,11 +235,7 @@ watch(isOpen, async (open) => {
 
         <label class="ai-field">
           <span>服务商</span>
-          <select v-model="presetId" class="ed-select" @change="applyPreset">
-            <option v-for="item in AI_PRESETS" :key="item.id" :value="item.id">
-              {{ item.label }}
-            </option>
-          </select>
+          <BaseSelect v-model="presetId" :options="presetOptions" @change="applyPreset" />
         </label>
 
         <label class="ai-field">
@@ -243,14 +253,12 @@ watch(isOpen, async (open) => {
         <label class="ai-field">
           <span>模型</span>
           <span class="ai-model-row">
-            <select
+            <BaseSelect
               v-if="!customModel && modelOptions.length"
               v-model="model"
-              class="ed-select"
+              :options="modelSelectOptions"
               @change="persistDraft"
-            >
-              <option v-for="name in modelOptions" :key="name" :value="name">{{ name }}</option>
-            </select>
+            />
             <input
               v-else
               v-model="model"
@@ -403,7 +411,7 @@ watch(isOpen, async (open) => {
 
 .ai-key-row .ed-input,
 .ai-model-row .ed-input,
-.ai-model-row .ed-select {
+.ai-model-row .bsel {
   flex: 1 1 auto;
   min-width: 0;
 }

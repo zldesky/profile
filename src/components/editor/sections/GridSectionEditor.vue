@@ -5,6 +5,7 @@
 import { computed } from 'vue'
 import { VueDraggable } from 'vue-draggable-plus'
 
+import BaseSelect from '@/components/BaseSelect.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { ICON_OPTIONS } from '@/data/presets'
 import { useResumeStore } from '@/stores/resume'
@@ -45,15 +46,13 @@ const draggableItems = computed<GridItem[]>({
           <span class="ed-drag" title="按住拖动可调整顺序">
             <SvgIcon name="drag" :size="14" />
           </span>
-          <select
-            class="ed-select ed-icon-select"
-            :value="item.icon"
-            @change="updateItem(item.id, { icon: ($event.target as HTMLInputElement).value })"
-          >
-            <option v-for="option in ICON_OPTIONS" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
+          <BaseSelect
+            class="ed-icon-select"
+            dense
+            :model-value="item.icon"
+            :options="ICON_OPTIONS"
+            @update:model-value="updateItem(item.id, { icon: String($event ?? '') })"
+          />
           <input
             class="ed-input"
             :value="item.label"

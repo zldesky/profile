@@ -8,6 +8,7 @@ import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 import { VueDraggable } from 'vue-draggable-plus'
 
 import ModuleCard from '@/components/editor/ModuleCard.vue'
+import BaseSelect from '@/components/BaseSelect.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { usePaperJump } from '@/composables/usePaperJump'
 import { SECTION_PRESETS, SECTION_TYPES } from '@/data/defaultResume'
@@ -15,6 +16,18 @@ import { useResumeStore } from '@/stores/resume'
 import type { Section, SectionType } from '@/types/resume'
 
 const store = useResumeStore()
+
+/*
+ * 下拉选项。SECTION_PRESETS 用的是 { key, title }、SECTION_TYPES 用 { value, label }，
+ * 而 BaseSelect 统一收 { value, label } —— 在调用点映射，而不是改动这些常量：
+ * 它们还被别处使用（默认简历生成等），为了一次下拉去改公共数据形状得不偿失。
+ */
+const presetOptions = computed(() =>
+  SECTION_PRESETS.map((preset) => ({ value: preset.key, label: preset.title })),
+)
+const typeOptions = computed(() =>
+  SECTION_TYPES.map((type) => ({ value: type.value, label: `自定义：${type.label}` })),
+)
 
 // 数组整体替换，用 ref；两个下拉框选项是字符串，用 shallowRef
 const expandedIds = ref<string[]>([])
@@ -137,11 +150,7 @@ watch(requestSeq, async () => {
     </VueDraggable>
 
     <div class="ed-add-row">
-      <select v-model="presetKey" class="ed-select">
-        <option v-for="preset in SECTION_PRESETS" :key="preset.key" :value="preset.key">
-          {{ preset.title }}
-        </option>
-      </select>
+      <BaseSelect v-model="presetKey" :options="presetOptions" />
       <button class="ed-btn ed-btn-primary" @click="addFromPreset">
         <SvgIcon name="plus" :size="14" />
         <span>添加</span>
@@ -150,11 +159,7 @@ watch(requestSeq, async () => {
     <p class="ed-hint">{{ presetHint }}</p>
 
     <div class="ed-add-row">
-      <select v-model="addingType" class="ed-select">
-        <option v-for="type in SECTION_TYPES" :key="type.value" :value="type.value">
-          自定义：{{ type.label }}
-        </option>
-      </select>
+      <BaseSelect v-model="addingType" :options="typeOptions" />
       <button class="ed-btn" @click="addSection">
         <SvgIcon name="plus" :size="14" />
         <span>添加空白模块</span>

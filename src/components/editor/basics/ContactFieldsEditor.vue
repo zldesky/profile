@@ -5,6 +5,7 @@
  */
 import { computed } from 'vue'
 
+import BaseSelect from '@/components/BaseSelect.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { ICON_OPTIONS } from '@/data/presets'
 import { useResumeStore } from '@/stores/resume'
@@ -38,15 +39,13 @@ const fieldIssues = computed(() => {
 
     <div v-for="field in store.basics.fields" :key="field.id" class="field-item">
       <div class="ed-row">
-        <select
-          class="ed-select ed-icon-select"
-          :value="field.icon"
-          @change="updateField(field.id, { icon: ($event.target as HTMLInputElement).value })"
-        >
-          <option v-for="option in ICON_OPTIONS" :key="option.value" :value="option.value">
-            {{ option.label }}
-          </option>
-        </select>
+        <BaseSelect
+          class="ed-icon-select"
+          dense
+          :model-value="field.icon"
+          :options="ICON_OPTIONS"
+          @update:model-value="updateField(field.id, { icon: String($event ?? '') })"
+        />
         <input
           class="ed-input field-label"
           :value="field.label"

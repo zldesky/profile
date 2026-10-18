@@ -18,6 +18,7 @@ import SvgIcon from '@/components/SvgIcon.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useAuthDialog } from '@/composables/useAuthDialog'
 import { useStyleConfig } from '@/composables/useStyleConfig'
+import BaseSelect from '@/components/BaseSelect.vue'
 import type { StylePreset } from '@/types/resume'
 import { useToast } from '@/composables/useToast'
 import {
@@ -67,6 +68,16 @@ const draftMatrix = shallowRef<DraftMatrix>({})
 const editing = shallowRef<DraftPreset | null>(null)
 
 const fontOptions = Object.entries(FONTS).map(([key, font]) => ({ key, name: font.name }))
+
+/*
+ * 字体下拉的选项。多一个「跟随简历当前字体」的空值项：
+ * 原来写的是 <option :value="undefined">，DOM 里 value 会变成字符串 "undefined"，
+ * 读写两个方向都不牢靠。改用 BaseSelect 的空值项，值真正是 undefined。
+ */
+const fontSelectOptions = computed(() => [
+  { value: undefined, label: '跟随简历当前字体' },
+  ...fontOptions.map((font) => ({ value: font.key, label: font.name })),
+])
 
 /** 内置默认作为编辑起点（服务器从未保存过时） */
 function draftFromBuiltin(): { presets: DraftPreset[]; matrix: DraftMatrix } {
@@ -411,36 +422,19 @@ const detailText = (patch: StylePreset['patch']) =>
               </label>
               <label class="ad2-field">
                 <span>标题样式</span>
-                <select v-model="editing.patch.titleStyle" class="ed-select">
-                  <option v-for="item in TITLE_STYLES" :key="item.value" :value="item.value">
-                    {{ item.label }}
-                  </option>
-                </select>
+                <BaseSelect v-model="editing.patch.titleStyle" :options="TITLE_STYLES" />
               </label>
               <label class="ad2-field">
                 <span>标题标记</span>
-                <select v-model="editing.patch.titleMarker" class="ed-select">
-                  <option v-for="item in TITLE_MARKERS" :key="item.value" :value="item.value">
-                    {{ item.label }}
-                  </option>
-                </select>
+                <BaseSelect v-model="editing.patch.titleMarker" :options="TITLE_MARKERS" />
               </label>
               <label class="ad2-field">
                 <span>标题底边线</span>
-                <select v-model="editing.patch.titleBottom" class="ed-select">
-                  <option v-for="item in TITLE_BOTTOM_STYLES" :key="item.value" :value="item.value">
-                    {{ item.label }}
-                  </option>
-                </select>
+                <BaseSelect v-model="editing.patch.titleBottom" :options="TITLE_BOTTOM_STYLES" />
               </label>
               <label class="ad2-field">
                 <span>字体（可选）</span>
-                <select v-model="editing.patch.fontKey" class="ed-select">
-                  <option :value="undefined">跟随简历当前字体</option>
-                  <option v-for="font in fontOptions" :key="font.key" :value="font.key">
-                    {{ font.name }}
-                  </option>
-                </select>
+                <BaseSelect v-model="editing.patch.fontKey" :options="fontSelectOptions" />
               </label>
             </div>
             <div class="ad2-form-actions">

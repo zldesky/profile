@@ -4,10 +4,26 @@
  */
 import { computed } from 'vue'
 
+import BaseSelect from '@/components/BaseSelect.vue'
 import { FONTS, FONT_GROUPS, FONT_SIZE_TIPS } from '@/data/presets'
 import { useResumeStore } from '@/stores/resume'
 
 const store = useResumeStore()
+
+/*
+ * 字体按类别分组展示。FONT_GROUPS 的项是 FontMeta（name 而非 label），
+ * 在调用点映射成 BaseSelect 的 { value, label }；
+ * 「推荐」标在标签里，与原实现一致。
+ */
+const fontGroupOptions = computed(() =>
+  FONT_GROUPS.map((group) => ({
+    label: group.name,
+    items: group.items.map((font) => ({
+      value: font.value,
+      label: font.recommended ? `${font.name}（推荐）` : font.name,
+    })),
+  })),
+)
 
 /** 当前字体，用于字样预览 */
 const currentFont = computed(() => FONTS[store.theme.fontKey] || FONTS.yahei)
@@ -19,17 +35,11 @@ const currentFont = computed(() => FONTS[store.theme.fontKey] || FONTS.yahei)
 
     <label class="ed-row">
       <span class="ed-label">字体</span>
-      <select
-        class="ed-select"
-        :value="store.theme.fontKey"
-        @change="store.setTheme({ fontKey: ($event.target as HTMLInputElement).value })"
-      >
-        <optgroup v-for="group in FONT_GROUPS" :key="group.name" :label="group.name">
-          <option v-for="font in group.items" :key="font.value" :value="font.value">
-            {{ font.name }}{{ font.recommended ? '（推荐）' : '' }}
-          </option>
-        </optgroup>
-      </select>
+      <BaseSelect
+        :model-value="store.theme.fontKey"
+        :options="fontGroupOptions"
+        @update:model-value="store.setTheme({ fontKey: String($event ?? '') })"
+      />
     </label>
 
     <div class="font-preview" :style="{ fontFamily: currentFont.stack }">

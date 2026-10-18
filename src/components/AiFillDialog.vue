@@ -10,6 +10,7 @@
  */
 import { computed, shallowRef, useTemplateRef } from 'vue'
 
+import BaseSelect from '@/components/BaseSelect.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import AISettingsDialog from '@/components/AISettingsDialog.vue'
 import { useDialogA11y } from '@/composables/useDialogA11y.ts'
@@ -56,6 +57,12 @@ const targets = computed(() => [
     .filter((s: Section) => s.visible)
     .map((s: Section) => ({ id: s.id, label: `模块：${s.title}` })),
 ])
+
+/*
+ * BaseSelect 的选项形状是 { value, label }，而 targets 用的是 { id, label }。
+ * 在调用点映射，不改 targets 本身 —— 它还用于按 id 查表等逻辑。
+ */
+const targetOptions = computed(() => targets.value.map((t) => ({ value: t.id, label: t.label })))
 
 const targetSection = computed(() =>
   targetId.value === 'basics'
@@ -251,9 +258,7 @@ function close() {
             <div class="af-step-body">
               <label class="af-field">
                 <span>填到哪个位置</span>
-                <select v-model="targetId" class="ed-select" @change="preview = null">
-                  <option v-for="t in targets" :key="t.id" :value="t.id">{{ t.label }}</option>
-                </select>
+                <BaseSelect v-model="targetId" :options="targetOptions" @change="preview = null" />
               </label>
             </div>
           </li>
