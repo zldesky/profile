@@ -237,12 +237,12 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 | 维度                     | 现状                                                                                     |
 | ------------------------ | ---------------------------------------------------------------------------------------- |
 | `<script setup>` 写法    | **64 / 64 全部完成**（`export default`、`defineComponent`、`setup()` 返回对象均为 0 处） |
-| `lang="ts"`              | **39 / 64**（约 5,800 行）；剩余 25 个仍是 JS，约 9,000 行                               |
+| `lang="ts"`              | **43 / 64**（约 6,600 行）；剩余 21 个仍是 JS，约 8,200 行                               |
 | 这些 JS 组件受类型检查吗 | **不受**。`tsconfig.json` 里 `checkJs: false`，且 `include` 未纳入 `src/**/*.js`         |
 
 实测过「打开 `checkJs` 直接检查现有 JS 组件」这条路：会报 **644 处**错误，其中 289 处只是缺参数注解（`TS7006`）—— 说明这条路的前期噪音很大，**逐组件迁 TS 比全局开 `checkJs` 更可控**。所以策略是分批迁，而不是一次性打开开关。
 
-**已迁的层**：`src/templates/**`（12/12）、`src/components/paper/**`（2/2）、`src/components/preview/**`（3/3）、`src/components/collection/**`（1/1），以及编辑器面板一层（`SectionList` / `ContentPanel` / `TitleSection` / `TypographySection` / `ImageTemplatePanel`）。
+**已迁的层**：`src/templates/**`（12/12）、`src/components/paper/**`（2/2）、`src/components/preview/**`（3/3）、`src/components/collection/**`（1/1）、`src/pages/**` 里除 `AdminPage` / `CollectionPage` / `HomePage` 外的页面（`SharePage` / `LoginPage` / `EditorPage`）与 `App.vue`，以及编辑器面板一层（`SectionList` / `ContentPanel` / `TitleSection` / `TypographySection` / `ImageTemplatePanel`）。
 
 模板层值得优先迁：它在编辑器、分享页、官网合集**三处共用同一份数据**，用具体类型收口后，数据形状漂移会在这里报出来，而不是渲染成空白。
 
@@ -254,13 +254,15 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 
 另外三处「能跑但顺序/类型不对」：`ContentPanel` 里 `removeFlash` 在声明前被使用（`let` 的 TDZ，只因 `go()` 只在点击时调用才一直没炸）；`CollectionCard` 的 `resizeObserver` 隐式 `any` 且 `observe(viewportRef.value)` 未判空；`PreviewToolbar` 的 `offset` 标成可选而模板在 `v-if` 内直接读 `offset.x`（类型系统看不到这层相关性，改为如实描述调用方为必填）。
 
+**一处「类型系统看不到的相关性」**（`SharePage.vue`）：模板里直接写 `shared.resume.xxx`，它被 `v-else` 保护着（对应 state 非 error），但类型系统看不到这层相关性，报「possibly null」。加一个按 `state` 收窄的 `readyResume` computed 来表达这个前提，比在模板里到处写 `shared?.` 更准 —— 它同时说明了「就绪」才是这些字段可用的条件。
+
 **一处我凭直觉写错的类型**：给 `ImageAnalysis.ratio` 写 `number`，理由是「百分比是数字」；实际 `nearestRatio` 返回的是离散字符串档位（`'28' | '34' | '40'`），`CustomLayout.ratio` 也声明为 `string`。类型检查当场纠正 —— **凭直觉写类型正是最容易错的地方**。
 
 **模板渲染验证（`npm run verify:templates`）**：模板迁 TS 改的是 props 声明，**编译不报错、类型也通过**，但万一把 prop 名或形状写错，模板会静默渲染成空白——单测（只验注册表）和构建都发现不了。所以逐个切一遍、数一数纸上有多少可见文字（12/12 通过，文字约 890 字、纸高 1123px，各模板 class 互不相同）。
 
 这个脚本自己也踩过一次坑，值得记：第一版想直接改 Pinia store（`#app.__vue_app__` → `$pinia`）来切模板，实测拿不到 pinia 实例，12 个模板全报 `apply=no-store`——**工具坏了，却看起来像 12 个模板都渲染失败**。改成黑盒点真实按钮后 12/12 通过。这与审计脚本那两次教训是同一类：**先怀疑工具，再怀疑被测对象**。
 
-**剩余 25 个 JS 组件**，最大的是 `AdminPage` 824 / `TopBar` 779 / `CollectionPage` 668 / `PreviewPane` 420。主要机械成本是**模板内联处理器的 DOM 收窄**：`$event.target` 是 `EventTarget`，取 `.value` / `.checked` 需写成 `($event.target as HTMLInputElement)`（本轮实测替换 11 处）。另外分段编辑器的 `section` prop 应按可辨识联合收窄成 `EntriesSection` / `GridSection` / `SkillsSection` / `TextSection`，否则模板里取 `section.items` 会报错 —— 那正是联合类型在提醒「先确定是哪种模块」。
+**剩余 21 个 JS 组件**，最大的是 `AdminPage` 823 / `TopBar` 778 / `CollectionPage` 667 / `PreviewPane` 422。主要机械成本是**模板内联处理器的 DOM 收窄**：`$event.target` 是 `EventTarget`，取 `.value` / `.checked` 需写成 `($event.target as HTMLInputElement)`（本轮实测替换 11 处）。另外分段编辑器的 `section` prop 应按可辨识联合收窄成 `EntriesSection` / `GridSection` / `SkillsSection` / `TextSection`，否则模板里取 `section.items` 会报错 —— 那正是联合类型在提醒「先确定是哪种模块」。
 
 `stores/resume` 是本地优先的落盘中心（多文档槽位、历史快照、头像引用、超容量降级），迁移前先用 `tests/resumeStore.test.js` 立起不变量再改类型；该测试需要 `localStorage` 与 `window`/`document`，由 `tests/setup/browser-globals.js` 按需安装（**刻意不放进 vitest 的 setupFiles**：全局安装 `document` 会让 pdf.js 误判运行环境，导致 PDF 导入端到端测试失败）。
 

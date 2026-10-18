@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 登录 / 注册页（独立路由版）。
  *

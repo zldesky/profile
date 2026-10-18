@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 简历分享只读页（/share/:id）。
  *
@@ -25,19 +25,32 @@ import { resolveTemplate } from '@/templates'
 import { applyChromeAccent } from '@/utils/helpers'
 import { computePageStyle, computePrintCss } from '@/utils/resumeStyle'
 import { fetchShare } from '@/utils/shareApi'
+import type { ShareSnapshot } from '@/types/resume'
 
 const route = useRoute()
 const router = useRouter()
 const store = useResumeStore()
 
-const state = shallowRef('loading') // loading | ready | error
+const state = shallowRef<'loading' | 'ready' | 'error'>('loading')
 const errorMessage = shallowRef('')
-const shared = shallowRef(null) // { resume, createdAt, expiresAt }
+const shared = shallowRef<ShareSnapshot | null>(null)
 
 const templateComponent = computed(() =>
   shared.value ? resolveTemplate(shared.value.resume.template) : null,
 )
 const pageStyle = computed(() => (shared.value ? computePageStyle(shared.value.resume) : undefined))
+
+/**
+ * 就绪时的简历，供模板使用。
+ *
+ * 模板里原先直接写 `shared.resume.xxx` —— 它被 `v-else`（对应 state 非 error）
+ * 保护着，但类型系统看不到这层相关性，报「possibly null」。
+ * 用一个按 state 收窄的 computed 表达这个前提，比在模板里到处写 `shared?.` 更准：
+ * 它同时也说明了「就绪」才是这些字段可用的条件。
+ */
+const readyResume = computed(() =>
+  state.value === 'ready' ? (shared.value?.resume ?? null) : null,
+)
 
 /** 纸张缩放：按窗口宽度自适应，与编辑器 fit() 同规则 */
 const zoom = shallowRef(1)
@@ -55,7 +68,7 @@ function fit() {
   )
 }
 
-let printStyleEl = null
+let printStyleEl: HTMLStyleElement | null = null
 
 function applyPrintCss() {
   if (!printStyleEl) {
@@ -73,16 +86,16 @@ async function load() {
   const seq = ++loadSeq
   state.value = 'loading'
   try {
-    const data = await fetchShare(route.params.id)
+    const data = await fetchShare(String(route.params.id))
     if (seq !== loadSeq) return
     shared.value = data
     state.value = 'ready'
-    applyChromeAccent(data.resume.theme?.accent)
+    applyChromeAccent(data.resume.theme?.accent ?? '')
     applyPrintCss()
   } catch (error) {
     if (seq !== loadSeq) return
     state.value = 'error'
-    errorMessage.value = error.message || '分享读取失败'
+    errorMessage.value = error instanceof Error ? error.message : '分享读取失败'
   }
 }
 
@@ -95,7 +108,7 @@ watch(state, (value) => {
 
 /** 主题变化时同步界面品牌色 */
 watch(
-  () => shared.value?.resume.theme?.accent,
+  () => shared.value?.resume.theme?.accent ?? '',
   (accent) => applyChromeAccent(accent),
 )
 
@@ -175,12 +188,12 @@ const expiryText = computed(() => {
         <div
           class="paper"
           :style="{ ...pageStyle, '--zoom': zoom }"
-          :data-tstyle="shared.resume.theme.titleStyle"
-          :data-marker="shared.resume.theme.titleMarker"
-          :data-line="shared.resume.theme.titleBottom"
-          :data-shape="shared.resume.basics.avatarShape"
+          :data-tstyle="readyResume?.theme.titleStyle"
+          :data-marker="readyResume?.theme.titleMarker"
+          :data-line="readyResume?.theme.titleBottom"
+          :data-shape="readyResume?.basics.avatarShape"
         >
-          <component :is="templateComponent" :resume="shared.resume" :selected-ids="[]" />
+          <component :is="templateComponent" :resume="readyResume" :selected-ids="[]" />
         </div>
       </div>
     </main>

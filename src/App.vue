@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 应用外壳：路由出口 + 全局轻提示。
  *

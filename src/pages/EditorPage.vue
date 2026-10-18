@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 编辑器页面：顶栏 + 预览区 + 编辑面板。
  *
@@ -73,7 +73,7 @@ function finishOnboarding() {
 }
 
 /** 焦点在输入控件里时不劫持字符与删除键，只放行组合键 */
-function isTypingTarget(event) {
+function isTypingTarget(event: KeyboardEvent) {
   const target = event.target
   return (
     target instanceof HTMLElement &&
@@ -105,7 +105,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
 })
 
-function onKeydown(event) {
+function onKeydown(event: KeyboardEvent) {
   if (event.isComposing) return
 
   if (event.ctrlKey || event.metaKey) {
