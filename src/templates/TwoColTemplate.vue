@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 双栏紧凑模板。
  * 顶部通栏放姓名与联系方式，下方左右分栏：窄栏放键值、技能与段落，宽栏放经历条目。
@@ -8,16 +8,17 @@ import { computed } from 'vue'
 import SectionBody from '@/components/paper/SectionBody.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { sectionLayoutStyle } from '@/utils/sectionStyle'
+import type { Resume } from '@/types/resume'
 
-const props = defineProps({
-  resume: { type: Object, required: true },
-  /* 纸面多选时选中的模块 id，仅编辑态用于高亮 */
-  selectedIds: { type: Array, default: () => [] },
-})
+const props = defineProps<{
+  resume: Resume
+  /** 纸面多选时选中的模块 id，仅编辑态用于高亮 */
+  selectedIds?: string[]
+}>()
 
 const basics = computed(() => props.resume.basics)
 const sections = computed(() => props.resume.sections.filter((s) => s.visible))
-const selectedSet = computed(() => new Set(props.selectedIds))
+const selectedSet = computed(() => new Set(props.selectedIds ?? []))
 
 /** 经历条目信息量大，独占宽栏 */
 const wideTypes = ['entries']

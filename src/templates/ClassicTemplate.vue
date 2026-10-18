@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 经典单栏模板。
  * 姓名 + 头像居顶，基本信息两列网格，正文模块自上而下堆叠。
@@ -8,16 +8,23 @@ import { computed } from 'vue'
 import SectionBody from '@/components/paper/SectionBody.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { sectionLayoutStyle } from '@/utils/sectionStyle'
+import type { Resume } from '@/types/resume'
 
-const props = defineProps({
-  resume: { type: Object, required: true },
-  /* 纸面多选时选中的模块 id，仅编辑态用于高亮 */
-  selectedIds: { type: Array, default: () => [] },
-})
+/*
+ * 模板统一以 Resume 收口：这些组件在编辑器、分享页、官网合集三处共用同一份数据，
+ * 用具体类型而不是 { type: Object }，模板里取 basics.fields / section.visible
+ * 才有约束 —— 数据形状漂移时会在这里报出来，而不是渲染成空白。
+ * 可见性过滤放在 computed 里，模板只管遍历。
+ */
+const props = defineProps<{
+  resume: Resume
+  /** 纸面多选时选中的模块 id，仅编辑态用于高亮 */
+  selectedIds?: string[]
+}>()
 
 const basics = computed(() => props.resume.basics)
 const sections = computed(() => props.resume.sections.filter((s) => s.visible))
-const selectedSet = computed(() => new Set(props.selectedIds))
+const selectedSet = computed(() => new Set(props.selectedIds ?? []))
 </script>
 
 <template>

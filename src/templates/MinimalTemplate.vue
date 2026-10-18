@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 极简留白模板。
  * 与其它模板一样使用主题定义的标题样式、标记与底边线，
@@ -9,16 +9,17 @@ import { computed } from 'vue'
 import SectionBody from '@/components/paper/SectionBody.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { sectionLayoutStyle } from '@/utils/sectionStyle'
+import type { Resume } from '@/types/resume'
 
-const props = defineProps({
-  resume: { type: Object, required: true },
-  /* 纸面多选时选中的模块 id，仅编辑态用于高亮 */
-  selectedIds: { type: Array, default: () => [] },
-})
+const props = defineProps<{
+  resume: Resume
+  /** 纸面多选时选中的模块 id，仅编辑态用于高亮 */
+  selectedIds?: string[]
+}>()
 
 const basics = computed(() => props.resume.basics)
 const sections = computed(() => props.resume.sections.filter((s) => s.visible))
-const selectedSet = computed(() => new Set(props.selectedIds))
+const selectedSet = computed(() => new Set(props.selectedIds ?? []))
 </script>
 
 <template>

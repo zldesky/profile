@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 标题左列模板。
  * 模块标题独立成列居左，正文统一对齐右轴，形成稳定双轴的美式简历排版。
@@ -8,16 +8,17 @@ import { computed } from 'vue'
 import SectionBody from '@/components/paper/SectionBody.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { sectionLayoutStyle } from '@/utils/sectionStyle'
+import type { Resume } from '@/types/resume'
 
-const props = defineProps({
-  resume: { type: Object, required: true },
-  /* 纸面多选时选中的模块 id，仅编辑态用于高亮 */
-  selectedIds: { type: Array, default: () => [] },
-})
+const props = defineProps<{
+  resume: Resume
+  /** 纸面多选时选中的模块 id，仅编辑态用于高亮 */
+  selectedIds?: string[]
+}>()
 
 const basics = computed(() => props.resume.basics)
 const sections = computed(() => props.resume.sections.filter((s) => s.visible))
-const selectedSet = computed(() => new Set(props.selectedIds))
+const selectedSet = computed(() => new Set(props.selectedIds ?? []))
 </script>
 
 <template>

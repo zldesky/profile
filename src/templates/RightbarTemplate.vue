@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 右侧色栏模板。
  * 左侧色栏的镜像：右侧深色竖栏承载联系方式与静态信息（键值网格、技能），左侧正文栏承载经历描述。
@@ -8,16 +8,17 @@ import { computed } from 'vue'
 import SectionBody from '@/components/paper/SectionBody.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { sectionLayoutStyle } from '@/utils/sectionStyle'
+import type { Resume } from '@/types/resume'
 
-const props = defineProps({
-  resume: { type: Object, required: true },
-  /* 纸面多选时选中的模块 id，仅编辑态用于高亮 */
-  selectedIds: { type: Array, default: () => [] },
-})
+const props = defineProps<{
+  resume: Resume
+  /** 纸面多选时选中的模块 id，仅编辑态用于高亮 */
+  selectedIds?: string[]
+}>()
 
 const basics = computed(() => props.resume.basics)
 const sections = computed(() => props.resume.sections.filter((s) => s.visible))
-const selectedSet = computed(() => new Set(props.selectedIds))
+const selectedSet = computed(() => new Set(props.selectedIds ?? []))
 
 /** 键值与技能适合窄栏，经历与段落留给正文栏 */
 const railTypes = ['grid', 'skills']

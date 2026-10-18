@@ -27,7 +27,8 @@
     "audit:shot": "node tools/shoot-pages.mjs",
     "audit:dialog": "node tools/shoot-dialog.mjs",
     "audit:interaction": "node tools/audit-interaction.mjs",
-    "audit:admin": "node tools/audit-admin.mjs"
+    "audit:admin": "node tools/audit-admin.mjs",
+    "verify:templates": "node tools/verify-templates.mjs"
   },
   "lint-staged": {
     "*.{js,vue}": [

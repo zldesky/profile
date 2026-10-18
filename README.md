@@ -67,6 +67,7 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 | `npm run audit:ui`          | **真实浏览器度量**（对比度 / 点击目标 / 文本溢出 / 键盘焦点）。默认审 `/editor`；带 URL 审首页，加 `--shots` 出截图。需先起服务                                                |
 | `npm run audit:interaction` | 交互态：键盘焦点可见性、悬停反馈（真的按 Tab / 真的移鼠标）                                                                                                                    |
 | `npm run audit:admin`       | 管理后台（`/admin`）的界面审计：自起临时服务 + 自造管理员，一步跑完                                                                                                            |
+| `npm run verify:templates`  | 逐个切换 12 个模板，数纸面可见文字 —— 验证模板组件迁 TS 后没有静默渲染成空白                                                                                                   |
 | `npm run audit:el`          | 量单个元素的盒子与真实命中区，如 `npm run audit:el -- .ed-check`                                                                                                               |
 | `npm run audit:login`       | 造一个已登录会话令牌，配合 `npm run audit:ui -- --token <令牌>`                                                                                                                |
 | `npm run audit:session`     | 诊断会话令牌是否真的生效                                                                                                                                                       |
@@ -231,7 +232,25 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 
 **TypeScript 迁移（进行中）**：领域类型在 `src/types/resume.ts`；`src/data`、`src/stores`、核心 `src/utils`、关键 composables 与**整个 `server/`** 已是严格模式 TS，用 `npm run typecheck`（vue-tsc）把关，并由 CI 强制执行（Vite 构建只转译不做类型校验，类型错误不会让 Build 失败，因此 typecheck 必须单独跑）。`server/` 由 Node 内置的类型剥离直接执行 `.ts`，不带构建步骤，细节见 [server/README.md](./server/README.md)。
 
-**Vue 组件（进行中，18/48）**：已迁的是编辑器面板与分段编辑器那一层（`src/components/editor/**` 与若干通用弹窗），尚未迁的是体量最大的几个页面与弹窗（`AdminPage` / `TopBar` / `CollectionPage` / `TemplatePicker` 等）。组件迁 TS 的主要机械成本是**模板内联处理器的 DOM 收窄**：`$event.target` 是 `EventTarget`，取 `.value` / `.checked` 需要写成 `($event.target as HTMLInputElement)`。另外分段编辑器的 `section` prop 应按可辨识联合收窄成 `EntriesSection` / `GridSection` / `SkillsSection` / `TextSection`，否则模板里取 `section.items` 会报错 —— 那正是联合类型在提醒「先确定是哪种模块」。
+**一个曾被写错的进度数字**：这里原写「Vue 组件（进行中，18/48）」。「48」这个分母从来没核实过，实际是 **64 个 `.vue`**，而那句真正想说的是**从 JS 迁到 TS 的进度**——不是 `<script setup>` 的进度。两者的现状差别很大：
+
+| 维度                     | 现状                                                                                     |
+| ------------------------ | ---------------------------------------------------------------------------------------- |
+| `<script setup>` 写法    | **64 / 64 全部完成**（`export default`、`defineComponent`、`setup()` 返回对象均为 0 处） |
+| `lang="ts"`              | **20 / 64**；剩余 44 个仍是 JS，共约 12,300 行                                           |
+| 这些 JS 组件受类型检查吗 | **不受**。`tsconfig.json` 里 `checkJs: false`，且 `include` 未纳入 `src/**/*.js`         |
+
+实测过「打开 `checkJs` 直接检查现有 JS 组件」这条路：会报 **644 处**错误，其中 289 处只是缺参数注解（`TS7006`）—— 说明这条路的前期噪音很大，**逐组件迁 TS 比全局开 `checkJs` 更可控**。所以策略是分批迁，而不是一次性打开开关。
+
+**已迁的模板层（12/12）**：`src/templates/**` 全部转为 `<script setup lang="ts">`，props 由 `{ type: Object, required: true }` 改为 `defineProps<{ resume: Resume; selectedIds?: string[] }>()`。这一层值得优先迁：它在编辑器、分享页、官网合集**三处共用同一份数据**，用具体类型收口后，数据形状漂移会在这里报出来，而不是渲染成空白。
+
+迁移抓到的第一处真问题就在迁移过程中：`sectionLayoutStyle` 返回 `object`，模板里 `:style="sectionLayoutStyle(section)"` 直接报类型错误。已转成 `.ts` 并显式声明返回类型 `SectionLayoutStyle`（含 `--sec-align` 等自定义属性）——**这类"类型没写清楚、JS 里一直静默用着"的地方，只有真去迁才会浮出来**。
+
+**模板渲染验证（`npm run verify:templates`）**：模板迁 TS 改的是 props 声明，**编译不报错、类型也通过**，但万一把 prop 名或形状写错，模板会静默渲染成空白——单测（只验注册表）和构建都发现不了。所以逐个切一遍、数一数纸上有多少可见文字（12/12 通过，文字约 890 字、纸高 1123px，各模板 class 互不相同）。
+
+这个脚本自己也踩过一次坑，值得记：第一版想直接改 Pinia store（`#app.__vue_app__` → `$pinia`）来切模板，实测拿不到 pinia 实例，12 个模板全报 `apply=no-store`——**工具坏了，却看起来像 12 个模板都渲染失败**。改成黑盒点真实按钮后 12/12 通过。这与审计脚本那两次教训是同一类：**先怀疑工具，再怀疑被测对象**。
+
+**剩余 44 个 JS 组件**（按行数降序，`AdminPage` 824 / `TopBar` 779 / `CollectionPage` 668 最大）。主要机械成本是**模板内联处理器的 DOM 收窄**：`$event.target` 是 `EventTarget`，取 `.value` / `.checked` 需写成 `($event.target as HTMLInputElement)`。另外分段编辑器的 `section` prop 应按可辨识联合收窄成 `EntriesSection` / `GridSection` / `SkillsSection` / `TextSection`，否则模板里取 `section.items` 会报错 —— 那正是联合类型在提醒「先确定是哪种模块」。
 
 `stores/resume` 是本地优先的落盘中心（多文档槽位、历史快照、头像引用、超容量降级），迁移前先用 `tests/resumeStore.test.js` 立起不变量再改类型；该测试需要 `localStorage` 与 `window`/`document`，由 `tests/setup/browser-globals.js` 按需安装（**刻意不放进 vitest 的 setupFiles**：全局安装 `document` 会让 pdf.js 误判运行环境，导致 PDF 导入端到端测试失败）。
 

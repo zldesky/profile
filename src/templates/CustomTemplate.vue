@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 自由定制模板。
  * 布局结构全部参数化（theme.customLayout）：
@@ -15,16 +15,17 @@ import SectionBody from '@/components/paper/SectionBody.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { DEFAULT_CUSTOM_LAYOUT } from '@/data/presets'
 import { sectionLayoutStyle } from '@/utils/sectionStyle'
+import type { Resume } from '@/types/resume'
 
-const props = defineProps({
-  resume: { type: Object, required: true },
-  /* 纸面多选时选中的模块 id，仅编辑态用于高亮 */
-  selectedIds: { type: Array, default: () => [] },
-})
+const props = defineProps<{
+  resume: Resume
+  /** 纸面多选时选中的模块 id，仅编辑态用于高亮 */
+  selectedIds?: string[]
+}>()
 
 const basics = computed(() => props.resume.basics)
 const sections = computed(() => props.resume.sections.filter((s) => s.visible))
-const selectedSet = computed(() => new Set(props.selectedIds))
+const selectedSet = computed(() => new Set(props.selectedIds ?? []))
 
 const layout = computed(() => props.resume.theme?.customLayout || DEFAULT_CUSTOM_LAYOUT)
 const mode = computed(() => layout.value.mode)
