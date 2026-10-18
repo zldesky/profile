@@ -26,6 +26,9 @@ const argv = process.argv.slice(2)
 const tokenFlag = argv.indexOf('--token')
 const sessionToken = tokenFlag >= 0 ? argv[tokenFlag + 1] || '' : ''
 const url = argv.find((a) => a.startsWith('http')) || 'http://127.0.0.1:3001/'
+/** --shots 时截图到 tools/shots/。有些问题（排版怪、留白失衡）只能看，量不出来。 */
+const shots = argv.includes('--shots')
+const shotDir = new URL('./shots/', import.meta.url).pathname.replace(/^\//, '')
 /** 桌面两档 + 手机一档；断点在 900px，所以要跨过它看 */
 const WIDTHS = [
   { w: 1440, h: 900, name: '桌面' },
@@ -319,6 +322,16 @@ for (const vp of WIDTHS) {
     data.overflowing.push(...d.overflowing)
   }
   report.expanded = (report.expanded || 0) + expanded
+
+  if (shots) {
+    const { mkdirSync } = await import('node:fs')
+    const dir = decodeURIComponent(shotDir)
+    mkdirSync(dir, { recursive: true })
+    const file = `${dir}${vp.name}-${vp.w}.png`
+    await page.screenshot({ path: file, fullPage: false })
+    report.shots = report.shots || []
+    report.shots.push(file)
+  }
   report.viewports.push({ ...vp, ...data, finalUrl: page.url() })
   if (vp.name === '桌面') {
     // 键盘焦点：逐个 Tab，看获得焦点的元素有没有可见的 outline / box-shadow
@@ -380,5 +393,9 @@ for (const f of report.focus) line(`      ${f.visible ? '可见' : '*** 不可�
 if (report.errors.length) {
   line(`\n▌控制台错误 ${report.errors.length} 条`)
   for (const e of report.errors.slice(0, 8)) line('      ' + e)
+}
+if (report.shots?.length) {
+  line('\n▌截图')
+  for (const f of report.shots) line('      ' + f)
 }
 line('')

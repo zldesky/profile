@@ -20,7 +20,10 @@
     "audit:login": "node tools/audit-login.mjs",
     "audit:ui": "node tools/audit-ui.mjs",
     "audit:el": "node tools/probe-el.mjs",
-    "audit:session": "node tools/probe-session.mjs"
+    "audit:session": "node tools/probe-session.mjs",
+    "audit:perf": "node tools/probe-perf.mjs",
+    "audit:mobile": "node tools/probe-mobile.mjs",
+    "audit:trace": "node tools/trace-startup.mjs"
   },
   "lint-staged": {
     "*.{js,vue}": [

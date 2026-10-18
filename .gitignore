@@ -56,3 +56,8 @@ gui-test-screenshots
 # Python 工具脚本（tools/ 下生成 favicon 的脚本）产生的字节码缓存
 __pycache__/
 *.pyc
+
+# 审计截图（tools/audit-ui.mjs --shots 的产物，本地看，不入库）
+tools/shots/
+# 启动性能 trace（tools/trace-startup.mjs 的产物，本地分析用）
+tools/trace/

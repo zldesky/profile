@@ -177,5 +177,8 @@ function onKeydown(event) {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
+  /* 窄屏时栏内的固有宽度（如那排模块操作按钮）不该把页面撑出横向滚动 */
+  min-width: 0;
+  overflow-x: clip;
 }
 </style>

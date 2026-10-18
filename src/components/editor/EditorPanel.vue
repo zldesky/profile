@@ -116,6 +116,14 @@ watch(requestSeq, () => {
   .editor-panel {
     flex: 1 1 auto;
     border-left: 0;
+    /*
+     * min-width: 0 不能省。flex 项默认 min-width: auto，即「不得小于内容的固有宽度」；
+     * 面板里那排模块操作按钮合计约 224px 再加间距，会把整栏撑到 332px ——
+     * 在 320px 的设备上就是横向溢出（实测：editor-panel 332 > 父级 320）。
+     * 允许压缩后由内部换行/滚动消化，而不是把页面撑破。
+     */
+    min-width: 0;
+    overflow-x: hidden;
   }
 
   .panel-tabs-wrap {

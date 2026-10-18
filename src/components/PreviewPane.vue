@@ -119,12 +119,17 @@ const SECTION_TIP = '点文字就地修改 · 点空白处跳到右侧编辑卡�
 /**
  * 把提示挂到纸上每个模块。模板切换后 DOM 是新的，所以要重新挂。
  * 只设 title、不动 DOM 结构，因此不会影响排版与打印（title 也不打印）。
+ *
+ * **只在确实需要时写**：refreshLayout() 在启动与每次改动后都会跑，
+ * 无条件赋值会让每个模块都产生一次「属性变更 → 样式重算」的失效记录
+ * （实测启动期间 Layout 占了 743 ms，是主要的阻塞来源）。
+ * title 已经是目标值就直接跳过，把常规路径上的写操作降到 0。
  */
 function applySectionTips() {
   const paper = paperRef.value
   if (!paper) return
   for (const el of paper.querySelectorAll('.r-sec[data-sec-id]')) {
-    el.title = SECTION_TIP
+    if (el.title !== SECTION_TIP) el.title = SECTION_TIP
   }
 }
 
