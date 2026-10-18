@@ -238,7 +238,7 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 | 维度                     | 现状                                                                                     |
 | ------------------------ | ---------------------------------------------------------------------------------------- |
 | `<script setup>` 写法    | **64 / 64 全部完成**（`export default`、`defineComponent`、`setup()` 返回对象均为 0 处） |
-| `lang="ts"`              | **54 / 64**（约 10,000 行）；剩余 10 个仍是 JS，约 4,800 行                              |
+| `lang="ts"`              | **58 / 64**（约 11,200 行）；剩余 6 个仍是 JS，约 3,800 行                               |
 | 这些 JS 组件受类型检查吗 | **不受**。`tsconfig.json` 里 `checkJs: false`，且 `include` 未纳入 `src/**/*.js`         |
 
 实测过「打开 `checkJs` 直接检查现有 JS 组件」这条路：会报 **644 处**错误，其中 289 处只是缺参数注解（`TS7006`）—— 说明这条路的前期噪音很大，**逐组件迁 TS 比全局开 `checkJs` 更可控**。所以策略是分批迁，而不是一次性打开开关。
@@ -271,7 +271,14 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 
 **新增 `npm run verify:dialogs`**：弹窗迁 TS 改的是类型与收窄，编译不报错、类型也通过，但 props / emit 载荷或 ref 收窄改错会让弹窗**打不开或点了没反应** —— 单测不挂载这些组件、静态审计也看不到（弹窗默认不渲染）。所以真的点开五个（简历体检 / JD 匹配 / 我的简历 / AI 补充导入 / 快捷键），确认弹出且内有文字：5/5 通过，控制台无错误。
 
-**剩余 10 个 JS 组件**：`AdminPage` 823 / `TopBar` 778 / `CollectionPage` 667 / `HomePage` 577 / `TemplatePicker` 540 / `SliderCaptcha` 398 / `AvatarCropDialog` 290 / `AvatarEditor` 289 / `AuthPanel` 231 / `ExperienceEntryEditor` 222。主要机械成本是**模板内联处理器的 DOM 收窄**：`$event.target` 是 `EventTarget`，取 `.value` / `.checked` 需写成 `($event.target as HTMLInputElement)`（本轮实测替换 11 处）。另外分段编辑器的 `section` prop 应按可辨识联合收窄成 `EntriesSection` / `GridSection` / `SkillsSection` / `TextSection`，否则模板里取 `section.items` 会报错 —— 那正是联合类型在提醒「先确定是哪种模块」。
+**头像与认证一层已迁完**：`AvatarCropDialog` / `AvatarEditor` / `AuthPanel` / `ExperienceEntryEditor`。
+
+这一批有两处值得记：
+
+- **`ExperienceEntryEditor` 用上了可辨识联合**：props 由 `{ type: Object }` 改成 `section: EntriesSection`（`type` 字段是字面量 `'entries'`）。这正是联合类型的用法 —— 若只写宽泛的 `Section`，模板里取 `section.items` 就会报错，提醒「先确定是哪种模块」。另外 `polishTarget` 从 `null` 收成 `Bullet | null`。
+- **类型检查报出的多是真实的可空时序**，不是纯噪音：`recentre()` 读 `imgSize.value.width` 而 `applyScale()` 里已有同样的判空 —— 说明这条守卫当初就是漏写的；canvas 的 `getContext('2d')` 可能返回 null；`imgSize` 在图片加载完成前确实是 null。补守卫的同时把注释写清楚「为什么这里会是 null」。
+
+**剩余 6 个 JS 组件**：`AdminPage` 823 / `TopBar` 778 / `CollectionPage` 667 / `HomePage` 577 / `TemplatePicker` 540 / `SliderCaptcha` 398 —— 都是大件或状态机。主要机械成本是**模板内联处理器的 DOM 收窄**：`$event.target` 是 `EventTarget`，取 `.value` / `.checked` 需写成 `($event.target as HTMLInputElement)`（本轮实测替换 11 处）。另外分段编辑器的 `section` prop 应按可辨识联合收窄成 `EntriesSection` / `GridSection` / `SkillsSection` / `TextSection`，否则模板里取 `section.items` 会报错 —— 那正是联合类型在提醒「先确定是哪种模块」。
 
 `stores/resume` 是本地优先的落盘中心（多文档槽位、历史快照、头像引用、超容量降级），迁移前先用 `tests/resumeStore.test.js` 立起不变量再改类型；该测试需要 `localStorage` 与 `window`/`document`，由 `tests/setup/browser-globals.js` 按需安装（**刻意不放进 vitest 的 setupFiles**：全局安装 `document` 会让 pdf.js 误判运行环境，导致 PDF 导入端到端测试失败）。
 

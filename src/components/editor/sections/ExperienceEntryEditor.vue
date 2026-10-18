@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 单段经历编辑：时间、单位、职位、机构图标、补充字段与要点。
  * 由 EntriesSectionEditor 按段渲染，自身只负责一段。
@@ -11,13 +11,20 @@ import SvgIcon from '@/components/SvgIcon.vue'
 import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
 import { readImageAsDataUrl } from '@/utils/helpers'
+import type { Bullet, EntriesSection, EntryItem, EntryMeta } from '@/types/resume'
 
-const props = defineProps({
-  section: { type: Object, required: true },
-  entry: { type: Object, required: true },
-  index: { type: Number, required: true },
-  total: { type: Number, required: true },
-})
+/*
+ * 用具体类型而不是 { type: Object }，并且 section 收成 EntriesSection ——
+ * 这正是可辨识联合的用法：EntriesSection 的 type 是字面量 'entries'，
+ * 因此模板里取 section.items / entry.bullets 才有约束；
+ * 若只写宽泛的 Section，取 section.items 会报错，提醒「先确定是哪种模块」。
+ */
+const props = defineProps<{
+  section: EntriesSection
+  entry: EntryItem
+  index: number
+  total: number
+}>()
 
 const store = useResumeStore()
 const { toast } = useToast()
@@ -25,14 +32,15 @@ const { toast } = useToast()
 const logoInput = useTemplateRef('logoInput')
 const uploadingLogo = shallowRef(false)
 
-const updateEntry = (patch) => store.updateEntry(props.section.id, props.entry.id, patch)
-const updateMeta = (metaId, patch) =>
+const updateEntry = (patch: Partial<EntryItem>) =>
+  store.updateEntry(props.section.id, props.entry.id, patch)
+const updateMeta = (metaId: string, patch: Partial<EntryMeta>) =>
   store.updateEntryMeta(props.section.id, props.entry.id, metaId, patch)
 
 /** 当前正在润色的要点：{ id, text }，null 表示弹窗关闭 */
-const polishTarget = shallowRef(null)
+const polishTarget = shallowRef<Bullet | null>(null)
 
-function applyPolish(text) {
+function applyPolish(text: string) {
   if (!polishTarget.value) return
   store.updateBullet(props.section.id, props.entry.id, polishTarget.value.id, text)
   toast('已应用润色结果，Ctrl+Z 可撤销')
@@ -40,12 +48,14 @@ function applyPolish(text) {
 }
 
 function pickLogo() {
-  logoInput.value.value = ''
-  logoInput.value.click()
+  const input = logoInput.value
+  if (!input) return
+  input.value = ''
+  input.click()
 }
 
-async function onLogoChange(event) {
-  const file = event.target.files?.[0]
+async function onLogoChange(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0]
   if (!file) return
 
   if (!file.type.startsWith('image/')) {
@@ -59,7 +69,7 @@ async function onLogoChange(event) {
     updateEntry({ logo: await readImageAsDataUrl(file, 160, 'png') })
     toast('机构图标已更新')
   } catch (error) {
-    toast(`图片处理失败：${error.message}`)
+    toast(`图片处理失败：${error instanceof Error ? error.message : '未知错误'}`)
   } finally {
     uploadingLogo.value = false
   }
@@ -101,7 +111,7 @@ async function onLogoChange(event) {
         class="ed-input"
         :value="entry.time"
         placeholder="2022-06 - 至今"
-        @input="updateEntry({ time: $event.target.value })"
+        @input="updateEntry({ time: ($event.target as HTMLInputElement).value })"
       />
     </label>
 
@@ -111,7 +121,7 @@ async function onLogoChange(event) {
         class="ed-input"
         :value="entry.org"
         placeholder="公司 / 学校 / 项目名"
-        @input="updateEntry({ org: $event.target.value })"
+        @input="updateEntry({ org: ($event.target as HTMLInputElement).value })"
       />
     </label>
 
@@ -121,7 +131,7 @@ async function onLogoChange(event) {
         class="ed-input"
         :value="entry.role"
         placeholder="岗位 / 专业 / 担任角色"
-        @input="updateEntry({ role: $event.target.value })"
+        @input="updateEntry({ role: ($event.target as HTMLInputElement).value })"
       />
     </label>
 
@@ -148,13 +158,13 @@ async function onLogoChange(event) {
         class="ed-input ed-meta-label"
         :value="meta.label"
         placeholder="字段名"
-        @input="updateMeta(meta.id, { label: $event.target.value })"
+        @input="updateMeta(meta.id, { label: ($event.target as HTMLInputElement).value })"
       />
       <input
         class="ed-input"
         :value="meta.value"
         placeholder="字段内容"
-        @input="updateMeta(meta.id, { value: $event.target.value })"
+        @input="updateMeta(meta.id, { value: ($event.target as HTMLInputElement).value })"
       />
       <button
         class="ed-icon-btn danger"
@@ -177,7 +187,14 @@ async function onLogoChange(event) {
         class="ed-textarea"
         :value="bullet.text"
         placeholder="一条要点，建议用「做了什么 + 结果数据」的写法"
-        @input="store.updateBullet(section.id, entry.id, bullet.id, $event.target.value)"
+        @input="
+          store.updateBullet(
+            section.id,
+            entry.id,
+            bullet.id,
+            ($event.target as HTMLInputElement).value,
+          )
+        "
       ></textarea>
       <button
         class="ed-icon-btn"

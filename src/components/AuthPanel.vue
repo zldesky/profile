@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 登录 / 注册表单本体。
  * 独立登录页（LoginPage）与编辑器内弹窗（AuthDialog）共用：
@@ -29,7 +29,7 @@ const captchaOpen = shallowRef(false)
 const busy = shallowRef(false)
 const error = shallowRef('')
 
-function switchMode(next) {
+function switchMode(next: 'login' | 'register') {
   mode.value = next
   error.value = ''
   captchaToken.value = ''
@@ -70,7 +70,8 @@ async function submit() {
         : await auth.register(username.value.trim(), password.value, captchaToken.value)
     toast(mode.value === 'login' ? `欢迎回来，${user.username}` : `注册成功，${user.username}`)
     emit('authed', user)
-  } catch (requestError) {
+  } catch (rawError) {
+    const requestError = rawError as { code?: string; message?: string }
     error.value = requestError.message || '请求失败'
     // 注册请求会把通过令牌消费掉（无论成败），重新提交时会再次弹出滑块
     captchaToken.value = ''
@@ -80,7 +81,7 @@ async function submit() {
 }
 
 /** 滑块验证通过：收下一次性令牌，关弹窗并自动继续注册 */
-function onCaptchaVerified(token) {
+function onCaptchaVerified(token: string) {
   captchaToken.value = token
   captchaOpen.value = false
   submit()

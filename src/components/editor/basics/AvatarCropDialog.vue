@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 头像裁剪弹窗。
  * 上传照片的比例与选定的头像尺寸不一致时弹出：拖动选取保留区域、滑杆缩放，
@@ -33,7 +33,7 @@ const display = computed(() => {
     : { w: Math.round(FRAME_LONG * ratio), h: FRAME_LONG }
 })
 
-const imgSize = shallowRef(null)
+const imgSize = shallowRef<{ width: number; height: number } | null>(null)
 const scale = shallowRef(1)
 const minScale = shallowRef(1)
 const offset = reactive({ dx: 0, dy: 0 })
@@ -66,14 +66,16 @@ watch(
   },
 )
 
-/** 回到居中位置 */
+/** 回到居中位置。图片尚未加载时 imgSize 为 null，直接返回（applyScale 里已有同样的守卫） */
 function recentre() {
-  offset.dx = (display.value.w - imgSize.value.width * scale.value) / 2
-  offset.dy = (display.value.h - imgSize.value.height * scale.value) / 2
+  const size = imgSize.value
+  if (!size) return
+  offset.dx = (display.value.w - size.width * scale.value) / 2
+  offset.dy = (display.value.h - size.height * scale.value) / 2
 }
 
 /** 缩放时保持框中心对应的源点不动，再收敛平移边界 */
-function applyScale(next) {
+function applyScale(next: number) {
   if (!imgSize.value) return
   const sourceX = (display.value.w / 2 - offset.dx) / scale.value
   const sourceY = (display.value.h / 2 - offset.dy) / scale.value
@@ -93,20 +95,25 @@ function applyScale(next) {
 
 let lastX = 0
 let lastY = 0
-function onPointerDown(event) {
+function onPointerDown(event: PointerEvent) {
   dragging.value = true
   lastX = event.clientX
   lastY = event.clientY
-  event.currentTarget.setPointerCapture(event.pointerId)
+  // 指针捕获要打在绑定元素上；类型上 currentTarget 是 EventTarget | null，
+  // 这里收窄成 HTMLElement —— 模板里它绑在 div 上，所以这个前提是成立的。
+  const el = event.currentTarget
+  if (el instanceof HTMLElement) el.setPointerCapture(event.pointerId)
 }
 
-function onPointerMove(event) {
+function onPointerMove(event: PointerEvent) {
   if (!dragging.value) return
+  const size = imgSize.value
+  if (!size) return
   const clamped = clampPan(
     offset.dx + event.clientX - lastX,
     offset.dy + event.clientY - lastY,
-    imgSize.value.width,
-    imgSize.value.height,
+    size.width,
+    size.height,
     scale.value,
     display.value.w,
     display.value.h,
@@ -146,12 +153,13 @@ async function confirmCrop() {
     canvas.width = outW
     canvas.height = outH
     const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('无法创建画布上下文，头像裁剪失败')
     // 头像入库统一转 JPEG，先铺白底避免透明区域发黑
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(0, 0, outW, outH)
     const img = new Image()
-    await new Promise((resolve, reject) => {
-      img.onload = resolve
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve()
       img.onerror = () => reject(new Error('图片无法解析'))
       img.src = props.src
     })
@@ -191,7 +199,7 @@ async function confirmCrop() {
             :max="zoomMax"
             :step="zoomStep"
             :value="scale"
-            @input="applyScale(Number($event.target.value))"
+            @input="applyScale(Number(($event.target as HTMLInputElement).value))"
           />
         </label>
 

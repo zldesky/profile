@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 头像：上传、尺寸（默认 1 寸证件照）、形状与位置微调。
  *
@@ -11,6 +11,7 @@ import AvatarCropDialog from '@/components/editor/basics/AvatarCropDialog.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { useToast } from '@/composables/useToast'
 import { AVATAR_SHAPES, AVATAR_SIZE_PRESETS, AVATAR_SIZE_RANGE } from '@/data/presets'
+import type { AvatarSizePreset } from '@/data/presets'
 import { useResumeStore } from '@/stores/resume'
 import { aspectMatches } from '@/utils/imageCrop'
 import { compressDataUrl, readImageAsDataUrl, readImageSize } from '@/utils/helpers'
@@ -24,24 +25,32 @@ const uploading = shallowRef(false)
 const cropSrc = shallowRef('')
 const showCrop = shallowRef(false)
 
-const isPresetActive = (preset) =>
+const isPresetActive = (preset: AvatarSizePreset) =>
   store.basics.avatarWidth === preset.width && store.basics.avatarHeight === preset.height
 
 /** 头像相对模板默认位置的偏移，取整后展示 */
 const avatarDx = computed(() => Math.round(Number(store.basics.avatarPos?.dx) || 0))
 const avatarDy = computed(() => Math.round(Number(store.basics.avatarPos?.dy) || 0))
 
-const toRange = (a, b) => ({ min: Math.floor(Math.min(a, b)), max: Math.ceil(Math.max(a, b)) })
+const toRange = (a: number, b: number) => ({
+  min: Math.floor(Math.min(a, b)),
+  max: Math.ceil(Math.max(a, b)),
+})
 const dxRange = computed(() => toRange(store.avatarLimits.minDx, store.avatarLimits.maxDx))
 const dyRange = computed(() => toRange(store.avatarLimits.minDy, store.avatarLimits.maxDy))
 
 function pickAvatar() {
-  fileInput.value.value = ''
-  fileInput.value.click()
+  // 模板 ref 在挂载前为 null；这里只在用户点击时执行，但类型上仍需守卫
+  const input = fileInput.value
+  if (!input) return
+  input.value = ''
+  input.click()
 }
 
-async function onAvatarChange(event) {
-  const file = event.target.files?.[0]
+async function onAvatarChange(event: Event) {
+  // target 是 EventTarget | null，取 files 前先收窄
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
   if (!file) return
 
   if (!file.type.startsWith('image/')) {
@@ -69,14 +78,15 @@ async function onAvatarChange(event) {
       cropSrc.value = raw
       showCrop.value = true
     }
-  } catch (error) {
+  } catch (rawError) {
+    const error = rawError as { message?: string }
     toast(`头像处理失败：${error.message}`)
   } finally {
     uploading.value = false
   }
 }
 
-async function onCropConfirm(dataUrl) {
+async function onCropConfirm(dataUrl: string) {
   showCrop.value = false
   cropSrc.value = ''
   store.setBasics({ avatar: dataUrl, showAvatar: true })
@@ -121,7 +131,7 @@ function onCropCancel() {
         class="ed-check"
         type="checkbox"
         :checked="store.basics.showAvatar"
-        @change="store.setBasics({ showAvatar: $event.target.checked })"
+        @change="store.setBasics({ showAvatar: ($event.target as HTMLInputElement).checked })"
       />
     </label>
 
@@ -146,7 +156,7 @@ function onCropCancel() {
         :max="AVATAR_SIZE_RANGE.width.max"
         step="1"
         :value="store.basics.avatarWidth"
-        @input="store.setBasics({ avatarWidth: Number($event.target.value) })"
+        @input="store.setBasics({ avatarWidth: Number(($event.target as HTMLInputElement).value) })"
       />
       <span class="ed-value">{{ store.basics.avatarWidth }}mm</span>
     </label>
@@ -160,7 +170,9 @@ function onCropCancel() {
         :max="AVATAR_SIZE_RANGE.height.max"
         step="1"
         :value="store.basics.avatarHeight"
-        @input="store.setBasics({ avatarHeight: Number($event.target.value) })"
+        @input="
+          store.setBasics({ avatarHeight: Number(($event.target as HTMLInputElement).value) })
+        "
       />
       <span class="ed-value">{{ store.basics.avatarHeight }}mm</span>
     </label>
@@ -187,7 +199,7 @@ function onCropCancel() {
         :max="dxRange.max"
         step="1"
         :value="avatarDx"
-        @input="store.setAvatarPos({ dx: Number($event.target.value) })"
+        @input="store.setAvatarPos({ dx: Number(($event.target as HTMLInputElement).value) })"
       />
       <span class="ed-value">{{ avatarDx }}mm</span>
     </label>
@@ -201,7 +213,7 @@ function onCropCancel() {
         :max="dyRange.max"
         step="1"
         :value="avatarDy"
-        @input="store.setAvatarPos({ dy: Number($event.target.value) })"
+        @input="store.setAvatarPos({ dy: Number(($event.target as HTMLInputElement).value) })"
       />
       <span class="ed-value">{{ avatarDy }}mm</span>
     </label>
