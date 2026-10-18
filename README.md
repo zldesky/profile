@@ -238,7 +238,7 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 | 维度                     | 现状                                                                                     |
 | ------------------------ | ---------------------------------------------------------------------------------------- |
 | `<script setup>` 写法    | **64 / 64 全部完成**（`export default`、`defineComponent`、`setup()` 返回对象均为 0 处） |
-| `lang="ts"`              | **60 / 64**（约 12,400 行）；剩余 4 个仍是 JS，约 2,600 行                               |
+| `lang="ts"`              | **61 / 64**（约 13,000 行）；剩余 3 个仍是 JS，约 2,000 行                               |
 | 这些 JS 组件受类型检查吗 | **不受**。`tsconfig.json` 里 `checkJs: false`，且 `include` 未纳入 `src/**/*.js`         |
 
 实测过「打开 `checkJs` 直接检查现有 JS 组件」这条路：会报 **644 处**错误，其中 289 处只是缺参数注解（`TS7006`）—— 说明这条路的前期噪音很大，**逐组件迁 TS 比全局开 `checkJs` 更可控**。所以策略是分批迁，而不是一次性打开开关。
@@ -278,7 +278,9 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 - **`ExperienceEntryEditor` 用上了可辨识联合**：props 由 `{ type: Object }` 改成 `section: EntriesSection`（`type` 字段是字面量 `'entries'`）。这正是联合类型的用法 —— 若只写宽泛的 `Section`，模板里取 `section.items` 就会报错，提醒「先确定是哪种模块」。另外 `polishTarget` 从 `null` 收成 `Bullet | null`。
 - **类型检查报出的多是真实的可空时序**，不是纯噪音：`recentre()` 读 `imgSize.value.width` 而 `applyScale()` 里已有同样的判空 —— 说明这条守卫当初就是漏写的；canvas 的 `getContext('2d')` 可能返回 null；`imgSize` 在图片加载完成前确实是 null。补守卫的同时把注释写清楚「为什么这里会是 null」。
 
-**展示型页面已迁完**：`HomePage` / `CollectionPage`。**剩余 4 个**：`AdminPage` 823 / `TopBar` 778 / `TemplatePicker` 540 / `SliderCaptcha` 398 —— 都是大件或状态机。
+**`TemplatePicker` 已迁完**（540 行）。它只有 8 处问题，其中一处值得记：`isStyleActive` 里 `Object.entries(preset.patch)` 会把键退化回 `string`，于是 `store.theme[key]` 报「不能用 string 索引 Theme」。做法是断言成 `keyof Theme`，而**不是把 `store.theme` 放宽成 `Record`** —— 后者会让整个主题失去类型。
+
+**剩余 3 个**：`AdminPage` 823 / `TopBar` 778 / `SliderCaptcha` 398。
 
 ### 审计的一个判据修正：纸张内部不算应用 UI
 

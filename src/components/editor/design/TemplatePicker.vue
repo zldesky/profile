@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 模板与风格选择（SKU 式组合约束）。
  * 缩略图是纯 CSS 画的示意图，不依赖任何图片资源；
@@ -13,6 +13,8 @@ import SvgIcon from '@/components/SvgIcon.vue'
 import { TEMPLATES } from '@/data/presets'
 import { useResumeStore } from '@/stores/resume'
 import { useStyleConfig } from '@/composables/useStyleConfig'
+import type { StylePreset, Theme } from '@/types/resume'
+import type { TemplateMeta } from '@/data/presets'
 
 const store = useResumeStore()
 const styleConfig = useStyleConfig()
@@ -26,33 +28,40 @@ const activeStyle = computed(
 )
 
 /** 模板与当前风格不兼容 → 置灰禁用 */
-function isTemplateLocked(tpl) {
+function isTemplateLocked(tpl: TemplateMeta) {
   const whitelist = styleConfig.stylesForTemplate(tpl.id)
   return Boolean(activeStyle.value && whitelist && !whitelist.includes(activeStyle.value.key))
 }
 
 /** 风格与当前模板不兼容 → 置灰禁用 */
-function isStyleLocked(preset) {
+function isStyleLocked(preset: StylePreset) {
   const whitelist = styleConfig.stylesForTemplate(store.resume.template)
   return Boolean(whitelist && !whitelist.includes(preset.key))
 }
 
-function selectTemplate(id) {
+function selectTemplate(id: string) {
   store.resume.template = id
 }
 
 /** 套用风格预设：主题色、标题样式、标记与底边线整体切换 */
-function applyStyle(preset) {
+function applyStyle(preset: StylePreset) {
   store.setTheme(preset.patch)
 }
 
 /** 当前主题与预设的每个键都一致才算命中，用于高亮 */
-function isStyleActive(preset) {
-  return Object.entries(preset.patch).every(([key, value]) => store.theme[key] === value)
+function isStyleActive(preset: StylePreset) {
+  /*
+   * patch 的键是 Theme 的子集（Partial<Pick<Theme, ...>>），但 Object.entries 会把
+   * 键退化回 string，于是 store.theme[key] 报「不能用 string 索引 Theme」。
+   * 断言成 keyof Theme 而不是把 store.theme 放宽成 Record —— 后者会让整个主题失去类型。
+   */
+  return Object.entries(preset.patch).every(
+    ([key, value]) => store.theme[key as keyof Theme] === value,
+  )
 }
 
 /** 置灰项的悬浮说明 */
-function lockedTitle(kind, name) {
+function lockedTitle(kind: 'tpl' | 'style', name: string) {
   return `「${name}」与当前${kind === 'tpl' ? '风格' : '模板'}不搭，已禁用；可在「色彩 / 标题」里手动细调出类似效果`
 }
 </script>
