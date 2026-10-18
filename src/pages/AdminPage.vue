@@ -760,14 +760,38 @@ const detailText = (patch) =>
   color: var(--ed-text-4);
 }
 
+/*
+ * 文字型小按钮（矩阵里的「全选 / 清空」）。
+ *
+ * 原来 padding 是 2px，盒子只有 36×23 —— 低于 24px 的最小点击目标，
+ * 是 /admin 审计报出来的两处之一。改成 4px 上下即可到 24px，
+ * 横向同步加到 8px 让命中区更接近方形，视觉上仍是一枚文字按钮。
+ */
 .ad2-link-btn {
-  padding: 2px 6px;
+  padding: 4px 8px;
   border: none;
   background: transparent;
   color: var(--ed-brand-strong);
   font: inherit;
   font-size: 12px;
   cursor: pointer;
+}
+
+/*
+ * 矩阵单元格里的复选框：**必须自己够大**。
+ *
+ * 它裸放在 <td> 里、没有 <label> 包裹，所以 editor.css 那条
+ * `label:has(> .ed-check) { min-height: 24px }` 覆盖不到它 ——
+ * 实测只有 15×15（手机 18×18），是 /admin 审计报出的另一处。
+ *
+ * `<input>` 是替换元素，`::after` 不生效（早先在复选框上实测过），
+ * 而它的父级是 <td>：把命中区扩到 <td> 上会让「点空白也算勾选」，
+ * 在矩阵表里很容易误操作。所以直接把控件本身做到 24px —— 这是唯一
+ * 既满足最小点击目标、又不会误触的改法。
+ */
+.ad2-matrix-cell .ed-check {
+  width: 24px;
+  height: 24px;
 }
 
 .ad2-link-btn:hover {
