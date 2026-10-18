@@ -30,7 +30,9 @@
     "audit:admin": "node tools/audit-admin.mjs",
     "verify:templates": "node tools/verify-templates.mjs",
     "verify:dialogs": "node tools/verify-dialogs.mjs",
-    "verify:captcha": "node tools/verify-captcha.mjs"
+    "verify:captcha": "node tools/verify-captcha.mjs",
+    "verify:paper": "node tools/verify-paper-edit.mjs",
+    "verify:drag": "node tools/verify-drag.mjs"
   },
   "lint-staged": {
     "*.{js,vue}": [

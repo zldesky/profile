@@ -1,0 +1,204 @@
+/**
+ * 端到端验证纸面「点文字就地编辑」与「点模块跳转」。
+ * 用法：node tools/verify-paper-edit.mjs [url]
+ *
+ * 为什么必须有一个常驻脚本：这两件事都是**交互**，
+ *   - 静态审计看不到（它不点击纸面）；
+ *   - 单测只覆盖 resolveEditTarget 这类纯逻辑，不挂载 PreviewPane。
+ * 而它们曾经真的坏过：页头字段不在任何 .r-sec 里，于是按在其文字上会落到
+ * 「框选」分支，而框选一上来就 preventDefault + setPointerCapture，
+ * **吃掉后续 click**，就地编辑整个失效 —— 编译、类型、单测、静态审计全都发现不了。
+ *
+ * 前两版探针的教训（都记在这里，避免重犯）：
+ *  1. 只判「有没有编辑框」会读到**上一次遗留的框**（实测「职位」读到了「张伟」）；
+ *  2. 点击坐标可能落在视口外（靠后的模块在折叠线以下），elementFromPoint 返回 null，
+ *     看起来像「功能坏了」，其实是探针没点到。
+ * 所以这一版只做用户视角的判定：点文字 → 输入新值 → 提交 → 纸面上真的出现新值。
+ */
+import { chromium } from '../server/node_modules/playwright-core/index.mjs'
+
+const url = process.argv.find((a) => a.startsWith('http')) || 'http://localhost:5173/editor'
+
+const browser = await chromium.launch({ channel: 'msedge' })
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+const errors = []
+page.on('pageerror', (e) => errors.push(`pageerror: ${String(e.message).slice(0, 110)}`))
+page.on('console', (m) => {
+  if (m.type() === 'error') errors.push(m.text().slice(0, 110))
+})
+
+await page.goto(url, { waitUntil: 'networkidle', timeout: 40000 })
+await page.waitForTimeout(1500)
+await page.evaluate(() => {
+  const s = [...document.querySelectorAll('button')].find((x) => (x.textContent || '').trim() === '跳过引导')
+  if (s) s.click()
+})
+await page.waitForTimeout(400)
+
+const findEditor = () =>
+  page.evaluate(() => {
+    const inp = [...document.querySelectorAll('body *')].find(
+      (el) => /^ie-input/.test(String(el.className || '')) && el.offsetParent !== null,
+    )
+    return inp ? { value: String(inp.value ?? inp.textContent ?? '') } : null
+  })
+
+/** 点某个锚点开编辑框；返回框中当前值或失败原因 */
+async function openEditorAt(field) {
+  await page.keyboard.press('Escape')
+  // 等旧编辑框真的消失，否则下一次会读到它
+  for (let i = 0; i < 12; i += 1) {
+    if (!(await findEditor())) break
+    await page.waitForTimeout(80)
+  }
+  const box = await page.evaluate((f) => {
+    const el = document.querySelector(`.paper [data-field="${f}"]`)
+    if (!el) return null
+    el.scrollIntoView({ block: 'center' })
+    const r = el.getBoundingClientRect()
+    return { x: r.x + Math.max(4, r.width / 2), y: r.y + r.height / 2 }
+  }, field)
+  if (!box) return { ok: false, why: '纸面上没有这个锚点' }
+  await page.mouse.click(box.x, box.y)
+  await page.waitForTimeout(450)
+  const editor = await findEditor()
+  return editor ? { ok: true, ...editor } : { ok: false, why: '没有弹出编辑框' }
+}
+
+console.log('就地编辑（改值 → 提交 → 看纸面是否变）：')
+let pass = 0
+const CASES = [
+  ['name', '页头 · 姓名'],
+  ['jobTitle', '页头 · 职位'],
+  ['sectionTitle', '模块标题'],
+  ['gridValue', '网格项内容'],
+]
+
+for (const [field, label] of CASES) {
+  const opened = await openEditorAt(field)
+  if (!opened.ok) {
+    console.log(`  *** ${label.padEnd(12)} ${opened.why}`)
+    continue
+  }
+  const before = opened.value
+  const next = before.includes('★') ? before.replace('★', '') : `${before}★`
+
+  const typed = await page.evaluate((val) => {
+    const inp = [...document.querySelectorAll('body *')].find(
+      (el) => /^ie-input/.test(String(el.className || '')) && el.offsetParent !== null,
+    )
+    if (!inp) return false
+    const proto = inp.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+    const setter = Object.getOwnPropertyDescriptor(proto, 'value').set
+    setter.call(inp, val)
+    inp.dispatchEvent(new Event('input', { bubbles: true }))
+    // 失焦提交（组件靠回车 / 失焦落库）
+    inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    return true
+  }, next)
+  if (!typed) {
+    console.log(`  *** ${label.padEnd(12)} 写入失败`)
+    continue
+  }
+  await page.waitForTimeout(700)
+
+  const onPaper = await page.evaluate((f) => {
+    const el = document.querySelector(`.paper [data-field="${f}"]`)
+    return (el?.textContent || '').trim()
+  }, field)
+
+  const ok = onPaper.includes('★')
+  if (ok) pass += 1
+  console.log(`  ${ok ? '✓' : '***'} ${label.padEnd(12)} 「${before}」→ 纸面「${onPaper}」`)
+}
+
+/* ---------- 点模块空白 → 选中 + 右侧卡片可见 ---------- */
+/*
+ * 先把就地编辑关掉再测跳转。
+ * onPaperClick 里 openInlineEdit 优先于跳转：点到任何 [data-field] 都直接返回，
+ * 不发起跳转。而上面的用例刚改过模块标题、编辑框可能还开着 ——
+ * 不关就会把「跳转没生效」误判成功能缺陷（实测就是这么误判的）。
+ */
+await page.keyboard.press('Escape')
+for (let i = 0; i < 12; i += 1) {
+  if (!(await findEditor())) break
+  await page.waitForTimeout(80)
+}
+console.log('\n点模块空白 → 跳转：')
+const jump = await page.evaluate(() => {
+  const secs = [...document.querySelectorAll('.paper .r-sec[data-sec-id]')]
+  const sec = secs[secs.length - 2] || secs[0]
+  if (!sec) return null
+  sec.scrollIntoView({ block: 'center' })
+  const r = sec.getBoundingClientRect()
+
+  /*
+   * 不再靠猜落点，而是**扫描出一个有效点**：
+   * 必须在模块内、且不属于任何 [data-field]（否则 openInlineEdit 优先处理，跳转不发起）。
+   * 前面三次都因为手写坐标误命中标题行而误判成「跳转坏了」——
+   * 与其继续调数字，不如让页面自己找出满足条件的点。
+   */
+  for (let dy = 4; dy < r.height - 4; dy += 4) {
+    for (let dx = 4; dx < r.width - 4; dx += 8) {
+      const x = r.left + dx
+      const y = r.top + dy
+      const el = document.elementFromPoint(x, y)
+      if (!el) continue
+      if (!el.closest('.r-sec[data-sec-id]')) continue
+      if (el.closest('[data-field]')) continue
+      return { id: sec.dataset.secId, x, y, found: true }
+    }
+  }
+  return { id: sec.dataset.secId, found: false }
+})
+let jumpOk = false
+if (!jump) {
+  console.log('  *** 找不到模块')
+} else if (!jump.found) {
+  console.log('  *** 扫遍整个模块也没找到「在模块内、且不是可编辑锚点」的点')
+} else {
+  const at = await page.evaluate(
+    ({ x, y }) => {
+      const el = document.elementFromPoint(x, y)
+      if (!el) return 'null（坐标在视口外）'
+      return (
+        `${el.tagName}.${String(el.className || '').split(' ')[0]}` +
+        ` 在模块内=${Boolean(el.closest('.r-sec[data-sec-id]'))}` +
+        ` 是可编辑锚点=${Boolean(el.closest('[data-field]'))}` +
+        '（若为 true，openInlineEdit 会优先处理，跳转不会发起）'
+      )
+    },
+    { x: jump.x, y: jump.y },
+  )
+  await page.mouse.click(jump.x, jump.y)
+  await page.waitForTimeout(900)
+  const res = await page.evaluate((id) => {
+    const sec = document.querySelector(`.paper .r-sec[data-sec-id="${id}"]`)
+    const card = document.querySelector(`.ed-card[data-section-id="${id}"]`)
+    let visible = false
+    if (card) {
+      const cr = card.getBoundingClientRect()
+      const body = card.closest('.panel-body')
+      const br = body?.getBoundingClientRect()
+      visible = br ? cr.top < br.bottom && cr.bottom > br.top : cr.top < window.innerHeight
+    }
+    return {
+      selected: sec?.classList.contains('is-sec-selected') ?? false,
+      hasCard: Boolean(card),
+      visible,
+    }
+  }, jump.id)
+  jumpOk = res.selected && res.visible
+  console.log(`  落点元素: ${at}`)
+  console.log(
+    `  ${jumpOk ? '✓' : '***'} 选中=${res.selected} · 卡片存在=${res.hasCard} · 卡片在可视区=${res.visible}`,
+  )
+}
+
+console.log('')
+console.log(`就地编辑 ${pass}/${CASES.length} · 跳转 ${jumpOk ? 1 : 0}/1`)
+console.log('运行时错误:', errors.length ? errors.join(' | ') : '无')
+const ok = pass === CASES.length && jumpOk && !errors.length
+console.log(ok ? '纸面行为：全部通过' : '纸面行为：*** 有未通过项 ***')
+await browser.close()
+process.exit(ok ? 0 : 1)

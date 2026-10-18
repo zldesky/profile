@@ -86,6 +86,23 @@ export function usePaperSelection(paperRef, scrollRef, zoom) {
     const paper = toValue(paperRef)
     if (!paper) return
 
+    /*
+     * 按在**可编辑文字**上时不进入选中/框选交互，把这次点击留给就地编辑。
+     *
+     * 这一条是必需的，因为页头字段（姓名 / 职位 / 联系方式）**不在任何 .r-sec 里**：
+     * 它们在模板的页头（实测 `p.r-job → div.who → header.head → div.tpl-classic → .paper`），
+     * 所以下面 `closest('.r-sec[data-sec-id]')` 对它们返回 null，会落到 startBand 分支 ——
+     * 而 startBand 一上来就 `preventDefault()` + `setPointerCapture()`，
+     * 这会**吃掉后续的 click 事件**，于是 PreviewPane 的 onPaperClick 收不到，
+     * 「点页头上的文字就地修改」整个失效。
+     *
+     * 判断条件用 `[data-field]`（与就地编辑同一套锚点），而不是写死页头选择器：
+     * 这样以后任何模块里新增的可编辑字段也自动走同一条路。
+     * 代价是**框选无法从这些文字上起手** —— 但它们散落在页头与模块内部，
+     * 不是框选的常用起手位置，模块之间的空白仍然可以正常框选。
+     */
+    if (event.target.closest?.('[data-field]')) return
+
     const secEl = event.target.closest?.('.r-sec[data-sec-id]')
     if (secEl) pressSection(event, secEl, paper)
     else startBand(event, paper)
@@ -134,7 +151,22 @@ export function usePaperSelection(paperRef, scrollRef, zoom) {
       rects: new Map(),
     }
     interaction = press
-    paper.setPointerCapture(event.pointerId)
+
+    /*
+     * 捕获指针**推迟到拖拽真正激活时**（见 activateDrag），不在这里做。
+     *
+     * 原来在 pointerdown 就无条件 `paper.setPointerCapture(...)`，而拖拽要等
+     * 位移超过 DRAG_THRESHOLD 才开始 —— 于是「按一下模块上的文字」这种最常见操作
+     * 也会被捕获：指针被 paper 抓住后，后续 click 的事件目标被重定向到 paper 本身，
+     * PreviewPane 的 `onPaperClick` 拿到的 target 不再是那个 [data-field] 元素，
+     * **「点文字就地编辑」整个失效**（实测：真实鼠标点击无浮层，而直接给元素派发
+     * click 却能正常弹出，差别就在这行捕获）。
+     *
+     * 这段代码写在就地编辑之前，两者从未一起验证过。
+     * 捕获推迟后：左键单击不再抢指针（就地编辑恢复），一旦真的拖动起来会补上捕获，
+     * 拖出纸面也不丢事件 —— stopPress 里的释放本来就带 hasPointerCapture 判断，
+     * 没捕获过时是无操作，所以推迟是安全的。
+     */
 
     const onMove = (moveEvent) => {
       if (moveEvent.pointerId !== press.pointerId) return
@@ -182,7 +214,15 @@ export function usePaperSelection(paperRef, scrollRef, zoom) {
     secDragging.value = true
     toolbarAnchor.value = null
 
+    /*
+     * 到这里才真正是拖拽，此时再捕获指针。
+     * 放在 pointerdown 会让「按一下」也被捕获，从而吃掉后续 click 的目标元素
+     * （详见 pressSection 里的说明）。
+     */
     const paper = toValue(paperRef)
+    if (paper && !paper.hasPointerCapture?.(press.pointerId)) {
+      paper.setPointerCapture?.(press.pointerId)
+    }
     for (const el of paper?.querySelectorAll('.r-sec[data-sec-id]') || []) {
       const id = el.dataset.secId
       const rect = el.getBoundingClientRect()

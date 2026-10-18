@@ -70,6 +70,8 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 | `npm run verify:templates`  | 逐个切换 12 个模板，数纸面可见文字 —— 验证模板组件迁 TS 后没有静默渲染成空白                                                                                                   |
 | `npm run verify:dialogs`    | 逐个点开关键弹窗，确认迁 TS 后仍能弹出且有内容                                                                                                                                 |
 | `npm run verify:captcha`    | 验证滑块验证码能加载并真的能拖动（注册必经环节）                                                                                                                               |
+| `npm run verify:paper`      | 纸面「点文字就地编辑」与「点模块跳转」：真的改值看纸面是否变                                                                                                                   |
+| `npm run verify:drag`       | 右侧面板模块卡片拖拽换序：真的拖，看顺序是否改变                                                                                                                               |
 | `npm run audit:el`          | 量单个元素的盒子与真实命中区，如 `npm run audit:el -- .ed-check`                                                                                                               |
 | `npm run audit:login`       | 造一个已登录会话令牌，配合 `npm run audit:ui -- --token <令牌>`                                                                                                                |
 | `npm run audit:session`     | 诊断会话令牌是否真的生效                                                                                                                                                       |
