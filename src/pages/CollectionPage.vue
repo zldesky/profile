@@ -410,6 +410,21 @@ async function openLogin() {
   font-weight: 600;
 }
 
+/*
+ * 选中的分类胶囊也要有悬停反馈。
+ *
+ * 上面 `.cl-cat:hover` 只改边框色与文字色，而选中态的边框色就是
+ * `--ed-brand-border`（同一个值）、文字已是最深的 `--ed-brand-deep` ——
+ * 于是鼠标停在**当前选中的分类**上没有任何变化（实测 :hover 匹配、计算样式不变）。
+ * 交互态审计在补齐遍历覆盖后把这条报了出来（此前遍历提前中止，没走到它）。
+ *
+ * 只压暗背景、不动文字色：文字与底色是对比度配好的。
+ * 用 color-mix 而非写死色值，品牌色被 applyChromeAccent 换掉后依然成立。
+ */
+.cl-cat.is-active:hover {
+  background: color-mix(in srgb, var(--ed-brand-tint) 94%, #000);
+}
+
 .cl-cat-count {
   color: var(--ed-text-4);
   font-size: 11px;

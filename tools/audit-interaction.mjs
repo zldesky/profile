@@ -28,6 +28,8 @@ const argv = process.argv.slice(2)
 const tokenFlag = argv.indexOf('--token')
 const token = tokenFlag >= 0 ? argv[tokenFlag + 1] : null
 const shots = argv.includes('--shots')
+/** 打印每次 Tab 的落点，用于诊断「走到 / 可聚焦」的差额是归并还是漏测 */
+const debugFocus = argv.includes('--debug-focus')
 const url = argv.find((a) => a.startsWith('http')) || 'http://127.0.0.1:3001/editor'
 
 const VIEWPORTS = [
@@ -84,6 +86,15 @@ const COLLECT = () => {
         tag: el.tagName.toLowerCase(),
         disabled: el.disabled === true || el.getAttribute('aria-disabled') === 'true',
         bg: fp(el),
+        /*
+         * 静止指纹在这里就取好。
+         * 原来是在焦点循环里对元素 blur() 再 focus() 现取基线 ——
+         * 那等于**每测一个元素就把焦点挪两次**：blur 会改变 :focus-within、
+         * 甚至触发「失焦即关闭」的弹窗，DOM 与 Tab 顺序随之中断，
+         * 后面的元素就走不到了（实测 54 个可聚焦里只走到 40 个）。
+         * 基线必须在任何聚焦发生之前一次性取完。
+         */
+        idleFp: fp(el),
       }
     }),
   }
@@ -109,9 +120,30 @@ for (const vp of VIEWPORTS) {
 
   /* ---------- 1. 键盘焦点可见性：真的按 Tab 走 ---------- */
   const focusProblems = []
-  const focusCount = Math.min(active.length, 40)
-  const seen = new Set()
-  for (let step = 0; step < focusCount; step += 1) {
+  /**
+   * 按「焦点外观指纹」归并：同种外观只算一类，用于回答「有几种焦点样式」。
+   * focusHits 是 Tab 实际落到的次数（含重复落到同一元素）。
+   */
+  const focusLooks = new Set()
+  let focusHits = 0
+  /*
+   * 上限只为防跑飞，不为「抽样」——但**触发时必须报出来**。
+   * 一个静默的上限会让报告看起来是全覆盖，实际只走了一部分：
+   * 这与本项目反复踩到的「工具报绿、覆盖是假的」是同一类问题。
+   */
+  /*
+   * 终止条件是「焦点回到已见过的元素」——说明已经遍历了一圈 —— 而不是按可聚焦元素数硬算步数。
+   *
+   * 原来用 Math.min(active.length, 400) 当次数：Tab 顺序里还夹着**不在收集列表里**的元素
+   * （面板输入框、下拉框，以及纸面那个 contenteditable 的 DIV），它们没有 data-ax-index
+   * 却照样吃掉一次 Tab，于是 54 次 Tab 走不完 54 个目标元素 —— 实测只走到 40 个。
+   * 那看起来像「14 个元素键盘不可达」，实际只是步数被无关元素占掉了。
+   * 上限仍保留，但只为防跑飞，且触发时会明确报出来。
+   */
+  const MAX_TABS = 800
+    const seen = new Set()
+  let step = 0
+  for (; step < MAX_TABS; step += 1) {
     await page.keyboard.press('Tab')
     const state = await page.evaluate(
       (KINDS) => {
@@ -120,6 +152,7 @@ for (const vp of VIEWPORTS) {
         const s = getComputedStyle(el)
         return {
           key: el.tagName + '#' + (el.dataset.axIndex ?? '?'),
+          index: el.dataset.axIndex ?? null,
           label: (el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '')
             .replace(/\s+/g, ' ')
             .trim()
@@ -134,45 +167,57 @@ for (const vp of VIEWPORTS) {
       ['background-color', 'background-image', 'color', 'border-color', 'box-shadow', 'outline-color', 'outline-width', 'filter'],
     )
     if (!state) continue
-    if (seen.has(state.key)) continue
+    focusHits += 1
+    if (debugFocus) console.log(`      Tab#${step + 1} → ${state.key}  ${state.label}`)
+    /*
+     * 只有**收集列表内的元素**才算数：它们带 data-ax-index。
+     * Tab 顺序里还夹着面板输入框 / 下拉框 / 纸面 contenteditable，
+     * 这些没有 index，label 会退化成「?#?」这类占位键 ——
+     * 若拿它们判「绕回」，第一个重复出现的 INPUT#? 就会让遍历提前中止
+     * （实测按 28 次就停了，只覆盖 27 个元素）。
+     */
+    const inTargetList = state.index !== null && state.index !== '?'
+    if (!inTargetList) continue
+    if (seen.has(state.key)) break
     seen.add(state.key)
 
-    // 与「同一元素未聚焦时」比较：临时失焦取一次指纹，再复原
-    const idle = await page.evaluate(() => {
-      const el = document.activeElement
-      if (!el) return null
-      const i = el.dataset.axIndex
-      const target = i !== undefined ? document.querySelector(`[data-ax-index="${i}"]`) : null
-      if (!target) return null
-      const had = document.activeElement
-      target.blur()
-      const s = getComputedStyle(target)
-      const fp = [
-        'background-color',
-        'background-image',
-        'color',
-        'border-color',
-        'box-shadow',
-        'outline-color',
-        'outline-width',
-        'filter',
-      ]
-        .map((k) => s.getPropertyValue(k))
-        .join('|')
-      if (had && had.focus) had.focus()
-      return fp
-    })
+    /*
+     * 与收集阶段取好的静止指纹比较，**不再 blur()/focus() 现取基线**。
+     *
+     * 那两次焦点操作是有副作用的：blur 会改变 :focus-within、可能触发
+     * 「失焦即关闭」的弹窗，使 DOM 与 Tab 顺序中断 —— 实测正是它让 54 个
+     * 可聚焦元素里只走到 40 个。基线已在 collect 阶段取好。
+     */
+    const baseline = items[Number(state.index)]?.idleFp ?? null
 
-    if (idle !== null && state.focused === idle && state.parent === idle) {
+    if (baseline !== null && state.focused === baseline && state.parent === baseline) {
       focusProblems.push(state.label || state.key)
+    } else if (baseline !== null) {
+      focusLooks.add(state.focused)
     }
   }
-  console.log(`  键盘焦点    : 走过 ${seen.size} 个元素，无可见反馈 ${focusProblems.length} 个`)
+  /*
+   * 报三个数而不是一个：走到了多少个不同元素、可聚焦总数是多少、焦点样式有几种。
+   * 只报第一个数时，读者无法判断「是不是所有可聚焦元素都走到了」——
+   * 若两者不等，差额是「被 Tab 走到但焦点外观与已见重复、因而被归并」的那些，
+   * 而不是漏测；把总数摆出来，这个结论才是可核对的。
+   */
+  console.log(
+    `  键盘焦点    : 走到 ${seen.size} / ${active.length} 个可聚焦元素（共按 ${focusHits} 次 Tab），` +
+      `焦点样式 ${focusLooks.size} 种，无可见反馈 ${focusProblems.length} 个`,
+  )
+  if (step >= MAX_TABS) {
+    console.log(`  ⚠ 按了 ${MAX_TABS} 次 Tab 仍未绕回起点，遍历可能未覆盖全部元素`)
+  }
   for (const l of focusProblems.slice(0, 8)) console.log(`      · ${l}`)
 
   /* ---------- 2. 悬停反馈 ---------- */
   const noHover = []
-  const sample = active.slice(0, 60)
+  const HOVER_CAP = 300
+  const sample = active.slice(0, HOVER_CAP)
+  if (active.length > HOVER_CAP) {
+    console.log(`  ⚠ 可交互元素 ${active.length} 个，超出悬停上限 ${HOVER_CAP}，本次只试了前 ${HOVER_CAP} 个`)
+  }
   let skipped = 0
   for (const item of sample) {
     const sel = `[data-ax-index="${item.i}"]`
