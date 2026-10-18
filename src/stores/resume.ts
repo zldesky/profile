@@ -606,6 +606,14 @@ export const useResumeStore = defineStore('resume', () => {
       tree.updateSectionLayout(resume.value, id, patch),
     moveSection: (from: number, to: number) => tree.moveSection(resume.value, from, to),
     reorderSectionsByIds: (ids: string[]) => tree.reorderSectionsByIds(resume.value, ids),
+    reorderEntriesByIds: (sid: string, ids: string[]) =>
+      tree.reorderEntriesByIds(resume.value, sid, ids),
+    reorderGridItemsByIds: (sid: string, ids: string[]) =>
+      tree.reorderGridItemsByIds(resume.value, sid, ids),
+    reorderSkillFieldsByIds: (sid: string, ids: string[]) =>
+      tree.reorderSkillFieldsByIds(resume.value, sid, ids),
+    reorderSkillsByIds: (sid: string, ids: string[]) =>
+      tree.reorderSkillsByIds(resume.value, sid, ids),
 
     addGridItem: (sid: string) => tree.addGridItem(resume.value, sid),
     updateGridItem: (sid: string, iid: string, patch: Parameters<typeof tree.updateGridItem>[3]) =>

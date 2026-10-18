@@ -16,39 +16,24 @@ const props = defineProps<{ section: EntriesSection }>()
 const store = useResumeStore()
 
 /**
- * 拖拽用的可写视图。
+ * 拖拽用的可写视图（按 id 顺序重排）。
  *
  * **不能直接 `v-model="section.items"`**：section 是 prop，往它的属性上赋值会被
  * Vue 拦下，拖完 DOM 被 SortableJS 改过、但数据没变，于是 Vue 重渲染时**顺序回弹**。
  * 实测就是这样：SortableJS 明明接管了（sortable-chosen / drag / ghost 都出现），
  * 松手后条目却恢复原样 —— 看起来像「拖拽没生效」，实际是写回被吞了。
  *
- * 改成 get/set 走 store 的动作：set 里把新数组换算成一次 moveEntry，
- * 于是撤销、落盘、纸面重排全都自动跟上（模块卡片那层直接绑 store 的数组，所以没这个问题）。
+ * 改走 store 的 reorderEntriesByIds（按 id 整体重排），于是撤销、落盘、纸面重排
+ * 全都自动跟上。与网格项 / 技能用的是同一套 reorder 动作，四处保持一致。
+ * （模块卡片那层直接绑 store 自身的数组，所以没这个问题。）
  */
 const draggableItems = computed<EntryItem[]>({
   get: () => props.section.items,
-  set: (next) => {
-    const cur = props.section.items
-    /*
-     * 把「新顺序」换算成 store 的 moveEntry(from, to)。
-     * 做法：逐位比对，第一个不同的位置就是 from；那一位上的条目在新数组里的位置就是 to。
-     * 不用「next[0] 的位置」那种简化写法 —— 它只对「拖到第一位」成立。
-     * 只换序、不增删，所以这样换算与 SortableJS 的结果等价；
-     * 借用 store 的 moveItem 也就顺带拿到了撤销 / 落盘 / 纸面重排。
-     */
-    let from = -1
-    for (let i = 0; i < cur.length; i += 1) {
-      if (cur[i]?.id !== next[i]?.id) {
-        from = i
-        break
-      }
-    }
-    if (from < 0) return
-    const to = next.findIndex((item) => item.id === cur[from].id)
-    if (to < 0 || to === from) return
-    store.moveEntry(props.section.id, from, to)
-  },
+  set: (next) =>
+    store.reorderEntriesByIds(
+      props.section.id,
+      next.map((item) => item.id),
+    ),
 })
 </script>
 

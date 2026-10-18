@@ -156,6 +156,18 @@ export function removeGridItem(resume: Resume, sectionId: string, itemId: string
   if (items && index >= 0) items.splice(index, 1)
 }
 
+/** 按 id 顺序重排某个键值网格模块的字段 */
+export function reorderGridItemsByIds(
+  resume: Resume,
+  sectionId: string,
+  orderedIds: string[],
+): void {
+  const section = findSection(resume, sectionId, 'grid')
+  if (!section) return
+  const next = reorderByIds(section.items, orderedIds)
+  if (next) section.items = next
+}
+
 /* ---------------- 条目列表 ---------------- */
 
 export function addEntry(resume: Resume, sectionId: string): void {
@@ -181,6 +193,32 @@ export function removeEntry(resume: Resume, sectionId: string, entryId: string):
 export function moveEntry(resume: Resume, sectionId: string, from: number, to: number): void {
   const section = findSection(resume, sectionId, 'entries')
   if (section) section.items = moveItem(section.items, from, to)
+}
+
+/**
+ * 按给定 id 顺序整体重排一个数组。
+ *
+ * 与 reorderSectionsByIds 同一套校验：传入顺序必须是现有 id 的一个排列，
+ * 否则安静忽略 —— 拖拽组件偶尔会在增删的中间态给出残缺数组，
+ * 那时宁可不换序，也不能把数组改成缺项的样子。
+ *
+ * 单独抽出来是因为条目 / 网格项 / 技能三处都要用，
+ * 而已有的 reorderSectionsByIds 直接写在 resume.sections 上、无法复用。
+ */
+function reorderByIds<T extends { id: string }>(list: T[], orderedIds: string[]): T[] | null {
+  if (!Array.isArray(orderedIds) || orderedIds.length !== list.length) return null
+  const byId = new Map(list.map((item) => [item.id, item]))
+  if (orderedIds.some((id) => !byId.has(id))) return null
+  // 上面的 has 校验已保证每个 id 都存在，这里断言只是把该前提写给类型系统
+  return orderedIds.map((id) => byId.get(id)!)
+}
+
+/** 按 id 顺序重排某个经历模块的条目 */
+export function reorderEntriesByIds(resume: Resume, sectionId: string, orderedIds: string[]): void {
+  const section = findSection(resume, sectionId, 'entries')
+  if (!section) return
+  const next = reorderByIds(section.items, orderedIds)
+  if (next) section.items = next
 }
 
 export function addBullet(resume: Resume, sectionId: string, entryId: string): void {
@@ -285,4 +323,24 @@ export function removeSkill(resume: Resume, sectionId: string, skillId: string):
   const items = findSection(resume, sectionId, 'skills')?.items
   const index = items ? items.findIndex((i) => i.id === skillId) : -1
   if (items && index >= 0) items.splice(index, 1)
+}
+
+/** 按 id 顺序重排技能模块的「文字描述」字段 */
+export function reorderSkillFieldsByIds(
+  resume: Resume,
+  sectionId: string,
+  orderedIds: string[],
+): void {
+  const section = findSection(resume, sectionId, 'skills')
+  if (!section) return
+  const next = reorderByIds(section.fields, orderedIds)
+  if (next) section.fields = next
+}
+
+/** 按 id 顺序重排技能模块的技能条目 */
+export function reorderSkillsByIds(resume: Resume, sectionId: string, orderedIds: string[]): void {
+  const section = findSection(resume, sectionId, 'skills')
+  if (!section) return
+  const next = reorderByIds(section.items, orderedIds)
+  if (next) section.items = next
 }

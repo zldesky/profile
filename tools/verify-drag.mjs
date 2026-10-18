@@ -80,7 +80,7 @@ async function drag(from, to) {
   await page.waitForTimeout(800)
 }
 
-let pass = 0
+let passCount = 0
 
 /* ---------------- 1. 模块卡片换序 ---------------- */
 console.log('① 模块卡片拖拽：')
@@ -94,86 +94,99 @@ const beforeIds = await sectionIds()
     await drag(pts.from, pts.to)
     const afterIds = await sectionIds()
     const changed = JSON.stringify(beforeIds) !== JSON.stringify(afterIds)
-    if (changed) pass += 1
+    if (changed) passCount += 1
     console.log(`  ${changed ? '✓' : '***'} 顺序 ${changed ? '已改变' : '未变'}`)
   }
 }
 
-/* ---------------- 2. 模块内条目换序 ---------------- */
-console.log('\n② 模块内条目拖拽：')
-// 展开一个 entries 模块的卡片（含「第 N 段」）
+/* ---------------- 2. 各列表型模块内的条目换序 ---------------- */
+
+/**
+ * 取容器内每个子项的「身份」用于比对顺序。
+ * 不能用「第 N 段」这类按位置现算的文本 —— 换序后它仍然是 第1段|第2段，
+ * 会把「顺序已变」误判成「未变」。改用输入框里的真实值（公司 / 职位 / 标签 / 技能名）。
+ * 排除 range：技能熟练度滑块的 value 是百分比，不表示条目身份。
+ */
+
+// 展开全部卡片，让各类模块的列表都渲染出来
 await page.evaluate(() => {
-  const cards = [...document.querySelectorAll('.ed-card')]
-  const withEntries = cards.find((c) => /第 \d+ 段/.test(c.innerText || ''))
-  if (withEntries) {
-    withEntries.scrollIntoView({ block: 'center' })
-    return
-  }
-  /*
-   * 展开卡片要点 .expand —— 那是唯一绑了 toggle 的元素。
-   * 先前写 `card.querySelector('button')` 点到的是别的按钮（可见性开关等），
-   * 卡片根本没展开，于是报「找不到条目」。
-   */
-  for (const card of cards.slice(0, 5)) card.querySelector('.expand')?.click()
-})
-await page.waitForTimeout(800)
-
-const entryInfo = await page.evaluate(() => {
-  const list = [...document.querySelectorAll('.entry-list')].find((l) =>
-    /第 \d+ 段/.test(l.innerText || ''),
-  )
-  if (!list) return null
-      // 取条目「身份」用真实内容（公司/职位等），不能用按位置现算的「第 N 段」
-      const entryKey = (el) =>
-        [...el.querySelectorAll('input, textarea')]
-          .map((i) => String(i.value || '').trim())
-          .filter(Boolean)
-          .slice(0, 2)
-          .join('/') || (el.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 16)
-  const entries = [...list.children]
-  return {
-    count: entries.length,
-    handles: list.querySelectorAll('.ed-drag').length,
-    labels: entries.map((e) => entryKey(e)),
+  for (const card of [...document.querySelectorAll('.ed-card')].slice(0, 8)) {
+    card.querySelector('.expand')?.click()
   }
 })
-console.log(
-  `  条目列表: ${entryInfo ? `${entryInfo.count} 段，手柄 ${entryInfo.handles} 个` : '未找到（可能没有多段经历）'}`,
-)
+await page.waitForTimeout(900)
 
-if (entryInfo && entryInfo.count >= 2 && entryInfo.handles >= 2) {
-  const beforeLabels = entryInfo.labels
-  const pts = await centersOf('.entry-list > * .ed-drag', 1, '.entry-list > *', 0, 'to')
-  if (pts) {
-    console.log(`  源 ${Math.round(pts.from.x)},${Math.round(pts.from.y)}(可见=${pts.fromVisible}) → 目标 ${Math.round(pts.to.x)},${Math.round(pts.to.y)}(可见=${pts.toVisible})`)
-    await drag(pts.from, pts.to)
-    const afterLabels = await page.evaluate(() => {
-      const entryKey = (el) =>
-        [...el.querySelectorAll('input, textarea')]
-          .map((i) => String(i.value || '').trim())
-          .filter(Boolean)
-          .slice(0, 2)
-          .join('/') || (el.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 16)
-      const list = [...document.querySelectorAll('.entry-list')].find((l) =>
-        /第 \d+ 段/.test(l.innerText || ''),
-      )
-      return [...(list?.children || [])].map((e) => entryKey(e))
+const lists = await page.evaluate(() => {
+  const out = []
+  for (const sel of ['.entry-list', '.ed-sub-list']) {
+    ;[...document.querySelectorAll(sel)].forEach((el, i) => {
+      const kids = [...el.children]
+      if (kids.length >= 2 && el.querySelectorAll('.ed-drag').length >= 2) {
+        out.push({ sel, i, count: kids.length })
+      }
     })
-    const changed = JSON.stringify(beforeLabels) !== JSON.stringify(afterLabels)
-    if (changed) pass += 1
-    console.log(`  ${changed ? '✓' : '***'} 条目顺序 ${changed ? '已改变' : '未变'}`)
-    console.log(`      拖前: ${beforeLabels.join(' | ')}`)
-    console.log(`      拖后: ${afterLabels.join(' | ')}`)
-  } else {
-    console.log('  *** 拿不到手柄或目标坐标')
   }
-} else {
-  console.log('  *** 条目不足 2 段，无法验证换序')
+  return out
+})
+console.log(`\n② 列表型模块内条目拖拽：共发现 ${lists.length} 个可拖列表`)
+
+let listPass = 0
+for (const { sel, i, count } of lists) {
+  const labelsOf = () =>
+    page.evaluate(
+      ({ sel: s2, i: i2 }) => {
+        const key = (el) =>
+          [...el.querySelectorAll('input:not([type=range]), textarea')]
+            .map((n) => String(n.value || '').trim())
+            .filter(Boolean)
+            .slice(0, 2)
+            .join('/') || (el.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 16)
+        const el = [...document.querySelectorAll(s2)][i2]
+        return [...(el?.children || [])].map((c) => key(c))
+      },
+      { sel, i },
+    )
+
+  const before = await labelsOf()
+  const pts = await page.evaluate(
+    ({ sel: s2, i: i2 }) => {
+      const list = [...document.querySelectorAll(s2)][i2]
+      const kids = [...list.children]
+      const h = kids[1]?.querySelector('.ed-drag')
+      if (!h) return null
+      kids[0].scrollIntoView({ block: 'center' })
+      const rh = h.getBoundingClientRect()
+      const rt = kids[0].getBoundingClientRect()
+      return {
+        from: { x: rh.x + rh.width / 2, y: rh.y + rh.height / 2 },
+        to: { x: rt.x + rt.width / 2, y: rt.y + rh.height / 2 },
+      }
+    },
+    { sel, i },
+  )
+  if (!pts) {
+    console.log(`  *** ${sel}[${i}] 拿不到手柄坐标`)
+    continue
+  }
+  await drag(pts.from, pts.to)
+  const after = await labelsOf()
+  const changed = JSON.stringify(before) !== JSON.stringify(after)
+  if (changed) listPass += 1
+  console.log(
+    `  ${changed ? '✓' : '***'} ${sel}[${i}]（${count} 项）${changed ? '已改变' : '未变'}`,
+  )
+  if (!changed) console.log(`      前后都是: ${before.join(' | ')}`)
 }
 
+/* ---------------- 汇总 ---------------- */
+const pass = passCount + listPass
+const total = 1 + lists.length
+
 console.log('')
-console.log(`拖拽验证：${pass}/2 项通过`)
+console.log(
+  `拖拽验证：${pass}/${total} 项通过（模块卡片 ${passCount}/1 · 列表内条目 ${listPass}/${lists.length}）`,
+)
 console.log('运行时错误:', errors.length ? errors.join(' | ') : '无')
 
 await browser.close()
-process.exit(pass === 2 ? 0 : 1)
+process.exit(pass === total && !errors.length ? 0 : 1)
