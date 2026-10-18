@@ -10,6 +10,7 @@ import { useRouter } from 'vue-router'
 import AuthDialog from '@/components/AuthDialog.vue'
 import CompletenessDialog from '@/components/CompletenessDialog.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import AiFillDialog from '@/components/AiFillDialog.vue'
 import JdMatchDialog from '@/components/JdMatchDialog.vue'
 import PasswordDialog from '@/components/PasswordDialog.vue'
 import ResumeManagerDialog from '@/components/ResumeManagerDialog.vue'
@@ -158,6 +159,8 @@ const importMenuOpen = shallowRef(false)
 const pdfInput = useTemplateRef('pdfInput')
 /** PDF 解析在主线程外的 worker 里跑，但整包可能要一两秒，按钮给出忙态 */
 const pdfParsing = shallowRef(false)
+/** AI 补充导入弹窗开关 */
+const aiFillOpen = shallowRef(false)
 
 function pickPdf() {
   pdfInput.value.value = ''
@@ -216,6 +219,11 @@ function runExport(action) {
 function runImport(action) {
   importMenuOpen.value = false
   action()
+}
+
+/** 打开 AI 补充导入。同样包一层，避免模板里出现多语句行内表达式。 */
+function openAiFill() {
+  aiFillOpen.value = true
 }
 </script>
 
@@ -310,7 +318,11 @@ function runImport(action) {
         </button>
         <button role="menuitem" :disabled="pdfParsing" @click="runImport(pickPdf)">
           <span class="menu-name">{{ pdfParsing ? '解析中…' : 'PDF 简历导入' }}</span>
-          <span class="menu-desc">文字版 PDF 转可编辑</span>
+          <span class="menu-desc">规则解析，整份重建</span>
+        </button>
+        <button role="menuitem" @click="runImport(openAiFill)">
+          <span class="menu-name">AI 补充导入</span>
+          <span class="menu-desc">按提示词填到指定位置</span>
         </button>
       </div>
     </div>
@@ -449,6 +461,7 @@ function runImport(action) {
     <ShareDialog :open="shareOpen" @close="shareOpen = false" />
     <CompletenessDialog :open="checkOpen" @close="checkOpen = false" />
     <JdMatchDialog :open="jdOpen" @close="jdOpen = false" />
+    <AiFillDialog :open="aiFillOpen" @close="aiFillOpen = false" />
     <AuthDialog />
     <ConfirmDialog
       :open="logoutConfirmOpen"

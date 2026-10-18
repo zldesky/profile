@@ -23,7 +23,9 @@
     "audit:session": "node tools/probe-session.mjs",
     "audit:perf": "node tools/probe-perf.mjs",
     "audit:mobile": "node tools/probe-mobile.mjs",
-    "audit:trace": "node tools/trace-startup.mjs"
+    "audit:trace": "node tools/trace-startup.mjs",
+    "audit:shot": "node tools/shoot-pages.mjs",
+    "audit:dialog": "node tools/shoot-dialog.mjs"
   },
   "lint-staged": {
     "*.{js,vue}": [
