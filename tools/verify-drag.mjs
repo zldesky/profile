@@ -1,10 +1,15 @@
 /**
- * 验证右侧内容面板里的拖拽排序：模块卡片能否上下拖动并真的改变顺序。
- * 用法：node tools/verify-drag.mjs
+ * 验证右侧内容面板的拖拽排序。
+ * 用法：node tools/verify-drag.mjs [url]
  *
- * 为什么单独验：拖拽是纯交互，静态审计与单测都看不到。
- * 而「拖起来没反应」与「拖了但顺序没变」是两回事，需要分别观察：
- * 前者多为手柄/命中区问题，后者是落点计算问题。
+ * 覆盖两级：
+ *  1. **模块卡片**换序；
+ *  2. **模块内条目**换序（体验 / 项目等 entries 模块里的「第 N 段」）。
+ * 两者都是纯交互，静态审计看不到、单测不挂载组件，所以必须真的拖一次。
+ *
+ * 一个反复踩到的前提：卡片/条目在面板里可能**远在视口之外**
+ * （实测模块手柄 y=1918 而窗口仅 900 高），不先滚进视口的话鼠标事件落空，
+ * 会被误判成「拖拽没生效」。所以每次拖之前都先 scrollIntoView。
  */
 import { chromium } from '../server/node_modules/playwright-core/index.mjs'
 
@@ -26,83 +31,149 @@ await page.evaluate(() => {
 })
 await page.waitForTimeout(400)
 
-const order = () =>
-  page.evaluate(() =>
-    [...document.querySelectorAll('.ed-card')].map((c) => c.dataset.sectionId),
+const sectionIds = () =>
+  page.evaluate(() => [...document.querySelectorAll('.ed-card')].map((c) => c.dataset.sectionId))
+
+/**
+
+/**
+ * 一次性取两个元素的中心点。
+ * 不能用 centerOf 分别取：它为每个元素各做一次 scrollIntoView，
+ * 第二次滚动会把第一次量到的坐标作废 —— 拖动就从错误的位置开始，
+ * 表现出来就是「拖了但没反应」。这是本轮第三次栽在坐标系上。
+ */
+async function centersOf(fromSel, fromIdx, toSel, toIdx, anchor = 'from') {
+  return page.evaluate(
+    ({ a, ai, b, bi, anchorEl }) => {
+      const ea = [...document.querySelectorAll(a)][ai]
+      const eb = [...document.querySelectorAll(b)][bi]
+      if (!ea || !eb) return null
+      /*
+       * 滚一次、同时读两点。以谁为准可选：
+       * 条目拖拽要以**目标**为准 —— 条目在卡片内部，以源为准时第二段会落到
+       * 折叠线以下（实测 to.y=1193，视口只有 900），鼠标拖到那儿等于没拖到。
+       */
+      ;(anchorEl === 'to' ? eb : ea).scrollIntoView({ block: 'center' })
+      const ra = ea.getBoundingClientRect()
+      const rb = eb.getBoundingClientRect()
+      const vis = (r) => r.top > 0 && r.bottom < window.innerHeight
+      return {
+        from: { x: ra.x + ra.width / 2, y: ra.y + ra.height / 2 },
+        to: { x: rb.x + rb.width / 2, y: rb.y + rb.height / 2 },
+        fromVisible: vis(ra),
+        toVisible: vis(rb),
+      }
+    },
+    { a: fromSel, ai: fromIdx, b: toSel, bi: toIdx, anchorEl: anchor },
   )
+}
 
-const titles = () =>
-  page.evaluate(() =>
-    [...document.querySelectorAll('.ed-card')].map((c) => {
-      const t = c.querySelector('[class*="title"], h3, h4')
-      const text = (t?.textContent || c.innerText || '').replace(/\s+/g, ' ').trim()
-      // 用 id 短码兜底，保证对照可读且唯一
-      return (text ? text.slice(0, 10) : '') + '#' + String(c.dataset.sectionId).slice(-4)
-    }),
-  )
-
-const before = await order()
-const beforeTitles = await titles()
-console.log('拖拽前后对比（模块卡片）：')
-console.log('  拖前顺序: ' + beforeTitles.join(' → '))
-
-// 找第一张卡片上的拖拽手柄
-// 先把卡片滚进面板可视区（否则手柄在视口外，鼠标事件落空）
-await page.evaluate(() => {
-  document.querySelector('.ed-card')?.scrollIntoView({ block: 'start' })
-})
-await page.waitForTimeout(500)
-
-const handleInfo = await page.evaluate(() => {
-  const card = document.querySelector('.ed-card')
-  if (!card) return null
-  const handle = card.querySelector('[class*="drag"], [class*="handle"], .ed-drag')
-  const r = (handle || card).getBoundingClientRect()
-  return {
-    hasHandle: Boolean(handle),
-    handleCls: handle ? handle.className : null,
-    x: r.x + r.width / 2,
-    y: r.y + r.height / 2,
-    cardTop: Math.round(card.getBoundingClientRect().top),
+async function drag(from, to) {
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.down()
+  for (let i = 1; i <= 20; i += 1) {
+    await page.mouse.move(from.x + ((to.x - from.x) * i) / 20, from.y + ((to.y - from.y) * i) / 20)
+    await page.waitForTimeout(35)
   }
-})
-console.log('  手柄: ' + (handleInfo?.hasHandle ? `有（${handleInfo.handleCls}）` : '没有（退化到整卡拖拽）'))
+  await page.waitForTimeout(200)
+  await page.mouse.up()
+  await page.waitForTimeout(800)
+}
 
-if (!handleInfo) {
-  console.log('  *** 找不到卡片')
-} else {
-  // 把第一张拖到第三张的位置
-  const targets = await page.evaluate(() => {
-    const cards = [...document.querySelectorAll('.ed-card')]
-    if (cards.length < 3) return null
-    const t = cards[2].getBoundingClientRect()
-    return { x: t.x + t.width / 2, y: t.y + t.height / 2, count: cards.length }
-  })
-  if (!targets) {
-    console.log(`  *** 卡片不足 3 张（实际 ${before.length}），无法验证换序`)
+let pass = 0
+
+/* ---------------- 1. 模块卡片换序 ---------------- */
+console.log('① 模块卡片拖拽：')
+const beforeIds = await sectionIds()
+{
+  const pts = await centersOf('.ed-card .ed-drag', 0, '.ed-card', 2)
+  if (!pts) {
+    console.log('  *** 找不到卡片或手柄')
   } else {
-    await page.mouse.move(handleInfo.x, handleInfo.y)
-    await page.mouse.down()
-    // 分步移动，触发 draggable 的位移判定
-    for (let i = 1; i <= 12; i += 1) {
-      const y = handleInfo.y + ((targets.y - handleInfo.y) * i) / 12
-      await page.mouse.move(handleInfo.x, y)
-      await page.waitForTimeout(45)
-    }
-    await page.waitForTimeout(250)
-    await page.mouse.up()
-    await page.waitForTimeout(700)
-
-    const after = await order()
-    const afterTitles = await titles()
-    const changed = JSON.stringify(before) !== JSON.stringify(after)
-    console.log('  拖后顺序: ' + afterTitles.join(' → '))
-    console.log('  ' + (changed ? '✓ 顺序已改变' : '*** 顺序未变（拖拽未生效）'))
-    if (changed) {
-      console.log('  新首位: ' + afterTitles[0])
-    }
+    console.log(`  源 ${Math.round(pts.from.x)},${Math.round(pts.from.y)}(可见=${pts.fromVisible}) → 目标 ${Math.round(pts.to.x)},${Math.round(pts.to.y)}(可见=${pts.toVisible})`)
+    await drag(pts.from, pts.to)
+    const afterIds = await sectionIds()
+    const changed = JSON.stringify(beforeIds) !== JSON.stringify(afterIds)
+    if (changed) pass += 1
+    console.log(`  ${changed ? '✓' : '***'} 顺序 ${changed ? '已改变' : '未变'}`)
   }
 }
 
-console.log('  运行时错误: ' + (errors.length ? errors.join(' | ') : '无'))
+/* ---------------- 2. 模块内条目换序 ---------------- */
+console.log('\n② 模块内条目拖拽：')
+// 展开一个 entries 模块的卡片（含「第 N 段」）
+await page.evaluate(() => {
+  const cards = [...document.querySelectorAll('.ed-card')]
+  const withEntries = cards.find((c) => /第 \d+ 段/.test(c.innerText || ''))
+  if (withEntries) {
+    withEntries.scrollIntoView({ block: 'center' })
+    return
+  }
+  /*
+   * 展开卡片要点 .expand —— 那是唯一绑了 toggle 的元素。
+   * 先前写 `card.querySelector('button')` 点到的是别的按钮（可见性开关等），
+   * 卡片根本没展开，于是报「找不到条目」。
+   */
+  for (const card of cards.slice(0, 5)) card.querySelector('.expand')?.click()
+})
+await page.waitForTimeout(800)
+
+const entryInfo = await page.evaluate(() => {
+  const list = [...document.querySelectorAll('.entry-list')].find((l) =>
+    /第 \d+ 段/.test(l.innerText || ''),
+  )
+  if (!list) return null
+      // 取条目「身份」用真实内容（公司/职位等），不能用按位置现算的「第 N 段」
+      const entryKey = (el) =>
+        [...el.querySelectorAll('input, textarea')]
+          .map((i) => String(i.value || '').trim())
+          .filter(Boolean)
+          .slice(0, 2)
+          .join('/') || (el.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 16)
+  const entries = [...list.children]
+  return {
+    count: entries.length,
+    handles: list.querySelectorAll('.ed-drag').length,
+    labels: entries.map((e) => entryKey(e)),
+  }
+})
+console.log(
+  `  条目列表: ${entryInfo ? `${entryInfo.count} 段，手柄 ${entryInfo.handles} 个` : '未找到（可能没有多段经历）'}`,
+)
+
+if (entryInfo && entryInfo.count >= 2 && entryInfo.handles >= 2) {
+  const beforeLabels = entryInfo.labels
+  const pts = await centersOf('.entry-list > * .ed-drag', 1, '.entry-list > *', 0, 'to')
+  if (pts) {
+    console.log(`  源 ${Math.round(pts.from.x)},${Math.round(pts.from.y)}(可见=${pts.fromVisible}) → 目标 ${Math.round(pts.to.x)},${Math.round(pts.to.y)}(可见=${pts.toVisible})`)
+    await drag(pts.from, pts.to)
+    const afterLabels = await page.evaluate(() => {
+      const entryKey = (el) =>
+        [...el.querySelectorAll('input, textarea')]
+          .map((i) => String(i.value || '').trim())
+          .filter(Boolean)
+          .slice(0, 2)
+          .join('/') || (el.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 16)
+      const list = [...document.querySelectorAll('.entry-list')].find((l) =>
+        /第 \d+ 段/.test(l.innerText || ''),
+      )
+      return [...(list?.children || [])].map((e) => entryKey(e))
+    })
+    const changed = JSON.stringify(beforeLabels) !== JSON.stringify(afterLabels)
+    if (changed) pass += 1
+    console.log(`  ${changed ? '✓' : '***'} 条目顺序 ${changed ? '已改变' : '未变'}`)
+    console.log(`      拖前: ${beforeLabels.join(' | ')}`)
+    console.log(`      拖后: ${afterLabels.join(' | ')}`)
+  } else {
+    console.log('  *** 拿不到手柄或目标坐标')
+  }
+} else {
+  console.log('  *** 条目不足 2 段，无法验证换序')
+}
+
+console.log('')
+console.log(`拖拽验证：${pass}/2 项通过`)
+console.log('运行时错误:', errors.length ? errors.join(' | ') : '无')
+
 await browser.close()
+process.exit(pass === 2 ? 0 : 1)

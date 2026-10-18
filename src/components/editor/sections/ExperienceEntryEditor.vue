@@ -80,6 +80,9 @@ async function onLogoChange(event: Event) {
   <div class="entry-editor ed-sub">
     <div class="ed-sub-head">
       <span class="ed-sub-label">第 {{ index + 1 }} 段</span>
+      <span class="ed-drag" title="按住拖动可调整条目顺序">
+        <SvgIcon name="drag" :size="14" />
+      </span>
       <button
         class="ed-icon-btn"
         title="上移"
