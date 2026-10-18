@@ -237,7 +237,7 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 | 维度                     | 现状                                                                                     |
 | ------------------------ | ---------------------------------------------------------------------------------------- |
 | `<script setup>` 写法    | **64 / 64 全部完成**（`export default`、`defineComponent`、`setup()` 返回对象均为 0 处） |
-| `lang="ts"`              | **43 / 64**（约 6,600 行）；剩余 21 个仍是 JS，约 8,200 行                               |
+| `lang="ts"`              | **44 / 64**（约 7,000 行）；剩余 20 个仍是 JS，约 7,800 行                               |
 | 这些 JS 组件受类型检查吗 | **不受**。`tsconfig.json` 里 `checkJs: false`，且 `include` 未纳入 `src/**/*.js`         |
 
 实测过「打开 `checkJs` 直接检查现有 JS 组件」这条路：会报 **644 处**错误，其中 289 处只是缺参数注解（`TS7006`）—— 说明这条路的前期噪音很大，**逐组件迁 TS 比全局开 `checkJs` 更可控**。所以策略是分批迁，而不是一次性打开开关。
@@ -262,7 +262,7 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 
 这个脚本自己也踩过一次坑，值得记：第一版想直接改 Pinia store（`#app.__vue_app__` → `$pinia`）来切模板，实测拿不到 pinia 实例，12 个模板全报 `apply=no-store`——**工具坏了，却看起来像 12 个模板都渲染失败**。改成黑盒点真实按钮后 12/12 通过。这与审计脚本那两次教训是同一类：**先怀疑工具，再怀疑被测对象**。
 
-**剩余 21 个 JS 组件**，最大的是 `AdminPage` 823 / `TopBar` 778 / `CollectionPage` 667 / `PreviewPane` 422。主要机械成本是**模板内联处理器的 DOM 收窄**：`$event.target` 是 `EventTarget`，取 `.value` / `.checked` 需写成 `($event.target as HTMLInputElement)`（本轮实测替换 11 处）。另外分段编辑器的 `section` prop 应按可辨识联合收窄成 `EntriesSection` / `GridSection` / `SkillsSection` / `TextSection`，否则模板里取 `section.items` 会报错 —— 那正是联合类型在提醒「先确定是哪种模块」。
+**剩余 20 个 JS 组件**，最大的是 `AdminPage` 823 / `TopBar` 778 / `CollectionPage` 667 / `HomePage` 577 / `TemplatePicker` 540。主要机械成本是**模板内联处理器的 DOM 收窄**：`$event.target` 是 `EventTarget`，取 `.value` / `.checked` 需写成 `($event.target as HTMLInputElement)`（本轮实测替换 11 处）。另外分段编辑器的 `section` prop 应按可辨识联合收窄成 `EntriesSection` / `GridSection` / `SkillsSection` / `TextSection`，否则模板里取 `section.items` 会报错 —— 那正是联合类型在提醒「先确定是哪种模块」。
 
 `stores/resume` 是本地优先的落盘中心（多文档槽位、历史快照、头像引用、超容量降级），迁移前先用 `tests/resumeStore.test.js` 立起不变量再改类型；该测试需要 `localStorage` 与 `window`/`document`，由 `tests/setup/browser-globals.js` 按需安装（**刻意不放进 vitest 的 setupFiles**：全局安装 `document` 会让 pdf.js 误判运行环境，导致 PDF 导入端到端测试失败）。
 
@@ -327,4 +327,6 @@ tests/               Vitest 测试
 - AI API Key 只存用户浏览器本地，`/api/ai/chat` 转发即用即弃，不落库不打日志；AI 转发与图片代理均带 SSRF 防线（`aiGuard.js` / `imageProxy.js`）；
 - 所有运行时数据集中在 `server/.data/`（SQLite 单文件），备份/迁移拷这一个目录即可。
 
-`PreviewPane` 刻意留在后面：它 420 行且逻辑密（就地编辑、框选、拖拽的编排），撞上本轮末尾赶工不划算。
+**`PreviewPane` 已迁完**（420 行，就地编辑 / 框选 / 拖拽的编排）。过程中遇到一个值得记的取舍：它读 `bandRect.value.left` 报「`never` 上不存在该属性」，根因是上游 `usePaperSelection.js` 里 `shallowRef(null)` 被推成 `Ref<null>`。
+
+两条路：把 406 行的指针状态机整体转 TS（一试就引出 46 处错误，改动面远大于收益），或者**只给那个 ref 加 JSDoc 类型标注**。选了后者 —— tsconfig 已开 `allowJs`，TS 会读 JSDoc，调用方拿到真类型，而那份脆弱逻辑一行未动。**能用标注解决的事，不必用重写解决。**

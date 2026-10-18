@@ -39,6 +39,13 @@ export function usePaperSelection(paperRef, scrollRef, zoom) {
   const selection = useSelectionStore()
 
   /** 框选矩形的视口坐标，渲染选框 overlay 用 */
+  /**
+   * 框选矩形（视口坐标，相对舞台滚动容器）。
+   * 用 JSDoc 标注：`shallowRef(null)` 在 TS 下会推成 `Ref<null>`，
+   * 调用方读 `.value.left` 就被收窄成 `never`。标注后调用方拿到真类型，
+   * 而本文件仍保持 JS（见文件顶部说明）。
+   * @type {import('vue').ShallowRef<{ left: number, top: number, right: number, bottom: number } | null>}
+   */
   const bandRect = shallowRef(null)
   /** 是否正在整组拖拽 */
   const secDragging = shallowRef(false)

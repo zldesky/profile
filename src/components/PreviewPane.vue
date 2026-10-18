@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 预览区。
  * 按当前模板渲染 A4 纸张；缩放、页数估算、头像拖拽与模块框选/整组拖拽
@@ -19,6 +19,7 @@ import PreviewToolbar from '@/components/preview/PreviewToolbar.vue'
 import SelectionToolbar from '@/components/preview/SelectionToolbar.vue'
 import { useAvatarDrag } from '@/composables/useAvatarDrag'
 import { resolveEditTarget } from '@/composables/useInlineEdit'
+import type { EditTarget } from '@/composables/useInlineEdit'
 import { usePageMetrics } from '@/composables/usePageMetrics'
 import { usePaperSelection } from '@/composables/usePaperSelection'
 import { usePaperJump } from '@/composables/usePaperJump'
@@ -65,8 +66,8 @@ const { focusSection } = usePaperJump()
  * 锚点用 shallowRef 而非 ref —— 存的是 DOM 元素，被 Vue 代理一层既没必要，
  * 也会让 getBoundingClientRect 之类的调用绕远路。
  */
-const editTarget = shallowRef(null)
-const editAnchor = shallowRef(null)
+const editTarget = shallowRef<EditTarget | null>(null)
+const editAnchor = shallowRef<HTMLElement | null>(null)
 
 /**
  * 从被点的元素解析出可编辑字段。命中返回 true（调用方据此不再跳转）。
@@ -74,19 +75,25 @@ const editAnchor = shallowRef(null)
  * 向上找最近的带 data-field 的祖先：点到的是文字节点所在的 span，
  * 但它可能是 <span data-field> 里的 <img>，所以要向上收敛。
  */
-function openInlineEdit(node) {
-  const el = node?.closest?.('[data-field]')
+function openInlineEdit(node: EventTarget | null) {
+  if (!(node instanceof Element)) return false
+  /*
+   * 用 closest<HTMLElement>：纸面上带 data-field 的必然是 HTML 元素
+   * （span / h1 / img 等），而 Element 上没有 dataset，后面每处都得再收窄一次。
+   * 一次标注到位，也如实说明了「这个属性只挂在 HTML 元素上」。
+   */
+  const el = node.closest<HTMLElement>('[data-field]')
   if (!el) return false
 
-  const sectionEl = el.closest('[data-sec-id]')
-  const entryEl = el.closest('[data-item-id]')
+  const sectionEl = el.closest<HTMLElement>('[data-sec-id]')
+  const entryEl = el.closest<HTMLElement>('[data-item-id]')
   const target = resolveEditTarget(store.resume, {
     sectionId: sectionEl?.dataset.secId || '',
     field: el.dataset.field || '',
     // SectionBody 把条目/要点/meta 的 id 挂在最近的 data-item-id 上
     itemId: el.dataset.itemId || entryEl?.dataset.itemId || '',
     // 条目本身的 id 挂在 .r-entry 上，要点与 meta 需要它定位父条目
-    entryId: el.closest('.r-entry')?.dataset.itemId || '',
+    entryId: el.closest<HTMLElement>('.r-entry')?.dataset.itemId || '',
   })
   if (!target) return false
 
@@ -128,7 +135,7 @@ const SECTION_TIP = '点文字就地修改 · 点空白处跳到右侧编辑卡�
 function applySectionTips() {
   const paper = paperRef.value
   if (!paper) return
-  for (const el of paper.querySelectorAll('.r-sec[data-sec-id]')) {
+  for (const el of paper.querySelectorAll<HTMLElement>('.r-sec[data-sec-id]')) {
     if (el.title !== SECTION_TIP) el.title = SECTION_TIP
   }
 }
@@ -151,7 +158,7 @@ const bandStyle = computed(() => {
 /**
  * 纸面按下：头像拖拽与模块框选/整组拖拽各自判断命中目标，互不干扰。
  */
-function onPaperPointerDown(event) {
+function onPaperPointerDown(event: PointerEvent) {
   onSectionPointerDown(event)
   onAvatarPointerDown(event)
 }
@@ -172,7 +179,7 @@ function onPaperPointerDown(event) {
  *  3. 命中 .r-sec[data-sec-id] —— 点到页头、空白或头像时忽略。
  * 注意模块正文里有链接与图片，点到它们同样按模块处理，不会误跳。
  */
-function onPaperClick(event) {
+function onPaperClick(event: MouseEvent) {
   if (secDragging.value) return
   if (event.detail > 1) return
   if (event.ctrlKey || event.metaKey) return
@@ -180,7 +187,9 @@ function onPaperClick(event) {
   // 就地编辑优先：文字上有点击锚点时直接改，不再绕去右侧面板
   if (openInlineEdit(event.target)) return
 
-  const hit = event.target.closest?.('.r-sec[data-sec-id]')
+  const target = event.target
+  if (!(target instanceof Element)) return
+  const hit = target.closest<HTMLElement>('.r-sec[data-sec-id]')
   if (!hit) return
   const id = hit.dataset.secId
   if (!id) return
@@ -237,7 +246,7 @@ function batchToggleVisible() {
 }
 
 /** 批量微调左缩进 / 上方间距，步长与范围与编辑面板的滑杆一致 */
-function batchAdjustLayout(field, step) {
+function batchAdjustLayout(field: 'indent' | 'extraGap', step: number) {
   const range = field === 'indent' ? { min: -24, max: 48 } : { min: -12, max: 48 }
   store.sections
     .filter((s) => selection.has(s.id))
@@ -287,7 +296,7 @@ async function compressToOnePage() {
   compressing.value = true
 
   try {
-    const round2 = (value) => Number(value.toFixed(2))
+    const round2 = (value: number) => Number(value.toFixed(2))
     let guard = 24
 
     while (measure() > 1 && guard-- > 0) {
