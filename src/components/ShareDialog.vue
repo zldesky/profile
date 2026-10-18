@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 简历分享弹窗：把当前简历创建为公开只读链接。
  * 创建要求登录（防滥用）；链接任何人可查看与打印，到期自动失效，
@@ -11,6 +11,7 @@ import SvgIcon from '@/components/SvgIcon.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useDialogA11y } from '@/composables/useDialogA11y.ts'
 import { useToast } from '@/composables/useToast'
+import type { MyShareItem } from '@/utils/shareApi'
 import { useResumeStore } from '@/stores/resume'
 import { formatTime } from '@/utils/helpers'
 import { createShare, deleteShare, fetchMyShares } from '@/utils/shareApi'
@@ -41,7 +42,7 @@ const expiryText = shallowRef('')
 const listInCollection = shallowRef(false)
 
 /** 我的历史分享（弹窗打开时拉取） */
-const myShares = shallowRef([])
+const myShares = shallowRef<MyShareItem[]>([])
 const loadingShares = shallowRef(false)
 
 async function loadMyShares() {
@@ -76,10 +77,11 @@ async function generate() {
     expiryText.value = `有效期约 ${days} 天，到期自动失效`
     toast(listInCollection.value ? '分享链接已生成，并已展示到简历合集' : '分享链接已生成')
   } catch (error) {
-    if (error.code === 'AUTH_EXPIRED') {
+    const err = error as { code?: string; message?: string }
+    if (err.code === 'AUTH_EXPIRED') {
       toast('登录已过期，请重新登录后再分享')
     } else {
-      toast(error.message || '分享创建失败')
+      toast(err.message || '分享创建失败')
     }
   } finally {
     busy.value = false
@@ -107,25 +109,25 @@ async function revoke() {
     toast('分享已撤销，链接立即失效')
     await loadMyShares()
   } catch (error) {
-    toast(error.message || '撤销失败')
+    toast(error instanceof Error ? error.message : '撤销失败')
   } finally {
     busy.value = false
   }
 }
 
 /** 打开某条历史分享的只读页 */
-function openShareLink(item) {
+function openShareLink(item: MyShareItem) {
   window.open(`/share/${item.id}`, '_blank', 'noopener')
 }
 
 /** 撤销历史分享；若它在合集里会同步从官网移除 */
-async function revokeShareItem(item) {
+async function revokeShareItem(item: MyShareItem) {
   try {
     await deleteShare(item.id)
     toast(item.listed ? '分享已撤销，并已从简历合集移除' : '分享已撤销，链接立即失效')
     await loadMyShares()
   } catch (error) {
-    toast(error.message || '撤销失败')
+    toast(error instanceof Error ? error.message : '撤销失败')
   }
 }
 </script>
@@ -166,7 +168,12 @@ async function revokeShareItem(item) {
         <template v-else>
           <label class="sh-field">
             <span>分享链接</span>
-            <input class="ed-input" :value="link" readonly @focus="$event.target.select()" />
+            <input
+              class="ed-input"
+              :value="link"
+              readonly
+              @focus="($event.target as HTMLInputElement).select()"
+            />
           </label>
           <p class="ed-hint">
             {{ expiryText

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * JD 匹配弹窗：粘贴目标岗位 JD → AI 比对简历 → 已覆盖/缺失关键词与修改建议。
  * 走与 AI 润色相同的 BYOK 通道（本机服务转发，Key 即用即弃）；
@@ -36,7 +36,18 @@ useDialogA11y(
 )
 
 const jd = shallowRef('')
-const result = shallowRef(null)
+/**
+ * 匹配结果。`parseJdMatchResult` 仍在 JS 里（utils/aiClient.js），
+ * shallowRef(null) 会被推成 Ref<null>，下面读 .matched 就报 never。
+ * 就近声明所需形状，比为了一个返回值去转整个 AI 客户端更划算。
+ */
+interface JdMatchResult {
+  matched: { kw: string; note: string }[]
+  missing: { kw: string; note: string }[]
+  suggestions: string[]
+}
+
+const result = shallowRef<JdMatchResult | null>(null)
 const busy = shallowRef(false)
 const error = shallowRef('')
 const settingsOpen = shallowRef(false)
@@ -75,15 +86,16 @@ async function match() {
         summarizeResumeForAI(store.resume),
         text,
         store.basics.jobTitle,
-      ),
+      ) as { role: 'system' | 'user' | 'assistant'; content: string }[],
       temperature: 0.3,
     })
     result.value = parseJdMatchResult(content)
   } catch (requestError) {
-    if (requestError.code === 'AUTH_EXPIRED') {
+    const err = requestError as { code?: string; message?: string }
+    if (err.code === 'AUTH_EXPIRED') {
       error.value = 'AI 功能需要先登录'
     } else {
-      error.value = requestError.message || 'JD 匹配失败，请稍后再试'
+      error.value = err.message || 'JD 匹配失败，请稍后再试'
     }
   } finally {
     busy.value = false

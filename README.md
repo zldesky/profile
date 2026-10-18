@@ -68,6 +68,7 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 | `npm run audit:interaction` | 交互态：键盘焦点可见性、悬停反馈（真的按 Tab / 真的移鼠标）                                                                                                                    |
 | `npm run audit:admin`       | 管理后台（`/admin`）的界面审计：自起临时服务 + 自造管理员，一步跑完                                                                                                            |
 | `npm run verify:templates`  | 逐个切换 12 个模板，数纸面可见文字 —— 验证模板组件迁 TS 后没有静默渲染成空白                                                                                                   |
+| `npm run verify:dialogs`    | 逐个点开关键弹窗，确认迁 TS 后仍能弹出且有内容                                                                                                                                 |
 | `npm run audit:el`          | 量单个元素的盒子与真实命中区，如 `npm run audit:el -- .ed-check`                                                                                                               |
 | `npm run audit:login`       | 造一个已登录会话令牌，配合 `npm run audit:ui -- --token <令牌>`                                                                                                                |
 | `npm run audit:session`     | 诊断会话令牌是否真的生效                                                                                                                                                       |
@@ -237,7 +238,7 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 | 维度                     | 现状                                                                                     |
 | ------------------------ | ---------------------------------------------------------------------------------------- |
 | `<script setup>` 写法    | **64 / 64 全部完成**（`export default`、`defineComponent`、`setup()` 返回对象均为 0 处） |
-| `lang="ts"`              | **44 / 64**（约 7,000 行）；剩余 20 个仍是 JS，约 7,800 行                               |
+| `lang="ts"`              | **54 / 64**（约 10,000 行）；剩余 10 个仍是 JS，约 4,800 行                              |
 | 这些 JS 组件受类型检查吗 | **不受**。`tsconfig.json` 里 `checkJs: false`，且 `include` 未纳入 `src/**/*.js`         |
 
 实测过「打开 `checkJs` 直接检查现有 JS 组件」这条路：会报 **644 处**错误，其中 289 处只是缺参数注解（`TS7006`）—— 说明这条路的前期噪音很大，**逐组件迁 TS 比全局开 `checkJs` 更可控**。所以策略是分批迁，而不是一次性打开开关。
@@ -262,7 +263,15 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 
 这个脚本自己也踩过一次坑，值得记：第一版想直接改 Pinia store（`#app.__vue_app__` → `$pinia`）来切模板，实测拿不到 pinia 实例，12 个模板全报 `apply=no-store`——**工具坏了，却看起来像 12 个模板都渲染失败**。改成黑盒点真实按钮后 12/12 通过。这与审计脚本那两次教训是同一类：**先怀疑工具，再怀疑被测对象**。
 
-**剩余 20 个 JS 组件**，最大的是 `AdminPage` 823 / `TopBar` 778 / `CollectionPage` 667 / `HomePage` 577 / `TemplatePicker` 540。主要机械成本是**模板内联处理器的 DOM 收窄**：`$event.target` 是 `EventTarget`，取 `.value` / `.checked` 需写成 `($event.target as HTMLInputElement)`（本轮实测替换 11 处）。另外分段编辑器的 `section` prop 应按可辨识联合收窄成 `EntriesSection` / `GridSection` / `SkillsSection` / `TextSection`，否则模板里取 `section.items` 会报错 —— 那正是联合类型在提醒「先确定是哪种模块」。
+**弹窗一层已迁完（10 个）**：`AISettingsDialog` / `ResumeManagerDialog` / `ShareDialog` / `JdMatchDialog` / `CompletenessDialog` / `AIPolishDialog` / `OnboardingDialog` / `PasswordDialog` / `ShortcutsDialog` / `CaptchaDialog`。
+
+这一批暴露的问题高度重复，都是同一个模式：**`shallowRef(null)` 被推成 `Ref<null>`，读 `.value.x` 就报「`never` 上不存在」**，以及 `catch` 参数是 `unknown` 不能直接取 `.code` / `.message`。处理办法是就近声明形状（这些上游工具函数还在 JS 里，`checkResume` / `parseJdMatchResult` / `fetchMyShares` 等），而不是为了一个返回值去转整个工具文件。
+
+**一处类型检查在「调用方」报错，说明载荷写准的价值**：给 `AIPolishDialog` 的 `apply` 事件一开始漏写了参数（写成 `apply: []`），结果报错出现在**用到它的** `TextSectionEditor`（「(text: string) => void 不能赋给 () => any」）。错在 AIPolishDialog、报在别处 —— 这正是事件载荷该写准的理由。
+
+**新增 `npm run verify:dialogs`**：弹窗迁 TS 改的是类型与收窄，编译不报错、类型也通过，但 props / emit 载荷或 ref 收窄改错会让弹窗**打不开或点了没反应** —— 单测不挂载这些组件、静态审计也看不到（弹窗默认不渲染）。所以真的点开五个（简历体检 / JD 匹配 / 我的简历 / AI 补充导入 / 快捷键），确认弹出且内有文字：5/5 通过，控制台无错误。
+
+**剩余 10 个 JS 组件**：`AdminPage` 823 / `TopBar` 778 / `CollectionPage` 667 / `HomePage` 577 / `TemplatePicker` 540 / `SliderCaptcha` 398 / `AvatarCropDialog` 290 / `AvatarEditor` 289 / `AuthPanel` 231 / `ExperienceEntryEditor` 222。主要机械成本是**模板内联处理器的 DOM 收窄**：`$event.target` 是 `EventTarget`，取 `.value` / `.checked` 需写成 `($event.target as HTMLInputElement)`（本轮实测替换 11 处）。另外分段编辑器的 `section` prop 应按可辨识联合收窄成 `EntriesSection` / `GridSection` / `SkillsSection` / `TextSection`，否则模板里取 `section.items` 会报错 —— 那正是联合类型在提醒「先确定是哪种模块」。
 
 `stores/resume` 是本地优先的落盘中心（多文档槽位、历史快照、头像引用、超容量降级），迁移前先用 `tests/resumeStore.test.js` 立起不变量再改类型；该测试需要 `localStorage` 与 `window`/`document`，由 `tests/setup/browser-globals.js` 按需安装（**刻意不放进 vitest 的 setupFiles**：全局安装 `document` 会让 pdf.js 误判运行环境，导致 PDF 导入端到端测试失败）。
 

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 滑块验证码弹窗。
  * 注册提交时由 AuthPanel 拉起：拖动通过即回传令牌并自动继续注册，

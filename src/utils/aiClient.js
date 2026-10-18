@@ -45,6 +45,7 @@ export async function aiChat({ settings, messages, temperature = 0.7 }) {
  * @param {'bullet'|'summary'} kind 要点 / 段落
  * @param {string} text 原文
  * @param {string} [jobTitle] 求职职位，用于对齐语气
+ * @returns {{ role: 'system'|'user'|'assistant', content: string }[]}
  */
 export function buildPolishMessages(kind, text, jobTitle = '') {
   const system =

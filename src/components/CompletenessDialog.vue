@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 简历体检弹窗：完成度评分 + 按严重度分级的问题清单。
  * 检查逻辑在 utils/completeness.js（纯函数），这里只做打开时的即时体检与展示。
@@ -25,8 +25,20 @@ useDialogA11y(
   () => emit('close'),
 )
 
-/** 体检结果：打开弹窗时算一次 */
-const report = shallowRef(null)
+/**
+ * 体检结果：打开弹窗时算一次。
+ *
+ * 显式声明形状：checkResume 还在 JS 里（utils/completeness.js），
+ * shallowRef(null) 会被推成 Ref<null>，模板里读 report.score 就报 never。
+ * 就近声明所需形状，比为了一个返回值去转整个 300 行的规则文件更划算。
+ */
+interface CompletenessReport {
+  score: number
+  counts: { error: number; warn: number; tip: number }
+  issues: { level: 'error' | 'warn' | 'tip'; title: string; detail: string }[]
+}
+
+const report = shallowRef<CompletenessReport | null>(null)
 
 watch(
   () => props.open,
@@ -36,7 +48,7 @@ watch(
 )
 
 /** 评分的一句话解读 */
-const scoreText = (score) => {
+const scoreText = (score: number) => {
   if (score >= 90) return '完成度很好，投递前可再对照 JD 微调'
   if (score >= 70) return '主体完整，把下面的问题补一补更有竞争力'
   if (score >= 40) return '还有明显缺口，建议逐项修复后再投递'

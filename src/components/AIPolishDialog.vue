@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * AI 润色弹窗：原文（可先改）→ 调用 AI 改写 → 结果（可再手改）→ 应用回简历。
  * 未配置 AI 服务时内嵌提示并可直接打开设置弹窗；所有改写都是用户确认后才落库。
@@ -12,15 +12,29 @@ import { useToast } from '@/composables/useToast'
 import { aiChat, buildPolishMessages, stripMarkdown } from '@/utils/aiClient'
 import { loadAISettings } from '@/utils/aiKeyStore'
 
-const props = defineProps({
-  open: { type: Boolean, default: false },
-  /** 'bullet' 单条要点 | 'summary' 段落 */
-  kind: { type: String, default: 'bullet' },
-  title: { type: String, default: 'AI 润色' },
-  text: { type: String, default: '' },
-})
+/*
+ * kind 收成联合类型而不是宽泛的 String：
+ * buildPolishMessages 只接受 'bullet' | 'summary'，写宽了调用处就报类型错误。
+ * 收窄后，将来多一个润色场景会在调用处被立刻提示，而不是悄悄传进去。
+ */
+const props = withDefaults(
+  defineProps<{
+    open?: boolean
+    /** 'bullet' 单条要点 | 'summary' 段落 */
+    kind?: 'bullet' | 'summary'
+    title?: string
+    text?: string
+  }>(),
+  { open: false, kind: 'bullet', title: 'AI 润色', text: '' },
+)
 
-const emit = defineEmits(['close', 'apply'])
+/*
+ * apply 带一个参数（润色后的文本）。
+ * 一开始漏写了这个参数，类型检查立刻在**调用方** TextSectionEditor 报
+ * 「(text: string) => void 不能赋给 () => any」—— 正好说明事件载荷写准的价值：
+ * 错在 AIPolishDialog，报在用到它的地方。
+ */
+const emit = defineEmits<{ close: []; apply: [text: string] }>()
 
 const { toast } = useToast()
 
@@ -73,10 +87,12 @@ async function polish() {
     })
     result.value = stripMarkdown(content)
   } catch (requestError) {
-    if (requestError.code === 'AUTH_EXPIRED') {
+    // catch 的参数是 unknown：先收窄再取字段，否则 code / message 都取不到
+    const err = requestError as { code?: string; message?: string }
+    if (err.code === 'AUTH_EXPIRED') {
       error.value = 'AI 功能需要先登录'
     } else {
-      error.value = requestError.message || '润色失败，请稍后再试'
+      error.value = err.message || '润色失败，请稍后再试'
     }
   } finally {
     busy.value = false

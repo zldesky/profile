@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 渲染服务访问口令输入弹窗。
  * 口令只用于向本机渲染服务证明身份，不写入简历数据，也不随导出文件带出。
@@ -26,7 +26,7 @@ useDialogA11y(
 
 const value = ref('')
 const visible = ref(false)
-const inputRef = ref(null)
+const inputRef = ref<HTMLInputElement | null>(null)
 
 // 每次打开重置输入框并聚焦：上一次输入的多半是错的，留着反而干扰
 watch(

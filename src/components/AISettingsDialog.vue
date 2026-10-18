@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * AI 服务设置弹窗：用户自带 API Key（BYOK）。
  *
@@ -164,11 +164,13 @@ async function saveAndTest() {
     toast(`连接成功，配置已保存${remember.value ? '' : '（仅本次会话有效）'}`)
     emit('saved')
   } catch (error) {
-    if (error.code === 'AUTH_EXPIRED') {
+    // catch 的参数是 unknown：先收窄再取字段
+    const err = error as { code?: string; message?: string }
+    if (err.code === 'AUTH_EXPIRED') {
       toast('AI 功能需要先登录')
       return
     }
-    toast(error.message || '连接失败，请检查地址、Key 与模型名')
+    toast(err.message || '连接失败，请检查地址、Key 与模型名')
   } finally {
     testing.value = false
   }

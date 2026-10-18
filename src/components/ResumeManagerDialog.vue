@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 「我的简历」管理弹窗：本地多份简历的切换、新建、复制、重命名与删除。
  *
@@ -13,6 +13,8 @@ import SvgIcon from '@/components/SvgIcon.vue'
 import { useDialogA11y } from '@/composables/useDialogA11y.ts'
 import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
+import type { DocEntry } from '@/stores/resumeDocuments'
+import type { Snapshot } from '@/stores/resumeHistory'
 import { formatTime } from '@/utils/helpers'
 
 const props = defineProps({
@@ -39,7 +41,7 @@ const view = shallowRef('docs')
 const renamingId = shallowRef('')
 const renameDraft = shallowRef('')
 
-function startRename(doc) {
+function startRename(doc: DocEntry) {
   renamingId.value = doc.id
   renameDraft.value = doc.name
 }
@@ -55,9 +57,9 @@ function cancelRename() {
 
 /* ---- 删除 ---- */
 
-const pendingDelete = shallowRef(null)
+const pendingDelete = shallowRef<DocEntry | null>(null)
 
-function askDelete(doc) {
+function askDelete(doc: DocEntry) {
   pendingDelete.value = doc
 }
 
@@ -74,9 +76,9 @@ async function confirmDelete() {
 
 /* ---- 历史版本 ---- */
 
-const pendingRestore = shallowRef(null)
+const pendingRestore = shallowRef<Snapshot | null>(null)
 
-function askRestore(snapshot) {
+function askRestore(snapshot: Snapshot) {
   pendingRestore.value = snapshot
 }
 
@@ -94,7 +96,7 @@ function confirmRestore() {
 
 /* ---- 其它操作 ---- */
 
-function openDoc(doc) {
+function openDoc(doc: DocEntry) {
   if (doc.id === store.activeDocId) {
     emit('close')
     return
@@ -110,7 +112,7 @@ function createDoc() {
   toast('已新建空白简历')
 }
 
-function duplicateDoc(doc) {
+function duplicateDoc(doc: DocEntry) {
   store.duplicateDoc(doc.id)
   toast(`已创建「${doc.name}」的副本`)
 }
