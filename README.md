@@ -399,6 +399,9 @@ server/              应用服务（Express，全部为 .ts，由 node 类型剥
   semaphore.ts       渲染并发信号量
 skills/              Agent Skill（AI 无界面操作）
   resume-workshop/   SKILL.md + 数据结构/API 参考 + 校验脚本 + 简历骨架
+markdown-hosts/      在外编辑器里写简历（同一份 .md 的另一种用法）
+  resume.css         三宿主共用主题（Typora #write / Obsidian 预览 / VSCode body）
+  templates/         起始模板，由应用自己的导出器生成（npm run build:host-template）
 tests/               Vitest 测试
   api.test.js         /api 集成测试（起真实服务进程，发真实 HTTP）
   api/harness.js      集成测试宿主：临时数据库 + 随机端口 + cookie jar
