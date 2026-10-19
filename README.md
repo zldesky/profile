@@ -18,6 +18,12 @@
 
 部署方式（本机自用 / 服务器 / Docker / 纯静态托管）见 [DEPLOY.md](./DEPLOY.md)。
 
+**改这个项目之前，先读 [PITFALLS.md](./PITFALLS.md)。** 那是历次踩坑的合集（症状 → 真因 → 规矩），
+共六大类。其中最大的一类是「**验证工具报错、被测对象其实没错**」，**13 条**
+（光「落点/距离不对」这一条就栽了 4 次）—— 它导致过两次「去修本来正确的代码」。
+所以本仓库的两条硬规矩是：**脚本报错时先怀疑脚本**；
+**改代码前先读文件、改完用 `git diff` 核对**。
+
 ## 快速开始
 
 环境要求：Node.js `^22.18.0` 或 `>= 24.12.0`（服务端用内置 `node:sqlite`，无原生编译依赖）。
@@ -252,6 +258,8 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 服务端侧只需 `.env` 里配好 `PDF_ACCESS_PASSWORD`（脚本 Bearer 通道），见 `DEPLOY.md` 环境变量参考。
 
 ## 工程约定
+
+**踩过的坑单独成文：[PITFALLS.md](./PITFALLS.md)。** 改代码前值得扫一眼 —— 里面按「症状 → 真因 → 规矩」记了六大类，并标出哪些已经用脚本拦住、哪些仍只靠注释（还会重犯）。
 
 **TypeScript 迁移（进行中）**：领域类型在 `src/types/resume.ts`；`src/data`、`src/stores`、核心 `src/utils`、关键 composables 与**整个 `server/`** 已是严格模式 TS，用 `npm run typecheck`（vue-tsc）把关，并由 CI 强制执行（Vite 构建只转译不做类型校验，类型错误不会让 Build 失败，因此 typecheck 必须单独跑）。`server/` 由 Node 内置的类型剥离直接执行 `.ts`，不带构建步骤，细节见 [server/README.md](./server/README.md)。
 
