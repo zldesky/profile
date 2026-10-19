@@ -2,6 +2,7 @@ import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
 import { BACKUP_KIND } from '@/utils/backup'
 import { resumeToMarkdown, resumeToPlainText } from '@/utils/exporters'
+import { markdownToResume, resumeToSourceMarkdown } from '@/utils/markdownSource'
 import { downloadFile, formatTime } from '@/utils/helpers'
 
 /**
@@ -27,6 +28,18 @@ export function useResumeFile() {
   }
 
   /** 导出为纯文本：面向 ATS 解析与招聘网站表单粘贴 */
+  /**
+   * 导出「内容源」Markdown。
+   *
+   * 与上面的 Markdown 文档**不是同一个用途**：
+   *  - Markdown 文档（resumeToMarkdown）面向 ATS 与在线文档粘贴，读回来有损；
+   *  - 内容源（resumeToSourceMarkdown）带类型提示与键值加粗，**能精确读回来**，
+   *    用于在 VSCode / Obsidian / Typora 里编辑，再导回本应用。
+   */
+  function exportSourceMarkdown() {
+    downloadFile(resumeToSourceMarkdown(store.resume), `${baseName()}-简历源.md`, 'text/markdown')
+  }
+
   function exportPlainText() {
     downloadFile(resumeToPlainText(store.resume), `${baseName()}-简历.txt`, 'text/plain')
     toast('已导出纯文本简历')
@@ -88,11 +101,63 @@ export function useResumeFile() {
     reader.readAsText(file)
   }
 
+  /**
+   * 导入 Markdown 简历（内容源或手写的 LapisCV 式 md）。
+   *
+   * 只还原**内容**：主题 / 模板 / 模块布局 / 头像不在 Markdown 里（见 markdownSource 文件头），
+   * 导入后会取默认值。这一点必须在确认框里说清 ——
+   * 用户以为「导出再导入就完全复原」是很自然的预期，而实际不是。
+   *
+   * @param {File|undefined} file
+   */
+  function importMarkdownFile(file) {
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = async () => {
+      try {
+        const text = String(reader.result || '')
+        const draft = markdownToResume(text)
+        const sections = draft.sections.length
+        if (!sections && !draft.basics.name) {
+          throw new Error('没读出姓名与模块，可能不是简历 Markdown')
+        }
+
+        const currentName = store.basics.name || '未命名简历'
+        if (
+          !window.confirm(
+            `导入将覆盖当前简历「${currentName}」，读到 ${sections} 个模块。\n\n` +
+              '只还原内容：主题、模板、模块布局与头像会取默认值。确定继续？',
+          )
+        ) {
+          return
+        }
+
+        // replaceResume 内部会走 normalizeResume 补 id 与缺省字段
+        store.replaceResume(draft)
+        toast(`已从 Markdown 导入：${sections} 个模块`)
+      } catch (error) {
+        toast(`导入失败：${error.message}`)
+      }
+    }
+    reader.onerror = () => toast('文件读取失败')
+    reader.readAsText(file)
+  }
+
   function resetResume() {
     if (!window.confirm('恢复为示例简历？当前所有修改都会丢失。')) return
     store.resetAll()
     toast('已恢复示例简历')
   }
 
-  return { exportJSON, exportMarkdown, exportPlainText, exportBackup, importFromFile, resetResume }
+  return {
+    exportJSON,
+    exportMarkdown,
+    exportSourceMarkdown,
+    exportPlainText,
+    exportBackup,
+    importFromFile,
+    importMarkdownFile,
+    resetResume,
+  }
 }

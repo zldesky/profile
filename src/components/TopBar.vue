@@ -92,8 +92,16 @@ function openShare() {
   shareOpen.value = true
 }
 
-const { exportJSON, exportMarkdown, exportPlainText, exportBackup, importFromFile, resetResume } =
-  useResumeFile()
+const {
+  exportJSON,
+  exportMarkdown,
+  exportSourceMarkdown,
+  exportPlainText,
+  exportBackup,
+  importFromFile,
+  importMarkdownFile,
+  resetResume,
+} = useResumeFile()
 const {
   exporting,
   quota,
@@ -173,6 +181,22 @@ const pdfInput = useTemplateRef<HTMLInputElement>('pdfInput')
 const pdfParsing = shallowRef(false)
 /** AI 补充导入弹窗开关 */
 const aiFillOpen = shallowRef(false)
+
+/** 内容源 Markdown 的文件选择器，与 PDF 那条入口同一套写法 */
+const markdownInput = useTemplateRef<HTMLInputElement>('markdownInput')
+
+function pickMarkdown() {
+  const input = markdownInput.value
+  if (!input) return
+  input.value = ''
+  input.click()
+}
+
+function onMarkdownChange(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  importMarkdownFile(file)
+}
 
 function pickPdf() {
   const input = pdfInput.value
@@ -319,7 +343,7 @@ function openAiFill() {
       <button
         class="ed-btn is-compact"
         :class="{ 'is-active': importMenuOpen }"
-        title="导入数据：JSON / 备份 / PDF 简历"
+        title="导入数据：JSON / 备份 / PDF 简历 / Markdown"
         aria-label="导入数据"
         aria-haspopup="menu"
         :aria-expanded="importMenuOpen"
@@ -336,6 +360,10 @@ function openAiFill() {
         <button role="menuitem" :disabled="pdfParsing" @click="runImport(pickPdf)">
           <span class="menu-name">{{ pdfParsing ? '解析中…' : 'PDF 简历导入' }}</span>
           <span class="menu-desc">规则解析，整份重建</span>
+        </button>
+        <button role="menuitem" @click="runImport(pickMarkdown)">
+          <span class="menu-name">Markdown 简历导入</span>
+          <span class="menu-desc">VSCode / Obsidian 里写的 .md</span>
         </button>
         <button role="menuitem" @click="runImport(openAiFill)">
           <span class="menu-name">AI 补充导入</span>
@@ -365,6 +393,10 @@ function openAiFill() {
         <button role="menuitem" @click="runExport(exportMarkdown)">
           <span class="menu-name">Markdown 文档</span>
           <span class="menu-desc">在线文档</span>
+        </button>
+        <button role="menuitem" @click="runExport(exportSourceMarkdown)">
+          <span class="menu-name">Markdown 内容源</span>
+          <span class="menu-desc">可在外编辑器里改，再导回</span>
         </button>
         <button role="menuitem" @click="runExport(exportPlainText)">
           <span class="menu-name">纯文本</span>
@@ -472,6 +504,13 @@ function openAiFill() {
       @change="onFileChange"
     />
     <input ref="pdfInput" type="file" accept="application/pdf,.pdf" hidden @change="onPdfChange" />
+    <input
+      ref="markdownInput"
+      type="file"
+      accept="text/markdown,.md,.markdown"
+      hidden
+      @change="onMarkdownChange"
+    />
 
     <!-- 弹窗组件内部都会 Teleport 到 body，放在这里只是便于就近阅读 -->
     <ResumeManagerDialog :open="managerOpen" @close="managerOpen = false" />
