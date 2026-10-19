@@ -12,18 +12,34 @@ function unauthorized(): Error & { code: string } {
   return error
 }
 
+/** 服务端告知的屏蔽结果：屏蔽了哪些字段、正文里替换了几处 */
+export interface ShareRedaction {
+  labels: string[]
+  inText: number
+}
+
 /**
  * 把当前简历创建为一份公开只读分享。
+ *
  * @param options.listInCollection 同时展示到官网「简历合集」
+ * @param options.revealContacts 在分享里保留联系方式。
+ *   **默认关闭**：服务端会屏蔽手机号 / 邮箱 / 身份证号等敏感信息
+ *   （见 server/redact.ts），因为分享链接是公开只读的，勾了合集更是进公开目录。
  */
 export async function createShare(
   resume: Resume,
-  { listInCollection = false }: { listInCollection?: boolean } = {},
-): Promise<{ id: string; expiresAt: number }> {
+  {
+    listInCollection = false,
+    revealContacts = false,
+  }: {
+    listInCollection?: boolean
+    revealContacts?: boolean
+  } = {},
+): Promise<{ id: string; expiresAt: number; redacted: ShareRedaction }> {
   const response = await fetch('/api/share', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ resume, listInCollection }),
+    body: JSON.stringify({ resume, listInCollection, revealContacts }),
   })
 
   if (response.status === 401) throw unauthorized()
@@ -31,7 +47,14 @@ export async function createShare(
   if (!response.ok || !data?.ok) {
     throw new Error(data?.message || `分享创建失败（${response.status}）`)
   }
-  return { id: data.id, expiresAt: data.expiresAt }
+  return {
+    id: data.id,
+    expiresAt: data.expiresAt,
+    redacted: {
+      labels: Array.isArray(data.redacted?.labels) ? data.redacted.labels : [],
+      inText: Number(data.redacted?.inText) || 0,
+    },
+  }
 }
 
 /** 公开读取分享内容；404 表示不存在或已过期 */

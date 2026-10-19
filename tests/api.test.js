@@ -313,6 +313,92 @@ describe('分享', () => {
     expect(res.status).toBe(400)
     expect(res.json.ok).toBe(false)
   })
+
+  /*
+   * ── 敏感信息屏蔽 ──────────────────────────────────────────────
+   * 分享链接是公开只读的，勾了合集更是进公开目录，所以手机号 / 邮箱 / 身份证号
+   * 必须在**存库之前**就被替换掉。这里刻意用**裸 fetch**（没有任何 cookie）
+   * 去读分享接口 —— 判据是"匿名请求也拿不到原文"，这才能证明数据没有离开服务端，
+   * 而不只是"页面上没显示"。
+   */
+  const SENSITIVE_RESUME = {
+    template: 'classic',
+    basics: {
+      name: '分享者',
+      jobTitle: '设计师',
+      fields: [
+        { icon: 'phone', label: '联系电话', value: '13800001111' },
+        { icon: 'mail', label: '联系邮箱', value: 'share@example.com' },
+        { icon: 'cake', label: '年龄', value: '30岁' },
+      ],
+    },
+    sections: [
+      {
+        id: 's1',
+        type: 'text',
+        title: '自我评价',
+        content: '可加微信 share_wx 或致电 13900002222 详谈。',
+      },
+    ],
+  }
+
+  it('分享快照里不含原手机号 / 邮箱 / 年龄（匿名请求也拿不到）', async () => {
+    const { client } = await registerUser('redact')
+    const created = await client.post('/api/share', { resume: SENSITIVE_RESUME })
+    expect(created.status).toBe(200)
+
+    const anon = await fetch(`${base}/api/share/${created.json.id}`)
+    expect(anon.status).toBe(200)
+    const raw = await anon.text()
+
+    // 逐条查泄漏，而不是只看「值变了」
+    expect(raw).not.toContain('13800001111')
+    expect(raw).not.toContain('share@example.com')
+    expect(raw).not.toContain('30岁')
+    // 写进正文的手机号也要被替换
+    expect(raw).not.toContain('13900002222')
+    // 屏蔽后的形态应当在
+    expect(raw).toContain('138****1111')
+  })
+
+  it('创建分享时回执告知屏蔽了哪些字段（屏蔽不能悄悄发生）', async () => {
+    const { client } = await registerUser('redact2')
+    const created = await client.post('/api/share', { resume: SENSITIVE_RESUME })
+
+    expect(created.json.redacted.labels).toContain('联系电话')
+    expect(created.json.redacted.labels).toContain('联系邮箱')
+    expect(created.json.redacted.inText).toBeGreaterThan(0)
+    expect(created.json.redacted.revealContacts).toBe(false)
+  })
+
+  it('显式 revealContacts 时保留联系方式（有意为之的出口）', async () => {
+    const { client } = await registerUser('reveal')
+    const created = await client.post('/api/share', {
+      resume: SENSITIVE_RESUME,
+      revealContacts: true,
+    })
+    expect(created.status).toBe(200)
+
+    const anon = await fetch(`${base}/api/share/${created.json.id}`)
+    const raw = await anon.text()
+    expect(raw).toContain('13800001111')
+    expect(created.json.redacted.labels).toEqual([])
+  })
+
+  it('展示到简历合集的那份同样已被屏蔽', async () => {
+    const { client } = await registerUser('redactlist')
+    const created = await client.post('/api/share', {
+      resume: SENSITIVE_RESUME,
+      listInCollection: true,
+    })
+    expect(created.status).toBe(200)
+
+    // 合集是公开目录，屏蔽必须同样生效
+    const list = await fetch(`${base}/api/collection?limit=50`)
+    const raw = await list.text()
+    expect(raw).not.toContain('13800001111')
+    expect(raw).not.toContain('share@example.com')
+  })
 })
 
 describe('来源与请求体防线', () => {

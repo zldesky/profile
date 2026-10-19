@@ -53,6 +53,25 @@ const readyResume = computed(() =>
 )
 
 /** 纸张缩放：按窗口宽度自适应，与编辑器 fit() 同规则 */
+/*
+ * 这份分享是否屏蔽了联系方式。
+ *
+ * 判据用**屏蔽形态本身**（`**`、`138****0000`、`z***@domain`），而不是再往接口加字段：
+ * 加字段要动分享表的库表结构，而这三个形状是服务端自己造出来的，
+ * 用户手填出一模一样的值几乎不可能 —— 换句话说，这个判据足够精确，代价却小得多。
+ * 它只用来决定要不要显示一行"联系方式已被隐藏"的说明。
+ */
+const maskedNotice = computed(() => {
+  const fields = readyResume.value?.basics?.fields
+  if (!Array.isArray(fields)) return false
+  return fields.some((field) => {
+    const value = String(field?.value ?? '').trim()
+    if (value === '**') return true
+    if (/^\d{3}\*{4}\d{0,4}$/.test(value)) return true
+    return /^[^@\s]\*{3}@/.test(value)
+  })
+})
+
 const zoom = shallowRef(1)
 const stageRef = useTemplateRef('stageRef')
 
@@ -184,18 +203,33 @@ const expiryText = computed(() => {
         <router-link class="ed-btn" :to="{ name: 'editor' }">回编辑器看看</router-link>
       </div>
 
-      <div v-else ref="stageRef" class="stage-scroll">
-        <div
-          class="paper"
-          :style="{ ...pageStyle, '--zoom': zoom }"
-          :data-tstyle="readyResume?.theme.titleStyle"
-          :data-marker="readyResume?.theme.titleMarker"
-          :data-line="readyResume?.theme.titleBottom"
-          :data-shape="readyResume?.basics.avatarShape"
-        >
-          <component :is="templateComponent" :resume="readyResume" :selected-ids="[]" />
+      <template v-else>
+        <!--
+          告知浏览者联系方式是被**有意隐藏**的。
+          不说的话，招聘方会以为对方漏填了联系方式 —— 而这恰恰是分享者刻意做的选择。
+
+          位置很讲究：必须放在 `.stage-scroll` **之外**、`.editor-stage` 之内。
+          `.stage-scroll` 是横向 flex（居中放纸张），放进去就会变成并排在纸面**左边**的一条
+          —— 我第一版正是这样，截图一看就发现了。`.editor-stage` 是纵向 flex，
+          放在这里才是纸面上方的一整条。
+        -->
+        <p v-if="maskedNotice" class="sp-masked">
+          <SvgIcon name="shield" :size="14" />
+          <span>这份分享已隐藏手机号、邮箱等个人信息；如需联系，请通过分享给你的渠道。</span>
+        </p>
+        <div ref="stageRef" class="stage-scroll">
+          <div
+            class="paper"
+            :style="{ ...pageStyle, '--zoom': zoom }"
+            :data-tstyle="readyResume?.theme.titleStyle"
+            :data-marker="readyResume?.theme.titleMarker"
+            :data-line="readyResume?.theme.titleBottom"
+            :data-shape="readyResume?.basics.avatarShape"
+          >
+            <component :is="templateComponent" :resume="readyResume" :selected-ids="[]" />
+          </div>
         </div>
-      </div>
+      </template>
     </main>
   </div>
 </template>
@@ -270,6 +304,28 @@ const expiryText = computed(() => {
   color: var(--ed-text-4);
   font-size: 12px;
   white-space: nowrap;
+}
+
+/* 屏蔽提示条：贴在纸面上方，不参与纸张排版（不能被打印进 PDF） */
+.sp-masked {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  max-width: 210mm;
+  margin: 0 auto 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--ed-line);
+  border-radius: 8px;
+  background: var(--ed-fill);
+  color: var(--ed-text-2);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+@media print {
+  .sp-masked {
+    display: none !important;
+  }
 }
 
 .sp-note {

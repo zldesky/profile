@@ -11,7 +11,7 @@ const props = defineProps({
   /**
    * 图标名。这里刻意收成 string 而不是 IconName：
    * IconName 是「简历数据字段能用的 14 个图标」，而本组件还承载 plus/copy/eye 等
-   * 编辑器 UI 图标（共 39 个），两者是不同的集合。未知名字会回退到 none（见下方 paths）。
+   * 编辑器 UI 图标（共 40 个），两者是不同的集合。未知名字会回退到 none（见下方 paths）。
    */
   name: { type: String, default: 'none' },
   size: { type: [Number, String], default: 16 },
@@ -71,6 +71,8 @@ const ICONS = {
     'M19.8 15.3C21.3 13.8 22 12 22 12s-3.6-7-10-7c-.7 0-1.4.1-2 .2',
   ],
   download: ['M12 3v12', 'm7 11 5 5 5-5', 'M4 21h16'],
+  // 盾牌：分享时的敏感信息屏蔽（见 components/ShareDialog.vue）
+  shield: ['M12 3l7 3v6c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6l7-3Z', 'm9 12 2 2 4-4'],
   upload: ['M12 20V8', 'm7 12 5-5 5 5', 'M4 4h16'],
   print: ['M7 8V3h10v5', 'M5 8h14v8H5z', 'M8 16h8v5H8z'],
   image: ['M3 5h18v14H3z', 'M8.5 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z', 'm4 17 5-5 4 4 3-3 4 4'],

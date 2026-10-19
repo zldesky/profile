@@ -40,6 +40,15 @@ const link = shallowRef('')
 const expiryText = shallowRef('')
 /** 是否同时展示到官网简历合集（生成时随请求带上） */
 const listInCollection = shallowRef(false)
+/**
+ * 是否在分享里保留联系方式。
+ * **默认关闭**：分享链接是公开只读的，服务端会自动屏蔽手机号 / 邮箱 / 身份证号等
+ * （见 server/redact.ts）。这个开关是留给「这份就是要发给某位招聘方」的显式出口，
+ * 所以文案里要把后果说清楚，而不是一个轻飘飘的复选框。
+ */
+const revealContacts = shallowRef(false)
+/** 服务端告知的屏蔽结果，用于生成后如实告诉用户屏蔽了什么 */
+const redacted = shallowRef<{ labels: string[]; inText: number }>({ labels: [], inText: 0 })
 
 /** 我的历史分享（弹窗打开时拉取） */
 const myShares = shallowRef<MyShareItem[]>([])
@@ -68,14 +77,29 @@ async function generate() {
   if (busy.value) return
   busy.value = true
   try {
-    const { id, expiresAt } = await createShare(store.resume, {
+    const {
+      id,
+      expiresAt,
+      redacted: result,
+    } = await createShare(store.resume, {
       listInCollection: listInCollection.value,
+      revealContacts: revealContacts.value,
     })
+    redacted.value = result
     shareId.value = id
     link.value = `${location.origin}/share/${id}`
     const days = Math.max(1, Math.ceil((expiresAt - Date.now()) / 86400000))
     expiryText.value = `有效期约 ${days} 天，到期自动失效`
-    toast(listInCollection.value ? '分享链接已生成，并已展示到简历合集' : '分享链接已生成')
+    /*
+     * 提示里带上屏蔽结果。
+     * 屏蔽是自动的，但不能是**悄悄**发生的 —— 用户有权知道自己分享出去的东西
+     * 被改动过，否则他会以为链接里就是简历原文。
+     */
+    const parts = [listInCollection.value ? '分享链接已生成，并已展示到简历合集' : '分享链接已生成']
+    if (result.labels.length)
+      parts.push(`已自动屏蔽 ${result.labels.length} 项：${result.labels.join('、')}`)
+    if (result.inText) parts.push(`正文中另有 ${result.inText} 处联系方式`)
+    toast(parts.join('；'))
   } catch (error) {
     const err = error as { code?: string; message?: string }
     if (err.code === 'AUTH_EXPIRED') {
@@ -105,6 +129,7 @@ async function revoke() {
     await deleteShare(shareId.value)
     shareId.value = ''
     link.value = ''
+    redacted.value = { labels: [], inText: 0 }
     expiryText.value = ''
     toast('分享已撤销，链接立即失效')
     await loadMyShares()
@@ -155,9 +180,30 @@ async function revokeShareItem(item: MyShareItem) {
             生成一条公开只读链接：对方无需登录即可查看和打印，但看不到编辑器、
             不能修改内容。当前简历的最新内容以生成时刻为准。
           </p>
+
+          <!--
+            自动屏蔽的说明放在勾选项之前：用户先知道「默认是安全的」，
+            再看到那个需要主动打开的例外。
+          -->
+          <p class="sh-privacy">
+            <SvgIcon name="shield" :size="14" />
+            <span>
+              公开链接会自动屏蔽<strong>手机号、邮箱、身份证号、年龄、性别、住址</strong>等个人信息；
+              写在要点与段落里的联系方式也会一并隐藏。别人看到的是
+              <code>138****0000</code> 这样的形式。
+            </span>
+          </p>
+
           <label class="sh-check">
             <input v-model="listInCollection" type="checkbox" class="ed-check" />
             <span>同时展示到官网「简历合集」，让更多人看到这份简历</span>
+          </label>
+          <label class="sh-check sh-check-warn">
+            <input v-model="revealContacts" type="checkbox" class="ed-check" />
+            <span>
+              在分享里<strong>保留真实的联系方式</strong>（默认屏蔽）
+              <em>仅在把链接私下发给特定招聘方时使用；勾选后任何拿到链接的人都能看到</em>
+            </span>
           </label>
           <button class="ed-btn ed-btn-primary ed-btn-block" :disabled="busy" @click="generate">
             <SvgIcon name="link" :size="14" />
@@ -176,10 +222,27 @@ async function revokeShareItem(item: MyShareItem) {
             />
           </label>
           <p class="ed-hint">
-            {{ expiryText
-            }}{{
-              listInCollection ? '，已展示到简历合集' : ''
-            }}。链接公开可见，请确认简历里没有不想公开的信息。
+            {{ expiryText }}{{ listInCollection ? '，已展示到简历合集' : '' }}。
+          </p>
+          <!--
+            生成后如实回执：屏蔽是自动的，但不该是**悄悄**发生的。
+            用户有权知道分享出去的内容被改动过，否则会以为链接里就是简历原文。
+          -->
+          <p v-if="redacted.labels.length || redacted.inText" class="sh-privacy">
+            <SvgIcon name="shield" :size="14" />
+            <span>
+              已自动屏蔽<strong>{{ redacted.labels.join('、') }}</strong
+              ><template v-if="redacted.inText"
+                >，正文中另有 {{ redacted.inText }} 处联系方式</template
+              >。分享页上对应位置显示为 <code>**</code> 或 <code>138****0000</code>。
+            </span>
+          </p>
+          <p v-else-if="revealContacts" class="sh-privacy sh-privacy-warn">
+            <SvgIcon name="shield" :size="14" />
+            <span>
+              这条分享<strong>包含了真实联系方式</strong>：任何拿到链接的人都能看到，
+              请只发给你信任的对象。
+            </span>
           </p>
           <div class="sh-actions">
             <button class="ed-btn ed-btn-primary" @click="copyLink">
@@ -300,6 +363,74 @@ async function revokeShareItem(item: MyShareItem) {
   color: var(--ed-text-2);
   font-size: 12.5px;
   line-height: 1.7;
+}
+
+.sh-privacy {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--ed-line);
+  border-radius: 8px;
+  background: var(--ed-fill);
+  color: var(--ed-text-2);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.sh-privacy strong {
+  color: var(--ed-text);
+}
+
+.sh-privacy code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--ed-surface, #fff);
+  color: var(--ed-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+/*
+ * 保留联系方式是「提高风险」的选择，要和默认那条明显区分开。
+ *
+ * 注意不能只写 `border-color`：`.sh-check` 本身没有边框，
+ * 光设 border-color 是**看不见的**（我第一版就是这么写的，截图一看两个复选框一模一样）。
+ * 所以这里给整块底色与边框，并把复选框本身也染成警示色。
+ */
+.sh-check-warn {
+  padding: 8px 10px;
+  border: 1px solid var(--ed-danger);
+  border-radius: 8px;
+  background: var(--ed-danger-tint);
+}
+
+.sh-check-warn input.ed-check {
+  accent-color: var(--ed-danger);
+}
+
+.sh-check-warn strong {
+  color: var(--ed-danger-strong);
+}
+
+/* 生成后「这条含真实联系方式」的提示：同理，要和默认的屏蔽提示区分开 */
+.sh-privacy-warn {
+  border-color: var(--ed-danger);
+  background: var(--ed-danger-tint);
+  color: var(--ed-danger-strong);
+}
+
+.sh-privacy-warn strong {
+  color: var(--ed-danger-strong);
+}
+
+.sh-check-warn em {
+  display: block;
+  margin-top: 2px;
+  color: var(--ed-text-3);
+  font-size: 12px;
+  font-style: normal;
 }
 
 .sh-check {

@@ -52,6 +52,7 @@ import {
 } from './render.ts'
 import { sanitizeFilename, sanitizeResume } from './sanitize.ts'
 import { EDITOR_PATH } from './renderTarget.ts'
+import { redactForShare } from './redact.ts'
 
 /**
  * 给 Express 的 Request 补上 req.auth。
@@ -771,6 +772,18 @@ app.post('/api/share', guards.requireAuth, (req, res) => {
   // 展示到合集是显式勾选的公开行为：默认只生成链接，拿到链接的人仍可查看
   const listInCollection = req.body?.listInCollection === true
 
+  /*
+   * 敏感信息屏蔽：**默认开启**，而且在存库之前就换掉。
+   *
+   * 分享链接是公开只读的（勾了合集更是进公开目录），手机号 / 邮箱 / 身份证号
+   * 一旦跟着出去就收不回来。屏蔽必须落在「数据离开之前」这一层 ——
+   * 只在页面上不显示、而库里与 /api/share/:id 仍是原文，那只是看不见，不是不暴露。
+   *
+   * revealContacts 是留给「这份就是要发给某位招聘方」的显式出口，默认关闭。
+   */
+  const revealContacts = req.body?.revealContacts === true
+  const redacted = redactForShare(sanitized.value, { revealContacts })
+
   if (!shareLimiter.tryTake(`share:${auth.subject}`)) {
     res.status(429).json({ ok: false, message: '分享过于频繁，请一小时后再试' })
     return
@@ -785,7 +798,8 @@ app.post('/api/share', guards.requireAuth, (req, res) => {
       result = db.createShare(
         newShareId(),
         auth.userId,
-        sanitized.value,
+        // 用屏蔽后的数据：库里存的就已经不含原手机号 / 邮箱 / 身份证号
+        redacted.resume,
         SHARE_TTL_DAYS * 24 * 60 * 60 * 1000,
         listInCollection,
       )
@@ -800,7 +814,17 @@ app.post('/api/share', guards.requireAuth, (req, res) => {
     return
   }
 
-  res.json({ ok: true, id: result.id, expiresAt: result.expiresAt })
+  res.json({
+    ok: true,
+    id: result.id,
+    expiresAt: result.expiresAt,
+    // 告知界面屏蔽了什么，让它如实告诉用户，而不是悄悄替用户决定
+    redacted: {
+      labels: redacted.maskedLabels,
+      inText: redacted.maskedInText,
+      revealContacts,
+    },
+  })
 })
 
 /** 当前用户的分享列表（「我的分享」管理用：撤销、取消合集展示） */
