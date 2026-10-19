@@ -34,7 +34,10 @@
     "verify:paper": "node tools/verify-paper-edit.mjs",
     "verify:drag": "node tools/verify-drag.mjs",
     "verify:selects": "node tools/verify-selects.mjs",
-    "verify:panel": "node tools/verify-panel-resize.mjs"
+    "verify:panel": "node tools/verify-panel-resize.mjs",
+    "verify:markdown": "node tools/verify-markdown-roundtrip.mjs",
+    "build:host-template": "node tools/build-host-template.mjs",
+    "preview:host-theme": "node tools/preview-host-theme.mjs"
   },
   "lint-staged": {
     "*.{js,vue}": [

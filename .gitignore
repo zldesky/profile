@@ -61,3 +61,6 @@ __pycache__/
 tools/shots/
 # 启动性能 trace（tools/trace-startup.mjs 的产物，本地分析用）
 tools/trace/
+
+# 宿主主题的预览产物（npm run preview:host-theme 生成）
+markdown-hosts/preview/

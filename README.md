@@ -14,6 +14,8 @@
 
   AI 补充导入的两道保险（都因为**错填比不填更糟**）：结果先在弹窗里列出「将写入以下内容」，用户确认后才写回；归一化阶段**丢掉所有空值**，因此模型没提取到时不会把原有内容清空。提示词里反复强调不许编造，返回后也不做任何「合理补全」——简历上的假经历是灾难。写入经由 store，可 Ctrl+Z 撤销。
 
+- **Markdown 是一等内容源**（多种用法）：同一份 `.md`，既能在 Web 编辑器里可视化编辑与出矢量 PDF，也能在 **VSCode / Typora / Obsidian** 里直接写与出 PDF（主题见 [`markdown-hosts/`](./markdown-hosts/)）。编辑器「导出数据 → Markdown 内容源」导出的文件**能精确导回**，「导入数据 → Markdown 简历导入」也接受手写的 LapisCV 式 Markdown。格式与两条规则（键值行加粗、别删类型提示）见 [`markdown-hosts/README.md`](./markdown-hosts/README.md)。
+
 - **导出防刷**：渲染并发信号量 + 按用户/全站双层每日配额 + 内容去重缓存。
 
 部署方式（本机自用 / 服务器 / Docker / 纯静态托管）见 [DEPLOY.md](./DEPLOY.md)。
@@ -42,6 +44,27 @@ npm run pdf             # 仅应用服务（账号 / 云端简历 / PDF 导出�
 
 AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置」里填入任意 OpenAI 兼容服务的 API Key 即可启用（内置 DeepSeek / 智谱 GLM / Kimi / 硅基流动 / OpenCode 等 11 家预设，也可自定义地址）。
 
+### 同一份简历的多种用法
+
+内容的源是 Markdown，渲染交给不同的宿主 —— 这一节说明四条路各自适合什么。
+
+| 方式       | 入口                                                       | 出 PDF 靠什么                               | 适合                           |
+| ---------- | ---------------------------------------------------------- | ------------------------------------------- | ------------------------------ |
+| Web 编辑器 | `/editor`                                                  | 本机 / 服务端渲染，**矢量 PDF、文本可选中** | 可视化调整模板、配色、布局     |
+| VSCode     | [`markdown-hosts/`](./markdown-hosts/) + Markdown PDF 扩展 | 扩展自带的 Chromium                         | 已经在 VSCode 里写东西         |
+| Typora     | 同一份 CSS 作为主题                                        | Typora 的导出                               | 习惯所见即所得的 Markdown 编辑 |
+| Obsidian   | 同一份 CSS 作为片段                                        | Obsidian 的导出                             | 简历与笔记放在一起维护         |
+
+四条路读的是**同一份 `.md`**。所以「在 VSCode 里改完，导回 Web 编辑器调模板再出矢量 PDF」是通的 ——
+反过来也通：编辑器里编完，导出内容源，拿去外编辑器继续维护。
+
+**两条容易踩的规则**（详见 [markdown-hosts/README.md](./markdown-hosts/README.md)）：
+键值行的标签必须写成加粗（`- **标签**：值`），否则「带中文冒号的要点」在导入时会被静默当成补充字段；
+`<!-- resume:type=… -->` 那几行不能删（渲染时不可见，但导入时靠它确定模块类型）。
+
+**导入只还原内容**：主题 / 模板 / 模块布局 / 头像不在 Markdown 里，导入后取默认值。
+即 **Markdown 是「内容的源」，不是「整份文档的源」**；要完全复原请用 JSON 备份。
+
 ### 页面结构
 
 | 路径          | 页面        | 说明                                                                                                                          |
@@ -59,35 +82,38 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 
 ## 常用脚本
 
-| 命令                        | 说明                                                                                                                                                                           |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `npm run dev`               | 仅启动前端（Vite，端口 5173）                                                                                                                                                  |
-| `npm run dev:all`           | 前端 + 应用服务一起启动，退出时同时结束                                                                                                                                        |
-| `npm run build`             | 构建产物到 `dist/`                                                                                                                                                             |
-| `npm run pdf`               | 启动应用服务（托管 `dist/` 静态站点 + `/api`，端口 3001）                                                                                                                      |
-| `npm test`                  | 运行 Vitest 测试（498 例：**含 /api 集成测试**，以及鉴权与会话守卫、来源校验、配额、数据清洗、SSRF 防线、导出、简历 store 及其拆解出的持久化/快照/多文档/模块树、AI 客户端等） |
-| `npm run lint`              | ESLint 检查（代码质量与 Vue 陷阱）                                                                                                                                             |
-| `npm run lint:fix`          | ESLint 自动修复                                                                                                                                                                |
-| `npm run format`            | Prettier 格式化 src / server / tests / 根配置                                                                                                                                  |
-| `npm run format:check`      | 只校验不改动（CI 用）                                                                                                                                                          |
-| `npm run audit:ui`          | **真实浏览器度量**（对比度 / 点击目标 / 文本溢出 / 键盘焦点）。默认审 `/editor`；带 URL 审首页，加 `--shots` 出截图。需先起服务                                                |
-| `npm run audit:interaction` | 交互态：键盘焦点可见性、悬停反馈（真的按 Tab / 真的移鼠标）                                                                                                                    |
-| `npm run audit:admin`       | 管理后台（`/admin`）的界面审计：自起临时服务 + 自造管理员，一步跑完                                                                                                            |
-| `npm run verify:templates`  | 逐个切换 12 个模板，数纸面可见文字 —— 验证模板组件迁 TS 后没有静默渲染成空白                                                                                                   |
-| `npm run verify:dialogs`    | 逐个点开关键弹窗，确认迁 TS 后仍能弹出且有内容                                                                                                                                 |
-| `npm run verify:captcha`    | 验证滑块验证码能加载并真的能拖动（注册必经环节）                                                                                                                               |
-| `npm run verify:paper`      | 纸面「点文字就地编辑」与「点模块跳转」：真的改值看纸面是否变                                                                                                                   |
-| `npm run verify:drag`       | 右侧面板模块卡片拖拽换序：真的拖，看顺序是否改变                                                                                                                               |
-| `npm run verify:selects`    | 下拉框统一性：源码级 import 守门 + dist 新鲜度 + 逐页量宽度 + 换值是否生效                                                                                                     |
-| `npm run verify:panel`      | 右侧面板宽度拉伸：拖拽位移是否精确、上下限、落盘、刷新保持、键盘、窄屏隐藏                                                                                                     |
-| `npm run audit:el`          | 量单个元素的盒子与真实命中区，如 `npm run audit:el -- .ed-check`                                                                                                               |
-| `npm run audit:login`       | 造一个已登录会话令牌，配合 `npm run audit:ui -- --token <令牌>`                                                                                                                |
-| `npm run audit:session`     | 诊断会话令牌是否真的生效                                                                                                                                                       |
-| `npm run audit:perf`        | 4G 手机档下的加载性能（长任务、启动里程碑、传输量）                                                                                                                            |
-| `npm run audit:mobile`      | 移动端布局：顶栏高度、逐行按钮、横向溢出定位                                                                                                                                   |
-| `npm run audit:trace`       | 录启动 trace 并按阶段聚合，定位「那 1 秒被谁占了」                                                                                                                             |
-| `npm run audit:shot`        | 给公开页面（首页 / 合集 / 登录）截图并量栅格与缩略图缩放比                                                                                                                     |
-| `npm run audit:dialog`      | 打开指定弹窗并截图，如 `npm run audit:dialog -- "AI 补充导入"`                                                                                                                 |
+| 命令                          | 说明                                                                                                                                                                           |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm run dev`                 | 仅启动前端（Vite，端口 5173）                                                                                                                                                  |
+| `npm run dev:all`             | 前端 + 应用服务一起启动，退出时同时结束                                                                                                                                        |
+| `npm run build`               | 构建产物到 `dist/`                                                                                                                                                             |
+| `npm run pdf`                 | 启动应用服务（托管 `dist/` 静态站点 + `/api`，端口 3001）                                                                                                                      |
+| `npm test`                    | 运行 Vitest 测试（498 例：**含 /api 集成测试**，以及鉴权与会话守卫、来源校验、配额、数据清洗、SSRF 防线、导出、简历 store 及其拆解出的持久化/快照/多文档/模块树、AI 客户端等） |
+| `npm run lint`                | ESLint 检查（代码质量与 Vue 陷阱）                                                                                                                                             |
+| `npm run lint:fix`            | ESLint 自动修复                                                                                                                                                                |
+| `npm run format`              | Prettier 格式化 src / server / tests / 根配置                                                                                                                                  |
+| `npm run format:check`        | 只校验不改动（CI 用）                                                                                                                                                          |
+| `npm run audit:ui`            | **真实浏览器度量**（对比度 / 点击目标 / 文本溢出 / 键盘焦点）。默认审 `/editor`；带 URL 审首页，加 `--shots` 出截图。需先起服务                                                |
+| `npm run audit:interaction`   | 交互态：键盘焦点可见性、悬停反馈（真的按 Tab / 真的移鼠标）                                                                                                                    |
+| `npm run audit:admin`         | 管理后台（`/admin`）的界面审计：自起临时服务 + 自造管理员，一步跑完                                                                                                            |
+| `npm run verify:templates`    | 逐个切换 12 个模板，数纸面可见文字 —— 验证模板组件迁 TS 后没有静默渲染成空白                                                                                                   |
+| `npm run verify:dialogs`      | 逐个点开关键弹窗，确认迁 TS 后仍能弹出且有内容                                                                                                                                 |
+| `npm run verify:captcha`      | 验证滑块验证码能加载并真的能拖动（注册必经环节）                                                                                                                               |
+| `npm run verify:paper`        | 纸面「点文字就地编辑」与「点模块跳转」：真的改值看纸面是否变                                                                                                                   |
+| `npm run verify:drag`         | 右侧面板模块卡片拖拽换序：真的拖，看顺序是否改变                                                                                                                               |
+| `npm run verify:selects`      | 下拉框统一性：源码级 import 守门 + dist 新鲜度 + 逐页量宽度 + 换值是否生效                                                                                                     |
+| `npm run verify:panel`        | 右侧面板宽度拉伸：拖拽位移是否精确、上下限、落盘、刷新保持、键盘、窄屏隐藏                                                                                                     |
+| `npm run verify:markdown`     | Markdown 往返（端到端）：真点菜单导出、真上传导入，比对纸面文字是否逐字一致                                                                                                    |
+| `npm run build:host-template` | 用应用自己的导出器生成宿主模板 markdown-hosts/templates/resume.md（避免手写模板与格式漂移）                                                                                    |
+| `npm run preview:host-theme`  | 渲染宿主主题并断言「完整示例简历恰好一页 A4」，同时产出预览图与外编辑器用的 PDF                                                                                                |
+| `npm run audit:el`            | 量单个元素的盒子与真实命中区，如 `npm run audit:el -- .ed-check`                                                                                                               |
+| `npm run audit:login`         | 造一个已登录会话令牌，配合 `npm run audit:ui -- --token <令牌>`                                                                                                                |
+| `npm run audit:session`       | 诊断会话令牌是否真的生效                                                                                                                                                       |
+| `npm run audit:perf`          | 4G 手机档下的加载性能（长任务、启动里程碑、传输量）                                                                                                                            |
+| `npm run audit:mobile`        | 移动端布局：顶栏高度、逐行按钮、横向溢出定位                                                                                                                                   |
+| `npm run audit:trace`         | 录启动 trace 并按阶段聚合，定位「那 1 秒被谁占了」                                                                                                                             |
+| `npm run audit:shot`          | 给公开页面（首页 / 合集 / 登录）截图并量栅格与缩略图缩放比                                                                                                                     |
+| `npm run audit:dialog`        | 打开指定弹窗并截图，如 `npm run audit:dialog -- "AI 补充导入"`                                                                                                                 |
 
 ### /api 集成测试（`tests/api.test.js`）
 

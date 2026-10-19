@@ -1,0 +1,334 @@
+/*
+ * 简历工坊 · Markdown 宿主主题
+ * ─────────────────────────────────────────────────────────────
+ * 让同一份 Markdown 简历在 VSCode / Typora / Obsidian 里**直接看到成品排版**，
+ * 并从这里导出 PDF —— 与 LapisCV 的用法同源：内容是 Markdown，渲染交给你的编辑器。
+ *
+ * 与 Web 编辑器的关系：Web 编辑器负责可视化编辑与矢量 PDF；
+ * 这里是「不想开浏览器」或「习惯在自己的笔记软件里维护」时的那条路。
+ * 两边读同一份 `.md`（格式约定见 src/utils/markdownSource.ts 的文件头）。
+ *
+ * 三个宿主的挂载方式不同，但渲染出来的 HTML 是同一套（h1/h2/h3/ul/li/strong/em/hr），
+ * 所以下面的规则以标准标签为主，只在必要处补宿主专属作用域：
+ *   - Typora：内容在 #write 里
+ *   - Obsidian：正文在 .markdown-preview-view / .markdown-rendered 里
+ *   - VSCode 的 Markdown PDF 扩展：直接是 body
+ *
+ * 自定义：改下面 :root 里的变量即可（这一段是有意做成可调的，
+ * 版面细节都从这些变量推导，不必逐条改规则）。
+ */
+
+/* ===================== 可调变量 ===================== */
+
+:root {
+  /* 正文 */
+  /*
+   * 字号与行高的默认值由「完整示例简历恰好一页 A4」反推而来，
+   * 不是随手挑的：项目自己的 A4 纸面对同一份示例内容是放得下的，
+   * 主题若是溢出到第二页，就说明排版比纸面松。
+   * 改这两个值后请跑 `npm run preview:host-theme`，它会断言是否仍在一页内。
+   */
+  --text-size: 10pt;
+  --line-height: 1.5;
+  --text-color: #2b2f36;
+
+  /* 主题色：姓名下划线、栏标题标记、链接 */
+  --accent: #1f2937;
+  --accent-soft: #e5e7eb;
+  --muted: #6b7280;
+
+  /* 版心与间距 */
+  --content-width: 200mm;
+  --section-gap: 0.66em;
+  --entry-gap: 0.34em;
+
+  /* 字体 */
+  --text-font:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Source Han Sans SC', sans-serif;
+  --title-font: var(--text-font);
+
+  /* 打印页边距（上 右 下 左） */
+  --print-margin: 12mm 14mm 12mm 14mm;
+}
+
+/* ===================== 基础排版 ===================== */
+
+body {
+  padding: 0;
+  color: var(--text-color);
+  font-family: var(--text-font);
+  font-size: var(--text-size);
+  line-height: var(--line-height);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Typora 与 Obsidian 的内容容器 */
+#write,
+.markdown-preview-view,
+.markdown-rendered {
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: 0;
+  font-family: var(--text-font);
+  font-size: var(--text-size);
+  line-height: var(--line-height);
+  color: var(--text-color);
+}
+
+/* 段落与列表的默认呼吸感收一收：简历求紧凑 */
+p {
+  margin: 0.35em 0;
+}
+
+/* ===================== 姓名块 ===================== */
+
+/*
+ * 一级标题 = 姓名，独占首屏。下面那条线是整份简历唯一的强势装饰，
+ * 用它把姓名块与后面所有栏目标开。
+ */
+h1,
+#write h1,
+.markdown-rendered h1 {
+  margin: 0 0 0.35em;
+  padding-bottom: 0.25em;
+  border-bottom: 2px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--title-font);
+  font-size: 1.8em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+}
+
+/* 职位：姓名块里独占一行的粗体。弱化为副标题，别和姓名抢 */
+h1 + p > strong:only-child,
+#write h1 + p > strong:only-child {
+  display: block;
+  margin-top: -0.2em;
+  color: var(--muted);
+  font-size: 1.05em;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+/*
+ * 联系方式：姓名块下那个列表（第一个 ul）。
+ * 排成一行、用「·」分隔 —— 竖排一列联系方式会把首屏撑得很空。
+ * 用相邻兄弟选择器限定在姓名块之后，不会误伤栏内的列表。
+ */
+h1 ~ ul:first-of-type {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2em 1.1em;
+  margin: 0.2em 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 0.95em;
+}
+
+h1 ~ ul:first-of-type > li {
+  position: relative;
+  margin: 0;
+}
+
+/* 分隔点用伪元素，这样列表本身仍然是标准的 ul/li（不破坏可访问性） */
+h1 ~ ul:first-of-type > li + li::before {
+  position: absolute;
+  left: -0.6em;
+  content: '·';
+  color: var(--accent-soft);
+}
+
+h1 ~ ul:first-of-type strong {
+  color: var(--text-color);
+  font-weight: 500;
+}
+
+/* ===================== 栏标题（二级） ===================== */
+
+h2,
+#write h2,
+.markdown-rendered h2 {
+  position: relative;
+  margin: var(--section-gap) 0 0.32em;
+  padding-left: 0.55em;
+  color: var(--accent);
+  font-family: var(--title-font);
+  font-size: 1.12em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* 左侧竖条：比整行下划线轻，多个栏目并排时不显得吵 */
+h2::before {
+  position: absolute;
+  top: 0.18em;
+  bottom: 0.18em;
+  left: 0;
+  width: 0.22em;
+  border-radius: 0.11em;
+  background: var(--accent);
+  content: '';
+}
+
+/* ===================== 条目标题（三级） ===================== */
+
+h3,
+#write h3,
+.markdown-rendered h3 {
+  margin: var(--entry-gap) 0 0.08em;
+  color: var(--text-color);
+  font-size: 1em;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+/*
+ * 时间：紧跟三级标题的那一段。
+ * 做成次级色、且与标题贴紧 —— 它在语义上是标题的补充，不是独立段落。
+ */
+h3 + p,
+#write h3 + p {
+  margin: 0 0 0.2em;
+  color: var(--muted);
+  font-size: 0.92em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===================== 列表：要点与键值 ===================== */
+
+ul {
+  margin: 0.3em 0;
+  padding-left: 1.05em;
+  list-style: none;
+}
+
+li {
+  position: relative;
+  margin-bottom: 0.06em;
+  white-space: pre-wrap;
+}
+
+/* 用伪元素画小方块点，避免不同宿主的默认项目符号差异 */
+li::before {
+  position: absolute;
+  top: 0.62em;
+  left: -0.85em;
+  width: 0.3em;
+  height: 0.3em;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.55;
+  content: '';
+}
+
+/* 键值行里的标签：正常字重 + 主色，读起来是「标签：值」而不是加粗噪声 */
+li > strong:first-child {
+  color: var(--text-color);
+  font-weight: 600;
+}
+
+/* 联系方式那一行没有项目符号（上面已单独处理），这里兜一下嵌套的 ul */
+li > ul {
+  margin-top: 0.2em;
+}
+
+/* ===================== 其它 ===================== */
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-soft);
+}
+
+/*
+ * 分隔线 = 分页标记（与 LapisCV 同一约定）。
+ * Web 编辑器里的分页是自动的，所以在那边它被忽略；
+ * 在这里让浏览器在它之后分页，用来手动控制多页简历的分页位置。
+ */
+hr {
+  height: 0;
+  margin: 0;
+  border: 0;
+  break-after: page;
+  page-break-after: always;
+}
+
+/* 页面上不显示那行类型提示（HTML 注释本来就不可见，这里只是明确表意） */
+.comment,
+.md-comment {
+  display: none;
+}
+
+/* ===================== 打印 ===================== */
+
+@media print {
+  /*
+   * size: A4 不能省。
+   * 不写它的话，Chromium 会按**美式 Letter**（8.5×11in = 216×279mm）出纸 ——
+   * 比 A4 矮 18mm、宽 6mm，而中文简历按 A4 排版。
+   * 实测：缺这一行时同一份内容在 Letter 上溢出成 2 页（MediaBox 612×792），
+   * 补上后是 1 页（595×842）。这个问题**只有真的导出一份 PDF 才看得出来** ——
+   * 浏览器预览与截图都不会报。
+   */
+  @page {
+    size: A4;
+    margin: var(--print-margin);
+  }
+
+  body,
+  #write,
+  .markdown-preview-view,
+  .markdown-rendered {
+    max-width: none;
+    padding: 0;
+  }
+
+  /* 条目尽量不被拆到两页：拆开的经历读起来很痛苦 */
+  h3,
+  h2 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  li,
+  h3 + p {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
+
+/* ===================== Obsidian 专属微调 ===================== */
+
+/*
+ * Obsidian 的预览会给内容加一层自己的内边距与最大宽度，
+ * 这里覆盖掉，让版面与另外两个宿主一致。
+ */
+.markdown-preview-view.markdown-rendered,
+.markdown-source-view.mod-cm6 .cm-scroller {
+  padding: 0;
+}
+
+.markdown-preview-sizer {
+  max-width: var(--content-width);
+  padding-bottom: 0 !important;
+}
+
+/* 编辑态（实时预览）下也套用正文排版，边写边看才一致 */
+.markdown-source-view.mod-cm6 .cm-line {
+  font-family: var(--text-font);
+  font-size: var(--text-size);
+  line-height: var(--line-height);
+}
+
+/* ===================== Typora 专属微调 ===================== */
+
+/*
+ * Typora 会在 #write 外面再套一层 padding，导出 PDF 时容易多出白边。
+ * 这里清掉，页边距统一交给上面的 @page。
+ */
+#write {
+  padding: 0 !important;
+}

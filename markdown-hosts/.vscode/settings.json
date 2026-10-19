@@ -1,0 +1,14 @@
+{
+  // 让 VSCode 的 Markdown 预览与「Markdown PDF」扩展都套用本目录的主题
+  "markdown.styles": ["resume.css"],
+
+  // 页面边距与 resume.css 里的 --print-margin 保持一致（上 右 下 左，单位 mm）
+  "markdown-pdf.margin.top": "14mm",
+  "markdown-pdf.margin.right": "14mm",
+  "markdown-pdf.margin.bottom": "14mm",
+  "markdown-pdf.margin.left": "14mm",
+
+  // 简历里的中文标点与全角字符较多，用等宽字体读 Markdown 源反而更整齐
+  "markdown-pdf.type": ["pdf"],
+  "editor.wordWrap": "on"
+}
