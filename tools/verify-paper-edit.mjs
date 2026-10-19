@@ -72,6 +72,11 @@ const CASES = [
   ['jobTitle', '页头 · 职位'],
   ['sectionTitle', '模块标题'],
   ['gridValue', '网格项内容'],
+  /*
+   * 技能名原先只有一个「被 showBars 关掉」的渲染路径，锚点其实不存在 ——
+   * 补回渲染后它必须也能就地编辑，所以列进来当回归用例。
+   */
+  ['skillName', '技能名'],
 ]
 
 for (const [field, label] of CASES) {

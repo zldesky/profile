@@ -77,10 +77,26 @@ const gridFlow = computed(() => {
         <span class="r-v" data-field="skillValue" :data-item-id="field.id">{{ field.value }}</span>
       </div>
       <!--
-        这里原先在 showBars 打开时渲染技能进度条。已整套移除：
-        简历里给技能打百分比既不精确也不加分。现在技能只走上方的文字描述。
-        showBars 字段保留在数据里（旧简历照常加载），只是不再被读取。
+        技能名列表。
+        原先它们在「进度条」区块里渲染，而那一段由 showBars 控制、默认关闭 ——
+        也就是说**默认情况下纸面上从来没有技能名**：编辑器里能加、文本导出里有、
+        但纸面与 PDF 里没有。移除熟练度时我按字面把这整段删掉了，
+        于是技能名连唯一的渲染路径也没了（useInlineEdit 里 skillName 的就地编辑分支
+        因此一直没有对应锚点）。这里补回：只有技能名，不再有百分比与进度条。
+
+        用 .r-bullets 而不是新造一个类：它是 12 套模板都已适配的通用列表样式，
+        新类还得逐个模板补 :deep 规则。
       -->
+      <ul v-if="section.items.length" class="r-bullets">
+        <li
+          v-for="skill in section.items"
+          :key="skill.id"
+          data-field="skillName"
+          :data-item-id="skill.id"
+        >
+          {{ skill.name }}
+        </li>
+      </ul>
     </template>
 
     <!-- 段落文本 -->
