@@ -190,6 +190,13 @@ function collect(limits) {
   /* ---------- 2. 点击目标尺寸 ---------- */
   const small = []
   const seenTap = new Set()
+  /*
+   * 选择器里**故意不含 [role="separator"]**（编辑器右侧的面板宽度分隔条）。
+   * 那条 7px 宽的竖条只在 >900px（两栏并排）时出现，那个尺寸下输入是鼠标/触控板；
+   * 24px 这条规则针对的是触屏，而窄屏下面板本来就是整宽、没有可拖的分隔条。
+   * 所以这是适用范围的判断，不是漏测 —— 它的焦点与悬停反馈由
+   * audit-interaction.mjs 覆盖（那里把它算作可交互元素）。
+   */
   for (const el of document.querySelectorAll('button, a[href], input, select, textarea, [role="button"]')) {
     if (!visible(el)) continue
     const r = el.getBoundingClientRect()

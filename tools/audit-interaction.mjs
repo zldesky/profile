@@ -70,9 +70,14 @@ const COLLECT = () => {
       .trim()
       .slice(0, 24) || el.tagName.toLowerCase()
 
+  /*
+   * [role="separator"] 是面板宽度分隔条。它虽然是拖拽控件，但焦点与悬停
+   * 反馈一样必须有（键盘用户靠方向键调宽度），所以纳入覆盖。
+   * 它是 7px 宽的竖条，触屏点击目标规则不适用 —— 理由写在 audit-ui.mjs 里。
+   */
   const nodes = [
     ...document.querySelectorAll(
-      'button, a[href], [role="button"], [role="menuitem"], [role="tab"], summary',
+      'button, a[href], [role="button"], [role="menuitem"], [role="tab"], [role="separator"], summary',
     ),
   ].filter(visible)
 

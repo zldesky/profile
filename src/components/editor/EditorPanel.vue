@@ -48,9 +48,26 @@ watch(requestSeq, () => {
 <style scoped>
 .editor-panel {
   display: flex;
-  flex: 0 0 340px;
+  /*
+   * 宽度由 usePanelResize 写进 --panel-w（默认 340 与原值一致）。
+   * 用变量而不是 prop：宽度是布局值，没必要让这个组件多一个与自身职责无关的入参。
+   * 窄屏那条媒体查询里的 flex: 1 1 auto 会覆盖它，所以手机上不受影响。
+   */
+  flex: 0 0 var(--panel-w, 340px);
   flex-direction: column;
   min-height: 0;
+  /*
+   * min-width: 0 不能省，否则拖窄会**拖不动**。
+   *
+   * flex 项默认 min-width: auto，即「不得小于内容的固有宽度」；
+   * 面板里那排模块操作按钮合计约 224px 再加内边距，把固有宽度顶到约 321px。
+   * 结果就是：宽度变量已经变成 280，面板却停在 321 —— 最后 41px 像是「拖不动」。
+   * 实测过：--panel-w=280px 而面板 getBoundingClientRect().width = 321px。
+   *
+   * 允许压缩后由内部换行/滚动消化。窄屏那条媒体查询里本来就有这一条，
+   * 桌面这边一直缺，只是以前宽度写死 340 看不出来。
+   */
+  min-width: 0;
   border-left: 1px solid var(--ed-line-soft);
   background: var(--ed-surface);
 }

@@ -33,7 +33,8 @@
     "verify:captcha": "node tools/verify-captcha.mjs",
     "verify:paper": "node tools/verify-paper-edit.mjs",
     "verify:drag": "node tools/verify-drag.mjs",
-    "verify:selects": "node tools/verify-selects.mjs"
+    "verify:selects": "node tools/verify-selects.mjs",
+    "verify:panel": "node tools/verify-panel-resize.mjs"
   },
   "lint-staged": {
     "*.{js,vue}": [
