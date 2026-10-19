@@ -87,7 +87,7 @@ const gridFlow = computed(() => {
         用 .r-bullets 而不是新造一个类：它是 12 套模板都已适配的通用列表样式，
         新类还得逐个模板补 :deep 规则。
       -->
-      <ul v-if="section.items.length" class="r-bullets">
+      <ul v-if="section.items.length" class="r-skills">
         <li
           v-for="skill in section.items"
           :key="skill.id"

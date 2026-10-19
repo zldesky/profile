@@ -687,7 +687,44 @@ textarea {
   margin-bottom: 0;
 }
 
-/* ---------------- 技能进度条 ---------------- */
+/* ---------------- 技能名 ---------------- */
+
+/*
+ * 技能名排成**一行**，中间用间隔点分隔。
+ *
+ * 为什么不用竖排列表：简历的页数是硬约束。示例简历原本正好卡在一页 A4 的高度上
+ * （1123px），技能名竖排多出的三行会直接把它顶到第二页（实测 1143px → 2 页）。
+ * 行内排布既省高度，也更符合「技能是一组并列的词」的读法。
+ *
+ * 间隔点用伪元素画，列表本身仍是标准的 ul/li —— 这样 data-field 锚点与
+ * 就地编辑、键盘可达性都不受影响。
+ */
+.r-skills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  margin-top: 0.3em;
+  padding: 0;
+  list-style: none;
+}
+
+.r-skills li {
+  position: relative;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.r-skills li + li {
+  margin-left: 0.55em;
+}
+
+.r-skills li + li::before {
+  position: absolute;
+  left: -0.55em;
+  color: var(--accent);
+  opacity: 0.5;
+  content: '·';
+}
 
 /*
  * 技能进度条的样式（.r-bars / .r-bar-head / .r-bar-pct / .r-bar-track / .r-bar-fill）
@@ -905,6 +942,24 @@ textarea {
     margin: 0 !important;
     padding: 0 !important;
     box-shadow: none !important;
+  }
+
+  /*
+   * 只打印应用本体，body 下别的节点一律不参与分页。
+   *
+   * body 下会挂上**非应用**的浮层：
+   *  - 浏览器扩展注入的（Vue DevTools 的 #__vue-devtools-container__ / #vue-inspector-container）；
+   *  - 各弹窗组件 Teleport 到 body 的节点。
+   * 它们的计算高度常常是 0，看起来无害，但**在分页时依然会占位** ——
+   * 实测：留着 DevTools 浮层时，内容只有 953px（可打印高度 1032px）也会被切成 2 页；
+   * 隐藏后立刻回到 1 页。这也解释了「开发态导出 2 页、生产态却是 1 页」这类诡异差异：
+   * server/render.ts 的 detectRenderUrl 在开发时优先渲染 Vite（带扩展浮层），
+   * 生产时渲染自己的 dist（不带）。同一个导出功能，两种结果。
+   *
+   * #app 是应用根节点（见 index.html）。弹窗不该出现在 PDF 里，一并隐藏。
+   */
+  body > *:not(#app) {
+    display: none !important;
   }
 
   .r-avatar {

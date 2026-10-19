@@ -103,6 +103,7 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 | `npm run verify:drag`         | 右侧面板模块卡片拖拽换序：真的拖，看顺序是否改变                                                                                                                               |
 | `npm run verify:selects`      | 下拉框统一性：源码级 import 守门 + dist 新鲜度 + 逐页量宽度 + 换值是否生效                                                                                                     |
 | `npm run verify:panel`        | 右侧面板宽度拉伸：拖拽位移是否精确、上下限、落盘、刷新保持、键盘、窄屏隐藏                                                                                                     |
+| `npm run verify:pdf`          | 服务端导出 PDF（端到端）：取应用自己的简历 JSON → 真发 `/api/pdf` →检查产出的 PDF （A4 纸张、页数、是否画了字）。现有集成测试只断言它匿名返回 401，从没真的生成过一份          |
 | `npm run verify:markdown`     | Markdown 往返（端到端）：真点菜单导出、真上传导入，比对纸面文字是否逐字一致                                                                                                    |
 | `npm run build:host-template` | 用应用自己的导出器生成宿主模板 markdown-hosts/templates/resume.md（避免手写模板与格式漂移）                                                                                    |
 | `npm run preview:host-theme`  | 渲染宿主主题并断言「完整示例简历恰好一页 A4」，同时产出预览图与外编辑器用的 PDF                                                                                                |

@@ -273,22 +273,22 @@ npm run build   # 上传/托管 dist/ 即可
 
 ## 环境变量参考
 
-| 变量                   | 默认值                | 说明                                                   |
-| ---------------------- | --------------------- | ------------------------------------------------------ |
-| `PORT`                 | `3001`                | 服务监听端口，需与 `vite.config.js` 的 `PDF_PORT` 一致 |
-| `HOST`                 | `127.0.0.1`           | 监听地址；对外暴露时 `/api` 仅限登录用户               |
-| `DEV_PORT`             | `5173`                | 渲染源自动探测的开发服务器端口                         |
-| `DB_PATH`              | `server/.data/app.db` | SQLite 数据库路径（账号/会话/简历/配额）               |
-| `PDF_USER_DAILY_LIMIT` | `10`                  | 每用户每日导出上限                                     |
-| `PDF_DAILY_LIMIT`      | `100`                 | 全站每日导出总额度（成本兜底）                         |
-| `RENDER_CONCURRENCY`   | `1`                   | 同时渲染的浏览器页面上限，小内存机器保持 1             |
-| `RENDER_QUEUE_MAX`     | `3`                   | 渲染排队上限，超过直接 429                             |
-| `BROWSER_EXTRA_ARGS`   | 空                    | 追加浏览器启动参数（容器内 `--no-sandbox` 从这里进）   |
-| `PDF_ACCESS_PASSWORD`  | 空（通道关闭）        | 脚本 Bearer 通道口令；连续错 10 次锁 15 分钟           |
-| `ALLOWED_ORIGINS`      | 空                    | 公网域名 Origin 白名单（逗号分隔）                     |
-| `TRUST_PROXY`          | 空                    | 前置反向代理时设 `1`，解析 X-Forwarded-*               |
-| `RENDER_URL`           | 自动探测              | 渲染源；显式设置时其来源同时加入白名单                 |
-| `BROWSER_PATH`         | 自动探测              | Chromium 内核浏览器可执行文件路径                      |
+| 变量                   | 默认值                | 说明                                                                                              |
+| ---------------------- | --------------------- | ------------------------------------------------------------------------------------------------- |
+| `PORT`                 | `3001`                | 服务监听端口，需与 `vite.config.js` 的 `PDF_PORT` 一致                                            |
+| `HOST`                 | `127.0.0.1`           | 监听地址；对外暴露时 `/api` 仅限登录用户                                                          |
+| `DEV_PORT`             | `5173`                | 渲染源自动探测的开发服务器端口                                                                    |
+| `DB_PATH`              | `server/.data/app.db` | SQLite 数据库路径（账号/会话/简历/配额）                                                          |
+| `PDF_USER_DAILY_LIMIT` | `10`                  | 每用户每日导出上限                                                                                |
+| `PDF_DAILY_LIMIT`      | `100`                 | 全站每日导出总额度（成本兜底）                                                                    |
+| `RENDER_CONCURRENCY`   | `1`                   | 同时渲染的浏览器页面上限，小内存机器保持 1                                                        |
+| `RENDER_QUEUE_MAX`     | `3`                   | 渲染排队上限，超过直接 429                                                                        |
+| `BROWSER_EXTRA_ARGS`   | 空                    | 追加浏览器启动参数（容器内 `--no-sandbox` 从这里进）                                              |
+| `PDF_ACCESS_PASSWORD`  | 空（通道关闭）        | 脚本 Bearer 通道口令；连续错 10 次锁 15 分钟                                                      |
+| `ALLOWED_ORIGINS`      | 空                    | 公网域名 Origin 白名单（逗号分隔）                                                                |
+| `TRUST_PROXY`          | 空                    | 前置反向代理时设 `1`，解析 X-Forwarded-*                                                          |
+| `RENDER_URL`           | 自动探测              | 渲染源；**必须指向编辑器页**（如 `http://localhost:5173/editor`），显式设置时其来源同时加入白名单 |
+| `BROWSER_PATH`         | 自动探测              | Chromium 内核浏览器可执行文件路径                                                                 |
 
 配置统一写在项目根 `.env`（已 gitignore，模板见 `.env.example`），由 `npm run pdf` 的 `--env-file-if-exists` 自动加载。
 

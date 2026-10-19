@@ -51,6 +51,7 @@ import {
   renderResumePdf,
 } from './render.ts'
 import { sanitizeFilename, sanitizeResume } from './sanitize.ts'
+import { EDITOR_PATH } from './renderTarget.ts'
 
 /**
  * 给 Express 的 Request 补上 req.auth。
@@ -254,7 +255,7 @@ let renderUrlCache = { value: '', at: 0 }
 async function detectRenderUrl() {
   if (process.env.RENDER_URL) return process.env.RENDER_URL
 
-  const candidates = LOCAL_HOSTS.map((host) => `http://${host}:${DEV_PORT}/`)
+  const candidates = LOCAL_HOSTS.map((host) => `http://${host}:${DEV_PORT}${EDITOR_PATH}`)
   for (const url of candidates) {
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(1500) })
@@ -264,7 +265,7 @@ async function detectRenderUrl() {
     }
   }
 
-  return `http://127.0.0.1:${PORT}/`
+  return `http://127.0.0.1:${PORT}${EDITOR_PATH}`
 }
 
 /**

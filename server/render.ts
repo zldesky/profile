@@ -201,7 +201,14 @@ export async function renderResumePdf({
       })
 
       await page.goto(renderUrl, { waitUntil: 'load', timeout: 20000 })
-      await page.waitForSelector('.paper', { timeout: 15000 })
+      /*
+       * 必须等**编辑器专属**的选择器，不能只等 `.paper`。
+       * 产品介绍首页（/）的主视觉里也有一个 `.paper`，所以只等 `.paper` 时，
+       * 一旦 renderUrl 指向了首页，这里照样通过，然后安安静静地导出一份
+       * 「首页的 PDF」—— 纸宽 332px、还带着页头页脚，分成 2 页。
+       * 选错页面却毫无报错，是最难发现的一类故障；这里让它直接超时失败。
+       */
+      await page.waitForSelector('.editor-app .paper', { timeout: 15000 })
       await waitForAssets(page)
 
       if (title) {

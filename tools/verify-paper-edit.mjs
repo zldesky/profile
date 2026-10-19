@@ -356,12 +356,74 @@ let groupOk = false
   }
 }
 
+/* ---------- 默认简历必须正好是一页 A4 ---------- */
+/*
+ * 这是一条**内容体积的回归闸门**，加它的原因是一次真实事故：
+ * 为了让技能名显示出来，我在纸面上补了一个技能名列表（3 行）——
+ * 结果示例简历从 1 页变成 2 页（纸面高度 1123px → 1143px），
+ * 而示例简历原本**正好卡在一页的高度上**，任何增加都会溢出。
+ *
+ * 「总长度」这类模糊断言拦不住这种问题（少三个词多三个词，长度可能一样），
+ * 「几页」是干净的硬指标。默认简历是给用户看的第一眼，它必须是一页。
+ */
+console.log('\n默认简历的页数：')
+// 两条分支都要赋值：lint 会指出「初始值没被用到」，而且这里也确实需要覆盖「找不到纸面」的情况
+let pagesOk
+{
+  const paging = await page.evaluate(() => {
+    /*
+     * 量的是**内容**高度，不是 .paper 的高度。
+     * .paper 有 `min-height: 一页 A4`，所以它的高度恰好等于 1123px ——
+     * 拿它去比 A4，永远得出「余量 0px」，完全看不出还有多少空间。
+     * （这一条我自己先量错过一次：报告「余量 0px」，实际余量 28px。）
+     *
+     * 真正该比的是：内容容器高度 vs 纸面**去掉内边距后**的可用高度。
+     */
+    const paper = document.querySelector('.paper')
+    if (!paper) return null
+    const cs = getComputedStyle(paper)
+    const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)
+    const available = paper.clientHeight - pad
+    // 内容 = 纸面里实际承载模板的那个子元素（取最高的）
+    const content = Math.max(
+      0,
+      ...[...paper.children].map((el) => el.getBoundingClientRect().height),
+    )
+    const shown = /(\d+)\s*页/.exec(document.body.innerText || '')
+    return {
+      available: Math.round(available),
+      content: Math.round(content),
+      shownPages: shown ? Number(shown[1]) : null,
+    }
+  })
+
+  if (!paging) {
+    pagesOk = false
+    console.log('  *** 找不到 .paper，无法判断页数')
+  } else {
+    const slack = paging.available - paging.content
+    pagesOk = paging.shownPages === 1 && slack >= 0
+    console.log(
+      `  ${pagesOk ? '✓' : '***'} 界面显示 ${paging.shownPages} 页 · 内容 ${paging.content}px / 可用 ${paging.available}px · ${
+        slack >= 0 ? `余量 ${slack}px` : `*** 超出 ${-slack}px`
+      }`,
+    )
+    if (!pagesOk) {
+      console.log('      *** 默认简历不是一页：内容体积增加了。')
+      console.log('          要么收排版，要么这属于「默认简历本来就该更长」的有意决定（那就调整本断言）。')
+    } else if (slack < 10) {
+      // 余量太小时提示：不同机器的字体度量略有差异，卡得太紧会在别处溢出成两页
+      console.log(`      （余量偏小，仅 ${slack}px。字体度量在不同机器上会有差异，太紧容易在别处溢出）`)
+    }
+  }
+}
+
 console.log('')
 console.log(
-  `就地编辑 ${pass}/${CASES.length} · 跳转 ${jumpOk ? 1 : 0}/1 · 文字拖动换序 ${dragOk ? 1 : 0}/1 · 整组拖动 ${groupOk ? 1 : 0}/1`,
+  `就地编辑 ${pass}/${CASES.length} · 跳转 ${jumpOk ? 1 : 0}/1 · 文字拖动换序 ${dragOk ? 1 : 0}/1 · 整组拖动 ${groupOk ? 1 : 0}/1 · 一页 ${pagesOk ? 1 : 0}/1`,
 )
 console.log('运行时错误:', errors.length ? errors.join(' | ') : '无')
-const ok = pass === CASES.length && jumpOk && dragOk && groupOk && !errors.length
+const ok = pass === CASES.length && jumpOk && dragOk && groupOk && pagesOk && !errors.length
 console.log(ok ? '纸面行为：全部通过' : '纸面行为：*** 有未通过项 ***')
 await browser.close()
 process.exit(ok ? 0 : 1)
