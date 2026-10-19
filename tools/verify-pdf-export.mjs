@@ -54,6 +54,25 @@ function inspectPdf(bytes) {
   }
 }
 
+/*
+ * 先确认开发服务可达。
+ *
+ * 临时服务的渲染源是**自动探测**的：优先用 Vite（此时渲染的是源码、最新），
+ * 探测不到就回落到它自己的静态目录 `dist`。而 `dist` 可能是旧的 ——
+ * 那正是「对着旧构建产物验证、假通过两轮」那个坑（见 PITFALLS 的 A10）。
+ * 与其依赖探测结果，不如在这里明确要求跑在开发服务上，让渲染源确定。
+ */
+try {
+  const ping = await fetch(`${appBase}/editor`, { signal: AbortSignal.timeout(5000) })
+  if (!ping.ok) throw new Error(`HTTP ${ping.status}`)
+} catch (error) {
+  console.log(`\n*** 打不开编辑器页面 ${appBase}/editor：${error.message}`)
+  console.log('    必须跑在开发服务上：临时服务的渲染源会自动探测，优先 Vite（源码、最新），')
+  console.log('    探测不到就回落到自己的 dist —— 而 dist 可能是旧的，那就成了"对着旧产物验证"。')
+  console.log('      npm run dev')
+  process.exit(1)
+}
+
 let browser
 // 服务脚手架的清理函数：无论成功失败都要收掉，否则会留下游离的 node 进程
 let started = null
