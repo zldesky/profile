@@ -195,10 +195,168 @@ if (!jump) {
   )
 }
 
+/* ---------- 按住模块文字拖动 → 换序 ---------- */
+/*
+ * 「点击=编辑、拖动=移动」是同一个起点上的两种意图，必须同时成立。
+ * 早先为了修就地编辑，在这里对 [data-field] 一律早退，代价是**从文字上无法起手拖动**；
+ * 后来发现真正的元凶是指针捕获（已推迟到拖拽激活时），于是两者可以共存。
+ * 这条断言就是钉住这个共存关系 —— 任一行为退化都会在这里失败。
+ */
+console.log('\n按住模块文字拖动：')
+let dragOk = false
+let groupOk = false
+{
+  const titlesOf = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('.paper .r-sec[data-sec-id]')].map((x) =>
+        (x.querySelector('[data-field="sectionTitle"]')?.textContent || '').trim(),
+      ),
+    )
+
+  // 落点必须让整块中心越过相邻模块的**中点** —— 这是 computeReorder 的判据
+  const before = await titlesOf()
+  const plan = await page.evaluate(() => {
+    const all = [...document.querySelectorAll('.paper .r-sec[data-sec-id]')]
+    const i = Math.min(2, all.length - 2)
+    const sec = all[i]
+    const next = all[i + 1]
+    if (!sec || !next) return null
+    sec.scrollIntoView({ block: 'center' })
+    const title = sec.querySelector('[data-field="sectionTitle"]')
+    const tr = title?.getBoundingClientRect()
+    const nr = next.getBoundingClientRect()
+    return {
+      // 从模块**标题文字**上起手 —— 正是早先被早退挡掉的那一类
+      from: { x: tr.x + Math.min(40, tr.width / 2), y: tr.y + tr.height / 2 },
+      to: { x: tr.x + Math.min(40, tr.width / 2), y: nr.top + nr.height / 2 + 30 },
+      startTitle: (title?.textContent || '').trim(),
+    }
+  })
+
+  if (!plan) {
+    console.log('  *** 拿不到模块标题坐标')
+  } else {
+    await page.mouse.move(plan.from.x, plan.from.y)
+    await page.mouse.down()
+    for (let i = 1; i <= 22; i += 1) {
+      await page.mouse.move(plan.from.x, plan.from.y + ((plan.to.y - plan.from.y) * i) / 22)
+      await page.waitForTimeout(30)
+    }
+    await page.waitForTimeout(150)
+    await page.mouse.up()
+    await page.waitForTimeout(700)
+    const after = await titlesOf()
+    dragOk = JSON.stringify(before) !== JSON.stringify(after)
+    console.log(
+      `  ${dragOk ? '✓' : '***'} 从文字起手拖动 → ${dragOk ? '顺序已变' : '顺序未变'}`,
+    )
+    if (dragOk) console.log(`      ${before.join(' / ')}  →  ${after.join(' / ')}`)
+  }
+
+  /* ---------- 框选多个模块后拖动整组 ---------- */
+  console.log('\n框选后拖动整组：')
+  const base = await titlesOf()
+  const band = await page.evaluate(() => {
+    const paper = document.querySelector('.paper')
+    const secs = [...document.querySelectorAll('.paper .r-sec[data-sec-id]')]
+    secs[0]?.scrollIntoView({ block: 'start' })
+    const r = paper.getBoundingClientRect()
+    const first = secs[0]?.getBoundingClientRect()
+    const third = secs[2]?.getBoundingClientRect()
+    return {
+      from: { x: r.left + 6, y: (first?.top ?? 0) + 4 },
+      to: { x: r.right - 6, y: (third?.bottom ?? 0) - 4 },
+    }
+  })
+  await page.mouse.move(band.from.x, band.from.y)
+  await page.mouse.down()
+  for (let i = 1; i <= 24; i += 1) {
+    await page.mouse.move(band.from.x + ((band.to.x - band.from.x) * i) / 24, band.from.y + ((band.to.y - band.from.y) * i) / 24)
+    await page.waitForTimeout(25)
+  }
+  await page.mouse.up()
+  await page.waitForTimeout(500)
+  const selInfo = await page.evaluate(() => {
+    const pick = (x) => (x.querySelector('[data-field="sectionTitle"]')?.textContent || '').trim()
+    const all = [...document.querySelectorAll('.paper .r-sec[data-sec-id]')]
+    const selected = all.filter((x) => x.classList.contains('is-sec-selected')).map(pick)
+    return { count: selected.length, titles: selected, allTitles: all.map(pick) }
+  })
+  const selCount = selInfo.count
+  console.log(`  框选到 ${selCount} 个模块：${selInfo.titles.join(' / ')}`)
+
+  if (selCount >= 2) {
+    const move = await page.evaluate(() => {
+      const sec = document.querySelector('.paper .r-sec.is-sec-selected')
+      const all = [...document.querySelectorAll('.paper .r-sec[data-sec-id]')]
+      if (!sec) return null
+      const idx = all.indexOf(sec)
+      const target = all[all.length - 1]
+      // 扫描一个有效起点（在模块内、非可编辑锚点）
+      const r = sec.getBoundingClientRect()
+      let from = null
+      for (let dy = 2; dy < r.height - 2 && !from; dy += 3) {
+        for (let dx = 2; dx < r.width - 2; dx += 10) {
+          const x = r.left + dx
+          const y = r.top + dy
+          const el = document.elementFromPoint(x, y)
+          if (!el || !el.closest('.r-sec[data-sec-id]') || el.closest('[data-field]')) continue
+          from = { x, y }
+          break
+        }
+      }
+      if (!from || !target) return null
+      const tr = target.getBoundingClientRect()
+      return { from, to: { x: from.x, y: tr.top + tr.height / 2 + 30 }, idx }
+    })
+    if (!move) {
+      console.log('  *** 拿不到整组拖动的坐标')
+    } else {
+      await page.mouse.move(move.from.x, move.from.y)
+      await page.mouse.down()
+      for (let i = 1; i <= 30; i += 1) {
+        await page.mouse.move(move.from.x, move.from.y + ((move.to.y - move.from.y) * i) / 30)
+        await page.waitForTimeout(28)
+      }
+      await page.waitForTimeout(150)
+      await page.mouse.up()
+      await page.waitForTimeout(700)
+      const afterGroup = await titlesOf()
+      const changed = JSON.stringify(base) !== JSON.stringify(afterGroup)
+      /*
+       * 「整组」的意义在于整组一起移动 —— 所以除了「顺序变了」，
+       * 还要断言被选中的那几项在结果里**仍然连续**。
+       * 只查「变了」会放过「组被打散」这种坏法：看起来动了，实际把一组拆开了。
+       */
+      const positions = selInfo.titles
+        .map((t) => afterGroup.indexOf(t))
+        .filter((i) => i >= 0)
+        .sort((a, b) => a - b)
+      const contiguous =
+        positions.length === selInfo.titles.length &&
+        positions.every((v, i) => i === 0 || v === positions[i - 1] + 1)
+      groupOk = changed && contiguous
+      console.log(
+        `  ${groupOk ? '✓' : '***'} 整组拖动 → ${changed ? '顺序已变' : '顺序未变'} · 组内仍连续 = ${contiguous}`,
+      )
+      if (changed) console.log(`      ${afterGroup.join(' / ')}`)
+      if (!contiguous) {
+        console.log(
+          `      *** 组被打散：选中「${selInfo.titles.join(' / ')}」在新顺序里的位置为 ${positions.join(',')}`,
+        )
+      }
+    }
+  } else {
+    console.log('  *** 框选不足 2 个模块，无法验证整组拖动')
+  }
+}
+
 console.log('')
-console.log(`就地编辑 ${pass}/${CASES.length} · 跳转 ${jumpOk ? 1 : 0}/1`)
+console.log(
+  `就地编辑 ${pass}/${CASES.length} · 跳转 ${jumpOk ? 1 : 0}/1 · 文字拖动换序 ${dragOk ? 1 : 0}/1 · 整组拖动 ${groupOk ? 1 : 0}/1`,
+)
 console.log('运行时错误:', errors.length ? errors.join(' | ') : '无')
-const ok = pass === CASES.length && jumpOk && !errors.length
+const ok = pass === CASES.length && jumpOk && dragOk && groupOk && !errors.length
 console.log(ok ? '纸面行为：全部通过' : '纸面行为：*** 有未通过项 ***')
 await browser.close()
 process.exit(ok ? 0 : 1)

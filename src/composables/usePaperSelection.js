@@ -86,24 +86,31 @@ export function usePaperSelection(paperRef, scrollRef, zoom) {
     const paper = toValue(paperRef)
     if (!paper) return
 
-    /*
-     * 按在**可编辑文字**上时不进入选中/框选交互，把这次点击留给就地编辑。
-     *
-     * 这一条是必需的，因为页头字段（姓名 / 职位 / 联系方式）**不在任何 .r-sec 里**：
-     * 它们在模板的页头（实测 `p.r-job → div.who → header.head → div.tpl-classic → .paper`），
-     * 所以下面 `closest('.r-sec[data-sec-id]')` 对它们返回 null，会落到 startBand 分支 ——
-     * 而 startBand 一上来就 `preventDefault()` + `setPointerCapture()`，
-     * 这会**吃掉后续的 click 事件**，于是 PreviewPane 的 onPaperClick 收不到，
-     * 「点页头上的文字就地修改」整个失效。
-     *
-     * 判断条件用 `[data-field]`（与就地编辑同一套锚点），而不是写死页头选择器：
-     * 这样以后任何模块里新增的可编辑字段也自动走同一条路。
-     * 代价是**框选无法从这些文字上起手** —— 但它们散落在页头与模块内部，
-     * 不是框选的常用起手位置，模块之间的空白仍然可以正常框选。
-     */
-    if (event.target.closest?.('[data-field]')) return
-
     const secEl = event.target.closest?.('.r-sec[data-sec-id]')
+
+    /*
+     * 页头字段（姓名 / 职位 / 联系方式）**不在任何 .r-sec 里** ——
+     * 实测祖先链是 `p.r-job → div.who → header.head → div.tpl-classic → .paper`。
+     * 它们既没有模块可选中、也没有东西可拖动，所以这里直接交还给就地编辑；
+     * 若放行到 startBand，那会 `preventDefault()` + `setPointerCapture()`，
+     * 把后续的 click 吃掉，「点页头文字就地修改」就失效了。
+     */
+    if (!secEl && event.target.closest?.('[data-field]')) return
+
+    /*
+     * 按在**模块文字**上时不再早退，而是照常进入 pressSection。
+     *
+     * 早先版本在这里对 `[data-field]` 一律早退 —— 那是为了修就地编辑失效，
+     * 但当时真正的元凶是 pressSection 里的 `paper.setPointerCapture()`：
+     * 指针被 paper 捕获后 click 的目标被重定向，onPaperClick 收不到。
+     * 捕获已经推迟到**拖拽真正激活时**（见 activateDrag），
+     * 所以现在点击能正常落到文字上，两个行为可以共存：
+     *
+     *   - 按下不动 → click → 就地编辑（openInlineEdit 优先）
+     *   - 按下并移动超过阈值 → 整组拖拽换序
+     *
+     * 这正是「选中文字后拖拽位置」想要的：文字既是编辑入口，也是拖动把手。
+     */
     if (secEl) pressSection(event, secEl, paper)
     else startBand(event, paper)
   }
