@@ -19,31 +19,17 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 
 import { chromium } from '../server/node_modules/playwright-core/index.mjs'
+import { startPdfServer } from './pdf-harness.mjs'
 
-const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const appBase = process.env.APP_BASE || 'http://localhost:5173'
-const apiBase = process.argv.find((a) => a.startsWith('http://127')) || 'http://127.0.0.1:3001'
 const outDir = mkdtempSync(join(tmpdir(), 'rs-pdf-export-'))
 
 const results = []
 function record(label, ok, detail) {
   results.push({ label, ok })
   console.log(`  ${ok ? '✓' : '***'} ${label}${detail ? ` — ${detail}` : ''}`)
-}
-
-/** 从 .env 里读脚本口令（环境变量优先） */
-function readAccessPassword() {
-  if (process.env.PDF_ACCESS_PASSWORD) return process.env.PDF_ACCESS_PASSWORD.trim()
-  try {
-    const env = readFileSync(join(ROOT, '.env'), 'utf8')
-    const m = /^\s*PDF_ACCESS_PASSWORD\s*=\s*(.*)$/m.exec(env)
-    return m ? m[1].trim().replace(/^["']|["']$/g, '') : ''
-  } catch {
-    return ''
-  }
 }
 
 /** 从 PDF 里读权威元数据：页树的 /Count、/MediaBox、字体资源 */
@@ -69,6 +55,8 @@ function inspectPdf(bytes) {
 }
 
 let browser
+// 服务脚手架的清理函数：无论成功失败都要收掉，否则会留下游离的 node 进程
+let started = null
 try {
   /* ---------- 1. 从应用里取真实简历 JSON ---------- */
   console.log('取简历数据（应用自己的 JSON 导出）：')
@@ -115,14 +103,18 @@ try {
   await browser.close()
   browser = null
 
-  /* ---------- 2. 发 /api/pdf ---------- */
-  const password = readAccessPassword()
-  if (!password) {
-    console.log('\n*** 没有可用的脚本口令：`.env` 里没配 PDF_ACCESS_PASSWORD，环境变量也没有。')
-    console.log('    这是服务端脚本通道的必要条件；也可以临时设环境变量后再跑，例如：')
-    console.log('      $env:PDF_ACCESS_PASSWORD="..."; node tools/verify-pdf-export.mjs')
-    process.exit(1)
-  }
+  /* ---------- 2. 起一个额度不受限的临时服务，发 /api/pdf ---------- */
+  /*
+   * 不打用户本机那个 3001：导出有每日额度（默认全站 20 次），
+   * 验证脚本一跑就要出好几份 PDF，反复跑几轮就把额度用光，
+   * 之后接口返 429 —— 那时的失败跟被测代码毫无关系。
+   */
+  console.log('\n启动临时服务（额度不受限）：')
+  const server = await startPdfServer()
+  const apiBase = server.base
+  const password = server.password
+  started = server.cleanup
+  console.log(`  ${apiBase} · 脚本口令通道已确认可用`)
 
   /*
    * 文件名必须每次不同。
@@ -170,12 +162,58 @@ try {
 
     record('画了字（有字体资源）', info.fontCount > 0, `${info.fontCount} 个字体对象`)
     record('页数与默认简历相称（1 页）', info.pageCount === 1, `${info.pageCount} 页`)
+
+    /* ---------- 3. 长简历必须能正常分页（内容不能被截断） ---------- */
+    /*
+     * 这一条比「默认简历是 1 页」更重要。
+     * 打印样式里为了压掉多余的一页，写了不少重置（`.paper` 的 min-height/padding、
+     * `body > *:not(#app)` 的隐藏…）。万一哪条重置把内容**截断**在一页里，
+     * 用户不会看到报错 —— 只会拿到一份**缺了后半截**的 PDF。
+     * 所以必须验证：内容变长时，页数要跟着涨。
+     * 「页数涨了」是「没有截断」的有效证据：真被截断的话，页数会一直是 1。
+     */
+    console.log('\n长简历的分页：')
+    const longResume = JSON.parse(JSON.stringify(resume))
+    const entriesSection = longResume.sections.find((s) => s.type === 'entries')
+    if (entriesSection && Array.isArray(entriesSection.items)) {
+      const template = entriesSection.items[0]
+      // 把条目复制到 12 条，足以跨过一页
+      for (let i = 0; i < 11; i += 1) {
+        const copy = JSON.parse(JSON.stringify(template))
+        copy.org = `${copy.org || '公司'}（第 ${i + 2} 段）`
+        for (const b of copy.bullets || []) b.text = `${b.text}`
+        entriesSection.items.push(copy)
+      }
+    }
+
+    const res2 = await fetch(`${apiBase}/api/pdf`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${password}`,
+      },
+      body: JSON.stringify({ resume: longResume, filename: `长简历-${stamp}` }),
+    })
+    if (!res2.ok) {
+      record('长简历导出成功', false, `HTTP ${res2.status}`)
+    } else {
+      const bytes2 = Buffer.from(await res2.arrayBuffer())
+      const info2 = inspectPdf(bytes2)
+      record(
+        '长简历分出多页（内容没有被截断）',
+        info2.pageCount >= 2,
+        `${info2.pageCount} 页 · ${Math.round(bytes2.length / 1024)} KB（单页版为 ${Math.round(bytes.length / 1024)} KB）`,
+      )
+      // 页数差距过大同样是异常（比如某个元素每页都撑出一片空白）
+      record('页数没有异常膨胀', info2.pageCount <= 8, `${info2.pageCount} 页（12 条经历）`)
+    }
   }
 } catch (error) {
   console.log(`\n*** 中断：${error.message}`)
   results.push({ label: '执行未中断', ok: false })
 } finally {
   if (browser) await browser.close()
+  if (typeof started === 'function') started()
   rmSync(outDir, { recursive: true, force: true })
 }
 

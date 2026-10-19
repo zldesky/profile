@@ -37,6 +37,7 @@
     "verify:panel": "node tools/verify-panel-resize.mjs",
     "verify:markdown": "node tools/verify-markdown-roundtrip.mjs",
     "verify:pdf": "node tools/verify-pdf-export.mjs",
+    "verify:pages": "node tools/verify-page-count-agreement.mjs",
     "build:host-template": "node tools/build-host-template.mjs",
     "preview:host-theme": "node tools/preview-host-theme.mjs"
   },

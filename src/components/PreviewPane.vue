@@ -43,7 +43,22 @@ const paperRef = useTemplateRef('paperRef')
 const compressing = shallowRef(false)
 
 const { zoom, autoFit, resizeTick, fit, zoomBy, resetFit } = usePaperZoom(scrollRef)
-const { pageCount, measure, refresh } = usePageMetrics(paperRef, zoom)
+const { pageCount, measure, refresh, debugBlocks } = usePageMetrics(paperRef, zoom)
+
+/*
+ * 开发态把页数估算的中间过程挂到 window，供验证脚本核对。
+ *
+ * 为什么需要：编辑器显示的页数是一个**估算**，而导出 PDF 的分页由浏览器决定。
+ * 两者不一致时（用户会说「编辑器说 2 页、导出是 3 页」），最难判断的是
+ * 「公式错了」还是「块几何取错了」——只看到最终页数无法区分。
+ * tools/verify-page-count-agreement.mjs 会读这个东西，把它们并排打出来。
+ * 只在开发态挂载，生产构建里不存在。
+ */
+if (import.meta.env.DEV) {
+  // 本仓库没有全局 .d.ts，按现有风格就地断言一次，而不是新开一个声明文件
+  const dbg = window as unknown as { __pageMetrics?: unknown }
+  dbg.__pageMetrics = { measure, refresh, debugBlocks }
+}
 const {
   dragging,
   offset,
