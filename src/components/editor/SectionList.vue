@@ -5,8 +5,7 @@
  * 每张卡片由 ModuleCard 承载，本组件只负责列表编排与新增。
  */
 import { computed, nextTick, ref, shallowRef, watch } from 'vue'
-import { VueDraggable } from 'vue-draggable-plus'
-
+import DraggableList from '@/components/editor/DraggableList.vue'
 import ModuleCard from '@/components/editor/ModuleCard.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
@@ -128,13 +127,10 @@ watch(requestSeq, async () => {
 
     <div v-if="!store.sections.length" class="ed-empty">还没有模块，先在下方添加一个</div>
 
-    <VueDraggable
-      v-model="store.resume.sections"
+    <DraggableList
+      :items="store.sections"
       class="ed-card-list"
-      :animation="160"
-      handle=".ed-drag"
-      ghost-class="ed-ghost"
-      chosen-class="ed-chosen"
+      @reorder="(ids) => store.reorderSectionsByIds(ids)"
     >
       <ModuleCard
         v-for="(section, index) in store.sections"
@@ -147,7 +143,7 @@ watch(requestSeq, async () => {
         @toggle="toggle(section.id)"
         @remove="removeSection(section)"
       />
-    </VueDraggable>
+    </DraggableList>
 
     <div class="ed-add-row">
       <BaseSelect v-model="presetKey" :options="presetOptions" />

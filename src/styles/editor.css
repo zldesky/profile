@@ -469,14 +469,52 @@ label:has(> .ed-check) {
   background: var(--ed-fill);
 }
 
-.ed-drag {
+/*
+ * 拖拽手柄（DragHandle 组件）。
+ *
+ * 手柄是**可聚焦控件**：给了 role="button" + tabindex，键盘用上下方向键调顺序。
+ * 所以悬停与焦点反馈都必须有 —— 原先它只有 cursor: grab，
+ * 鼠标移上去颜色不变、键盘 Tab 过来也看不出来在哪。
+ *
+ * 两类类名共用同一套外观：.ed-drag 是条目 / 模块层级，.ed-drag-sub 是
+ * 嵌套在条目内部的要点 / 标签层级。必须分开 —— SortableJS 靠类名识别
+ * 「按住这里才算拖拽」，两层同名会让外层把内层手柄也认成自己的，
+ * 于是拖要点会变成拖整段经历。
+ */
+.ed-drag,
+.ed-drag-sub {
   display: flex;
   align-items: center;
+  justify-content: center;
+  /*
+   * 24px 是静态审计的点击目标门槛。手柄靠 padding 撑到 22px 差一点，
+   * 而这个差值不随图标尺寸变化 —— 直接用 min-width/height 兜住，
+   * 换图标（14 → 15px）也不会再掉下去。
+   */
+  min-width: 24px;
+  min-height: 24px;
+  border-radius: var(--ed-radius-sm);
   color: var(--ed-line-3);
   cursor: grab;
+  transition:
+    color 0.15s,
+    background-color 0.15s;
 }
 
-.ed-drag:active {
+.ed-drag:hover,
+.ed-drag-sub:hover {
+  color: var(--ed-text-2);
+  background: var(--ed-fill);
+}
+
+.ed-drag:focus-visible,
+.ed-drag-sub:focus-visible {
+  outline: 2px solid var(--ed-brand);
+  outline-offset: 1px;
+}
+
+.ed-drag:active,
+.ed-drag-sub:active {
   cursor: grabbing;
 }
 

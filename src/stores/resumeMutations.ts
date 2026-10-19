@@ -251,6 +251,36 @@ export function removeBullet(
   if (index >= 0) entry.bullets.splice(index, 1)
 }
 
+/**
+ * 按 id 顺序重排某个条目的要点。
+ * 复用上面的 reorderByIds：校验方式与模块 / 条目 / 网格项 / 技能一致
+ * （传入顺序必须是现有 id 的一个排列，否则安静忽略）。
+ */
+export function reorderBulletsByIds(
+  resume: Resume,
+  sectionId: string,
+  entryId: string,
+  orderedIds: string[],
+): void {
+  const entry = findById(findSection(resume, sectionId, 'entries')?.items, entryId)
+  if (!entry) return
+  const next = reorderByIds(entry.bullets, orderedIds)
+  if (next) entry.bullets = next
+}
+
+/** 按 id 顺序重排某个条目的标签（机构 / 时间这类键值对） */
+export function reorderEntryMetaByIds(
+  resume: Resume,
+  sectionId: string,
+  entryId: string,
+  orderedIds: string[],
+): void {
+  const entry = findById(findSection(resume, sectionId, 'entries')?.items, entryId)
+  if (!entry) return
+  const next = reorderByIds(entry.meta, orderedIds)
+  if (next) entry.meta = next
+}
+
 export function addEntryMeta(resume: Resume, sectionId: string, entryId: string): void {
   findById(findSection(resume, sectionId, 'entries')?.items, entryId)?.meta.push(
     createMeta('项目', ''),

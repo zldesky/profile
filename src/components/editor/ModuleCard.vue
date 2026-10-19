@@ -5,6 +5,7 @@
  */
 import SectionEditor from '@/components/editor/SectionEditor.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
+import DragHandle from '@/components/editor/DragHandle.vue'
 import { useResumeStore } from '@/stores/resume'
 import { useSelectionStore } from '@/stores/selection'
 import type { PropType } from 'vue'
@@ -41,9 +42,12 @@ const toggleVisible = () =>
     }"
   >
     <div class="ed-card-head">
-      <span class="ed-drag" title="按住拖动可调整模块顺序">
-        <SvgIcon name="drag" :size="15" />
-      </span>
+      <DragHandle
+        :index="index"
+        :total="total"
+        :item-id="section.id"
+        label="按住拖动或用上下方向键调整模块顺序"
+      />
 
       <input
         class="ed-card-title"

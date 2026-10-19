@@ -7,12 +7,11 @@
  * 既不精确也不加分，纯文字列表更利于网申系统解析。
  * 数据里的 level 字段保留未删，旧简历与旧备份照常能加载，只是不再被使用。
  */
-import { computed } from 'vue'
-import { VueDraggable } from 'vue-draggable-plus'
-
 import SvgIcon from '@/components/SvgIcon.vue'
+import DragHandle from '@/components/editor/DragHandle.vue'
+import DraggableList from '@/components/editor/DraggableList.vue'
 import { useResumeStore } from '@/stores/resume'
-import type { EntryMeta, SkillItem, SkillsSection } from '@/types/resume'
+import type { SkillsSection } from '@/types/resume'
 
 const props = defineProps<{ section: SkillsSection }>()
 
@@ -31,34 +30,23 @@ const updateSkill = (skillId: string, patch: Record<string, unknown>): void =>
  * 改走 store 的 reorder 动作（按 id 整体重排，与 reorderSectionsByIds 同一套校验），
  * 于是撤销 / 落盘 / 纸面重排全部自动跟上。
  */
-const draggableFields = computed<EntryMeta[]>({
-  get: () => props.section.fields,
-  set: (next) =>
-    store.reorderSkillFieldsByIds(
-      props.section.id,
-      next.map((f) => f.id),
-    ),
-})
-const draggableSkills = computed<SkillItem[]>({
-  get: () => props.section.items,
-  set: (next) =>
-    store.reorderSkillsByIds(
-      props.section.id,
-      next.map((s) => s.id),
-    ),
-})
+/** 拖完把新顺序交给 store 的按 id 重排 */
+function reorderFields(ids: string[]): void {
+  store.reorderSkillFieldsByIds(props.section.id, ids)
+}
+function reorderSkills(ids: string[]): void {
+  store.reorderSkillsByIds(props.section.id, ids)
+}
 </script>
 
 <template>
   <div class="skills-editor">
     <div class="ed-sub-title">文字描述</div>
 
-    <VueDraggable v-model="draggableFields" :animation="160" handle=".ed-drag" class="ed-sub-list">
-      <div v-for="field in section.fields" :key="field.id" class="ed-sub">
+    <DraggableList :items="section.fields" class="ed-sub-list" @reorder="reorderFields">
+      <div v-for="(field, index) in section.fields" :key="field.id" class="ed-sub">
         <div class="ed-row">
-          <span class="ed-drag" title="按住拖动可调整顺序">
-            <SvgIcon name="drag" :size="14" />
-          </span>
+          <DragHandle :index="index" :total="section.fields.length" :item-id="field.id" />
           <input
             class="ed-input ed-meta-label"
             :value="field.label"
@@ -80,19 +68,17 @@ const draggableSkills = computed<SkillItem[]>({
           @input="updateField(field.id, { value: ($event.target as HTMLInputElement).value })"
         ></textarea>
       </div>
-    </VueDraggable>
+    </DraggableList>
 
     <button class="ed-btn ed-btn-block" @click="store.addSkillField(section.id)">
       <SvgIcon name="plus" :size="14" />
       <span>添加描述字段</span>
     </button>
 
-    <VueDraggable v-model="draggableSkills" :animation="160" handle=".ed-drag" class="ed-sub-list">
-      <div v-for="skill in section.items" :key="skill.id" class="ed-sub">
+    <DraggableList :items="section.items" class="ed-sub-list" @reorder="reorderSkills">
+      <div v-for="(skill, index) in section.items" :key="skill.id" class="ed-sub">
         <div class="ed-row">
-          <span class="ed-drag" title="按住拖动可调整顺序">
-            <SvgIcon name="drag" :size="14" />
-          </span>
+          <DragHandle :index="index" :total="section.items.length" :item-id="skill.id" />
           <input
             class="ed-input"
             :value="skill.name"
@@ -108,7 +94,7 @@ const draggableSkills = computed<SkillItem[]>({
           </button>
         </div>
       </div>
-    </VueDraggable>
+    </DraggableList>
 
     <button class="ed-btn ed-btn-block" @click="store.addSkill(section.id)">
       <SvgIcon name="plus" :size="14" />

@@ -614,6 +614,10 @@ export const useResumeStore = defineStore('resume', () => {
       tree.reorderSkillFieldsByIds(resume.value, sid, ids),
     reorderSkillsByIds: (sid: string, ids: string[]) =>
       tree.reorderSkillsByIds(resume.value, sid, ids),
+    reorderBulletsByIds: (sid: string, eid: string, ids: string[]) =>
+      tree.reorderBulletsByIds(resume.value, sid, eid, ids),
+    reorderEntryMetaByIds: (sid: string, eid: string, ids: string[]) =>
+      tree.reorderEntryMetaByIds(resume.value, sid, eid, ids),
 
     addGridItem: (sid: string) => tree.addGridItem(resume.value, sid),
     updateGridItem: (sid: string, iid: string, patch: Parameters<typeof tree.updateGridItem>[3]) =>

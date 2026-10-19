@@ -3,38 +3,20 @@
  * 条目列表编辑：教育背景、工作经历、项目经历、校园经历等。
  * 每段经历交给 ExperienceEntryEditor，本组件只负责模块级开关与列表编排。
  */
-import { computed } from 'vue'
-import { VueDraggable } from 'vue-draggable-plus'
-
 import SvgIcon from '@/components/SvgIcon.vue'
+import DraggableList from '@/components/editor/DraggableList.vue'
 import ExperienceEntryEditor from '@/components/editor/sections/ExperienceEntryEditor.vue'
 import { useResumeStore } from '@/stores/resume'
-import type { EntriesSection, EntryItem } from '@/types/resume'
+import type { EntriesSection } from '@/types/resume'
 
 const props = defineProps<{ section: EntriesSection }>()
 
 const store = useResumeStore()
 
-/**
- * 拖拽用的可写视图（按 id 顺序重排）。
- *
- * **不能直接 `v-model="section.items"`**：section 是 prop，往它的属性上赋值会被
- * Vue 拦下，拖完 DOM 被 SortableJS 改过、但数据没变，于是 Vue 重渲染时**顺序回弹**。
- * 实测就是这样：SortableJS 明明接管了（sortable-chosen / drag / ghost 都出现），
- * 松手后条目却恢复原样 —— 看起来像「拖拽没生效」，实际是写回被吞了。
- *
- * 改走 store 的 reorderEntriesByIds（按 id 整体重排），于是撤销、落盘、纸面重排
- * 全都自动跟上。与网格项 / 技能用的是同一套 reorder 动作，四处保持一致。
- * （模块卡片那层直接绑 store 自身的数组，所以没这个问题。）
- */
-const draggableItems = computed<EntryItem[]>({
-  get: () => props.section.items,
-  set: (next) =>
-    store.reorderEntriesByIds(
-      props.section.id,
-      next.map((item) => item.id),
-    ),
-})
+/** 拖完把新顺序交给 store 的按 id 重排，撤销 / 落盘 / 纸面重排都自动跟上 */
+function onReorder(ids: string[]): void {
+  store.reorderEntriesByIds(props.section.id, ids)
+}
 </script>
 
 <template>
@@ -57,15 +39,11 @@ const draggableItems = computed<EntryItem[]>({
     <div v-if="!section.items.length" class="ed-empty">暂无经历条目</div>
 
     <!--
-      条目拖拽排序：与模块卡片同一套做法（VueDraggable + handle=".ed-drag"）。
-      **但 v-model 不能直接绑 section.items**（那是 prop，写回会被 Vue 拦下，
-      拖完顺序会回弹），改绑 draggableItems 这个可写视图 —— 详见脚本里的说明。
-
       index 仍在 v-for 里现算：数组换序后 Vue 会重新渲染，
       每段的「第 N 段」与上移/下移按钮的 disabled 状态随之更新。
-      保留上移/下移按钮是因为键盘用户拖不了 —— 它们是可达性兜底，不是冗余。
+      每段自己的拖拽手柄在 ExperienceEntryEditor 里（DragHandle）。
     -->
-    <VueDraggable v-model="draggableItems" :animation="160" handle=".ed-drag" class="entry-list">
+    <DraggableList :items="section.items" class="entry-list" @reorder="onReorder">
       <ExperienceEntryEditor
         v-for="(entry, index) in section.items"
         :key="entry.id"
@@ -74,7 +52,7 @@ const draggableItems = computed<EntryItem[]>({
         :index="index"
         :total="section.items.length"
       />
-    </VueDraggable>
+    </DraggableList>
 
     <button class="ed-btn ed-btn-block ed-btn-primary" @click="store.addEntry(section.id)">
       <SvgIcon name="plus" :size="14" />

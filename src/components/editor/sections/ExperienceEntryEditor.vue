@@ -8,6 +8,8 @@ import { shallowRef, useTemplateRef } from 'vue'
 
 import AIPolishDialog from '@/components/AIPolishDialog.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
+import DragHandle from '@/components/editor/DragHandle.vue'
+import DraggableList from '@/components/editor/DraggableList.vue'
 import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
 import { readImageAsDataUrl } from '@/utils/helpers'
@@ -74,15 +76,28 @@ async function onLogoChange(event: Event) {
     uploadingLogo.value = false
   }
 }
+/*
+ * 标签与要点的重排。两者都走 DraggableList 的 reorder 出口 ——
+ * 与拖拽、与键盘方向键是同一条路径，所以行为、撤销、落盘完全一致。
+ */
+function reorderMeta(ids: string[]): void {
+  store.reorderEntryMetaByIds(props.section.id, props.entry.id, ids)
+}
+function reorderBullets(ids: string[]): void {
+  store.reorderBulletsByIds(props.section.id, props.entry.id, ids)
+}
 </script>
 
 <template>
   <div class="entry-editor ed-sub">
     <div class="ed-sub-head">
       <span class="ed-sub-label">第 {{ index + 1 }} 段</span>
-      <span class="ed-drag" title="按住拖动可调整条目顺序">
-        <SvgIcon name="drag" :size="14" />
-      </span>
+      <DragHandle
+        :index="index"
+        :total="total"
+        :item-id="entry.id"
+        label="按住拖动可调整条目顺序"
+      />
       <button
         class="ed-icon-btn"
         title="上移"
@@ -156,27 +171,44 @@ async function onLogoChange(event: Event) {
       <span v-else class="ed-hint ed-hint-inline">建议使用透明背景的 PNG</span>
     </div>
 
-    <div v-for="meta in entry.meta" :key="meta.id" class="ed-row">
-      <input
-        class="ed-input ed-meta-label"
-        :value="meta.label"
-        placeholder="字段名"
-        @input="updateMeta(meta.id, { label: ($event.target as HTMLInputElement).value })"
-      />
-      <input
-        class="ed-input"
-        :value="meta.value"
-        placeholder="字段内容"
-        @input="updateMeta(meta.id, { value: ($event.target as HTMLInputElement).value })"
-      />
-      <button
-        class="ed-icon-btn danger"
-        title="删除该字段"
-        @click="store.removeEntryMeta(section.id, entry.id, meta.id)"
-      >
-        <SvgIcon name="trash" :size="14" />
-      </button>
-    </div>
+    <!--
+      标签（机构 / 时间这类键值对）可拖拽排序。
+      handleClass 用 .ed-drag-sub：这几个列表**嵌套在条目列表内部**，
+      与外层同名会让外层 Sortable 抢走手柄，拖标签就变成拖整段经历。
+    -->
+    <DraggableList :items="entry.meta" handle=".ed-drag-sub" @reorder="reorderMeta">
+      <template #default="{ move }">
+        <div v-for="(meta, mi) in entry.meta" :key="meta.id" class="ed-row">
+          <DragHandle
+            :index="mi"
+            :total="entry.meta.length"
+            :item-id="meta.id"
+            handle-class="ed-drag-sub"
+            label="按住拖动或用上下方向键调整标签顺序"
+            @move="move"
+          />
+          <input
+            class="ed-input ed-meta-label"
+            :value="meta.label"
+            placeholder="字段名"
+            @input="updateMeta(meta.id, { label: ($event.target as HTMLInputElement).value })"
+          />
+          <input
+            class="ed-input"
+            :value="meta.value"
+            placeholder="字段内容"
+            @input="updateMeta(meta.id, { value: ($event.target as HTMLInputElement).value })"
+          />
+          <button
+            class="ed-icon-btn danger"
+            title="删除该字段"
+            @click="store.removeEntryMeta(section.id, entry.id, meta.id)"
+          >
+            <SvgIcon name="trash" :size="14" />
+          </button>
+        </div>
+      </template>
+    </DraggableList>
 
     <button class="ed-btn ed-btn-block" @click="store.addEntryMeta(section.id, entry.id)">
       <SvgIcon name="plus" :size="14" />
@@ -185,37 +217,49 @@ async function onLogoChange(event: Event) {
 
     <div class="ed-sub-title">要点描述</div>
 
-    <div v-for="bullet in entry.bullets" :key="bullet.id" class="ed-bullet-row">
-      <textarea
-        class="ed-textarea"
-        :value="bullet.text"
-        placeholder="一条要点，建议用「做了什么 + 结果数据」的写法"
-        @input="
-          store.updateBullet(
-            section.id,
-            entry.id,
-            bullet.id,
-            ($event.target as HTMLInputElement).value,
-          )
-        "
-      ></textarea>
-      <button
-        class="ed-icon-btn"
-        title="AI 润色这条要点"
-        aria-label="AI 润色这条要点"
-        @click="polishTarget = { id: bullet.id, text: bullet.text }"
-      >
-        <SvgIcon name="sparkles" :size="14" />
-      </button>
-      <button
-        class="ed-icon-btn danger"
-        title="删除该要点"
-        aria-label="删除该要点"
-        @click="store.removeBullet(section.id, entry.id, bullet.id)"
-      >
-        <SvgIcon name="trash" :size="14" />
-      </button>
-    </div>
+    <DraggableList :items="entry.bullets" handle=".ed-drag-sub" @reorder="reorderBullets">
+      <template #default="{ move }">
+        <div v-for="(bullet, bi) in entry.bullets" :key="bullet.id" class="ed-bullet-row">
+          <DragHandle
+            :index="bi"
+            :total="entry.bullets.length"
+            :item-id="bullet.id"
+            handle-class="ed-drag-sub"
+            label="按住拖动或用上下方向键调整要点顺序"
+            @move="move"
+          />
+          <textarea
+            class="ed-textarea"
+            :value="bullet.text"
+            placeholder="一条要点，建议用「做了什么 + 结果数据」的写法"
+            @input="
+              store.updateBullet(
+                section.id,
+                entry.id,
+                bullet.id,
+                ($event.target as HTMLInputElement).value,
+              )
+            "
+          ></textarea>
+          <button
+            class="ed-icon-btn"
+            title="AI 润色这条要点"
+            aria-label="AI 润色这条要点"
+            @click="polishTarget = { id: bullet.id, text: bullet.text }"
+          >
+            <SvgIcon name="sparkles" :size="14" />
+          </button>
+          <button
+            class="ed-icon-btn danger"
+            title="删除该要点"
+            aria-label="删除该要点"
+            @click="store.removeBullet(section.id, entry.id, bullet.id)"
+          >
+            <SvgIcon name="trash" :size="14" />
+          </button>
+        </div>
+      </template>
+    </DraggableList>
 
     <button class="ed-btn ed-btn-block" @click="store.addBullet(section.id, entry.id)">
       <SvgIcon name="plus" :size="14" />
