@@ -68,6 +68,7 @@ const {
 const selection = useSelectionStore()
 const {
   bandRect,
+  dropLine,
   secDragging,
   toolbarAnchor,
   onPaperPointerDown: onSectionPointerDown,
@@ -157,6 +158,17 @@ function applySectionTips() {
 
 const templateComponent = computed(() => resolveTemplate(store.resume.template))
 const paperStyle = computed(() => ({ ...store.pageStyle, '--zoom': zoom.value }))
+
+/** 落点指示线的视口定位 */
+const dropLineStyle = computed(() => {
+  const line = dropLine.value
+  if (!line) return {}
+  return {
+    top: `${line.top}px`,
+    left: `${line.left}px`,
+    width: `${line.width}px`,
+  }
+})
 
 /** 框选 overlay 的视口定位 */
 const bandStyle = computed(() => {
@@ -366,6 +378,12 @@ async function compressToOnePage() {
     />
 
     <div v-if="bandRect" class="sel-band no-print" :style="bandStyle"></div>
+    <!--
+    落点指示线：拖动时告诉用户「松手会插到这里」。
+    没有它的话，「拖了没换位」与「拖了但没拖够」在视觉上是同一件事，
+    用户就会觉得拖不动。
+  -->
+    <div v-if="dropLine" class="drop-line no-print" :style="dropLineStyle"></div>
 
     <SelectionToolbar
       v-if="toolbarAnchor"
@@ -422,6 +440,42 @@ async function compressToOnePage() {
 }
 
 /* 框选矩形：视口定位的 overlay，不参与打印（no-print）也不拦截指针 */
+/*
+   * 落点指示线：2px 实线 + 两端圆点，压在纸面上方。
+   * 用主题色，与框选的虚线区分开（一个是「已选中」，一个是「将要插入」）。
+   */
+.drop-line {
+  position: fixed;
+  z-index: 30;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--ed-brand, #111);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9);
+  pointer-events: none;
+  transform: translateY(-1px);
+}
+
+.drop-line::before,
+.drop-line::after {
+  position: absolute;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ed-brand, #111);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9);
+  transform: translateY(-50%);
+  content: '';
+}
+
+.drop-line::before {
+  left: -3px;
+}
+
+.drop-line::after {
+  right: -3px;
+}
+
 .sel-band {
   position: fixed;
   z-index: 50;

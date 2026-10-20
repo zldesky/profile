@@ -851,6 +851,29 @@ textarea {
   box-shadow: var(--ed-shadow-float);
 }
 
+/*
+ * 拖动中的模块要**抬起来**。
+ *
+ * 不这么做的话，它只是被 translateY 平移，仍然占着原来的文档流位置，
+ * 于是会盖在下面的模块上 —— 两层文字叠在一起，看起来像乱码（截图确认过）。
+ * 这里补三件事：不透明底色（否则透出下面的字）、阴影（表示"浮起来了"）、
+ * 更高的层级（保证它在其他模块之上，而不是被压住）。
+ */
+.paper.is-sec-dragging .r-sec.is-sec-selected {
+  position: relative;
+  z-index: 5;
+  background: var(--paper-bg, #fff);
+  box-shadow:
+    var(--ed-shadow-float),
+    0 0 0 1px var(--ed-brand-ring, rgba(0, 0, 0, 0.16));
+}
+
+/* 拖动时其余模块淡一点，让"正在移动的那块"更醒目 */
+.paper.is-sec-dragging .r-sec[data-sec-id]:not(.is-sec-selected) {
+  opacity: 0.55;
+  transition: opacity 0.12s;
+}
+
 /* ---------------- 深色区域反白 ---------------- */
 
 .on-dark .r-title {

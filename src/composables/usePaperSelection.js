@@ -49,6 +49,17 @@ export function usePaperSelection(paperRef, scrollRef, zoom) {
   const bandRect = shallowRef(null)
   /** 是否正在整组拖拽 */
   const secDragging = shallowRef(false)
+  /**
+   * 落点指示线的位置（视口坐标 { top, left, width }）。
+   *
+   * 为什么需要它：拖拽门槛即使降到半个模块高，用户仍然只能靠"猜"——
+   * 模块跟着手在动，但**看不出松手会插到哪里**。没有这条线时，
+   * 「拖了没换位」与「拖了但没拖够」在视觉上是同一件事，用户就会觉得"拖不动"。
+   * 有了它，松手之前就能看到结果。
+   *
+   * @type {import('vue').ShallowRef<{ top: number, left: number, width: number } | null>}
+   */
+  const dropLine = shallowRef(null)
   /** 悬浮工具条的视口坐标 { left, top }，null 表示隐藏 */
   const toolbarAnchor = shallowRef(null)
 
@@ -246,14 +257,138 @@ export function usePaperSelection(paperRef, scrollRef, zoom) {
     for (const el of press.els.values()) {
       el.style.transform = cssDy ? `translateY(${cssDy}px)` : ''
     }
+    const resolved = resolveDropTarget(press)
+    syncDropLine(press, resolved)
+    applyDropShift(press, resolved)
+  }
+
+  /**
+   * 解析当前落点：把「会插到哪个位置」算成一份数据，供**指示线**与**让位**共用。
+   *
+   * 两处各算一套判据的话，线画在一个地方、松手却落在另一个地方 —— 那比没有还糟。
+   */
+  function resolveDropTarget(press) {
+    if (!press.active) return null
+    const paper = toValue(paperRef)
+    if (!paper) return null
+
+    const sections = resumeStore.sections
+    const byId = new Map(sections.map((s) => [s.id, s]))
+    const memberIds = sections
+      .map((s) => s.id)
+      .filter((id) => containerKeyOf(byId.get(id)) === press.containerKey)
+    const groupIds = memberIds.filter((id) => selection.has(id))
+    if (!groupIds.length) return null
+
+    let top = Infinity
+    let bottom = -Infinity
+    for (const id of groupIds) {
+      const rect = press.rects.get(id)
+      if (!rect) continue
+      top = Math.min(top, rect.top)
+      bottom = Math.max(bottom, rect.bottom)
+    }
+    if (top === Infinity) return null
+
+    const visibleSet = new Set(memberIds.filter((id) => byId.get(id)?.visible))
+    const groupTop = top + press.dyScreen
+    const groupBottom = bottom + press.dyScreen
+    const draggingDown = press.dyScreen > 0
+
+    let targetIndex = 0
+    for (const id of memberIds) {
+      if (groupIds.includes(id) || !visibleSet.has(id)) continue
+      const rect = press.rects.get(id)
+      if (!rect) continue
+      const mid = (rect.top + rect.bottom) / 2
+      const passed = draggingDown ? groupBottom > mid : groupTop < mid
+      if (passed) targetIndex += 1
+    }
+
+    const others = memberIds.filter((id) => !groupIds.includes(id) && visibleSet.has(id))
+    return { memberIds, groupIds, others, targetIndex, visibleSet, groupHeight: bottom - top }
+  }
+
+  /**
+   * 实时让位：让插入点之后的模块整体下移被拖块的高度，腾出空位。
+   *
+   * 不做这件事的话，被拖块只是浮在原位之上、**盖住**下面的模块（实测重叠 55px），
+   * 两层文字叠在一起看起来像乱码，用户也判断不出"松手会插到哪"。
+   * 让位之后，视觉上就是"插进去了"。
+   *
+   * 位移量取被拖块的高度 + 与相邻块之间的间距，用视口 px 再除以缩放比。
+   */
+  function applyDropShift(press, resolved) {
+    if (!resolved) return
+    const { others, targetIndex, groupHeight } = resolved
+    const gap = 8
+    const shift = (groupHeight + gap) / scale()
+
+    for (const id of others) {
+      const el = findSectionEl(id)
+      if (!el) continue
+      const index = others.indexOf(id)
+      // 插入点之后的模块让位；之前的保持不动
+      const shouldMove = index >= targetIndex
+      el.style.transform = shouldMove ? `translateY(${shift}px)` : ''
+    }
+  }
+
+  /**
+   * 把「松手会插到哪里」画成一条横线。
+   *
+   * 位置取插入点相邻那个模块的上边缘（插到末尾时取最后一个模块的下边缘），
+   * 与 computeReorder 用的是**同一套判据**，所以线在哪、松手就落在哪。
+   * 不这么做的话，指示线与实际结果各算一套，比没有还糟。
+   */
+  function syncDropLine(press, resolved) {
+    if (!resolved) {
+      dropLine.value = null
+      return
+    }
+    const { others, targetIndex } = resolved
+
+    // 插入点：第 targetIndex 个"其余可见模块"的上边缘；越界则取最后一个的下边缘
+    let lineY = null
+    let refEl = null
+    if (targetIndex < others.length) {
+      const nextId = others[targetIndex]
+      const rect = press.rects.get(nextId)
+      if (rect) {
+        lineY = rect.top
+        refEl = findSectionEl(nextId)
+      }
+    } else if (others.length) {
+      const lastId = others[others.length - 1]
+      const rect = press.rects.get(lastId)
+      if (rect) {
+        lineY = rect.bottom
+        refEl = findSectionEl(lastId)
+      }
+    }
+
+    if (lineY === null || !refEl) {
+      dropLine.value = null
+      return
+    }
+
+    const box = refEl.getBoundingClientRect()
+    dropLine.value = { top: lineY, left: box.left, width: box.width }
   }
 
   function clearDragTransforms(press) {
+    // 除了被拖的模块，让位时还动过**其他**模块，必须一并复位，
+    // 否则松手后会有一批模块停在偏移位置上（看起来像排版坏了）
     for (const el of press.els.values()) el.style.transform = ''
+    const paper = toValue(paperRef)
+    for (const el of paper?.querySelectorAll('.r-sec[data-sec-id]') || []) {
+      if (!press.els.has(el.dataset.secId)) el.style.transform = ''
+    }
   }
 
   function finalizeDrag(press) {
     interaction = null
+    dropLine.value = null
     if (!press.active) {
       // 原地单击：pointerdown 时的选中变化会被「交互中」挂起工具条，松手后补一次定位
       nextTick(syncToolbar)
@@ -298,13 +433,32 @@ export function usePaperSelection(paperRef, scrollRef, zoom) {
       bottom = Math.max(bottom, rect.bottom)
     }
     if (top === Infinity) return null
-    const groupCenterY = (top + bottom) / 2 + press.dyScreen
+
+    /*
+     * 落点判据：用**被拖动块的边缘**与相邻块的**中线**比较，而不是两个中心。
+     *
+     * 原先用的是「整块中心越过相邻模块的中心」，那对相邻的等高模块意味着
+     * **要拖满一整个模块高才会换位**。实测：模块高 204px 时门槛是 220px ——
+     * 拖 180px 都不换位，松手又弹回原位。用户看到模块明明跟着手走到了
+     * 另一个模块的位置，却什么都没发生，体感就是「拖不动」。
+     *
+     * 现在改成「边缘越过中线」：往下拖时看被拖块的**下边缘**是否越过
+     * 相邻块的中线，往上拖时看上边缘。门槛因此降到约半个模块高，
+     * 与 SortableJS / dnd-kit 等成熟实现的直觉一致。
+     */
+    const groupTop = top + press.dyScreen
+    const groupBottom = bottom + press.dyScreen
+    const draggingDown = press.dyScreen > 0
 
     const targetIndex = memberIds.reduce((count, id) => {
       if (groupIds.includes(id) || !visibleSet.has(id)) return count
       const rect = press.rects.get(id)
       if (!rect) return count
-      return count + ((rect.top + rect.bottom) / 2 < groupCenterY ? 1 : 0)
+      const mid = (rect.top + rect.bottom) / 2
+      // 往下拖：被拖块的下边缘越过该块中线 → 它排到该块之后
+      // 往上拖：被拖块的上边缘越过该块中线 → 它排到该块之前
+      const passed = draggingDown ? groupBottom > mid : groupTop < mid
+      return count + (passed ? 1 : 0)
     }, 0)
 
     const newMemberOrder = insertGroupAtVisibleIndex(memberIds, groupIds, targetIndex, visibleSet)
@@ -456,5 +610,5 @@ export function usePaperSelection(paperRef, scrollRef, zoom) {
     document.removeEventListener('keydown', onGlobalKey)
   })
 
-  return { bandRect, secDragging, toolbarAnchor, onPaperPointerDown, syncToolbar }
+  return { bandRect, dropLine, secDragging, toolbarAnchor, onPaperPointerDown, syncToolbar }
 }

@@ -32,6 +32,7 @@
     "verify:dialogs": "node tools/verify-dialogs.mjs",
     "verify:captcha": "node tools/verify-captcha.mjs",
     "verify:paper": "node tools/verify-paper-edit.mjs",
+    "verify:drag-ux": "node tools/verify-paper-drag-ux.mjs",
     "verify:drag": "node tools/verify-drag.mjs",
     "verify:selects": "node tools/verify-selects.mjs",
     "verify:panel": "node tools/verify-panel-resize.mjs",
