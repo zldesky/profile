@@ -30,7 +30,7 @@ function minimalResume() {
   }
 }
 
-describe('inspectResume（Agent Skill 校验器，与服务端 sanitize.js 同源）', () => {
+describe('inspectResume（Agent Skill 校验器，与服务端 sanitize.ts 同源）', () => {
   it('合法简历返回 ok 并给出统计', () => {
     const result = inspectResume(minimalResume())
     expect(result.ok).toBe(true)

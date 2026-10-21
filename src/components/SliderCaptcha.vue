@@ -2,7 +2,7 @@
 /**
  * 滑块拼图验证码。
  *
- * 服务端生成带缺口的场景图与拼图块（见 server/captcha.js），缺口横向坐标
+ * 服务端生成带缺口的场景图与拼图块（见 server/captcha.ts），缺口横向坐标
  * 只在服务端——组件只负责拖动与提交：把滑块位移换算成视图盒坐标发给
  * /api/captcha/verify，通过后把一次性令牌经 v-model 交给表单。
  * Pointer Events 统一鼠标与触摸拖拽；图形按视图盒等比缩放，
@@ -16,7 +16,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:modelValue', 'failed'])
 
-/** 与服务端约定的视图盒尺寸与拼图块尺寸（见 server/captcha.js） */
+/** 与服务端约定的视图盒尺寸与拼图块尺寸（见 server/captcha.ts） */
 const VIEW_WIDTH = 320
 /** 拼图块：46 见方 + 上方 8px 凸起，块图宽高比 46:54 */
 const PIECE_SIZE = 46

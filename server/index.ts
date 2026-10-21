@@ -728,7 +728,7 @@ app.post('/api/pdf', guards.requireAuth, async (req, res) => {
 /**
  * 远程图片代理：「图片生成模板」需要把网络图片画进 Canvas 读像素，
  * 前端直取会被 CORS 污染画布，由本机服务代取。
- * 任意 URL 抓取是高危能力，与导出同为登录后能力，目标校验见 imageProxy.js。
+ * 任意 URL 抓取是高危能力，与导出同为登录后能力，目标校验见 imageProxy.ts。
  */
 app.post('/api/image-proxy', guards.requireAuth, async (req, res) => {
   // 该端点对会话与脚本口令都开放，只能依赖 subject
@@ -907,7 +907,7 @@ app.get('/api/collection', (req, res) => {
 /**
  * 浏览器直连各家 AI 服务会被 CORS 与混合内容拦住，由本机服务代为转发。
  * Key 由前端每次随请求带来：转发即用即弃，不写库、不打日志；
- * base URL 的协议与内网校验见 aiGuard.js。
+ * base URL 的协议与内网校验见 aiGuard.ts。
  */
 app.post('/api/ai/chat', guards.requireAuth, async (req, res) => {
   const { baseUrl, apiKey, model, messages, temperature } = req.body || {}

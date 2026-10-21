@@ -55,7 +55,7 @@ RESUME_SKILL="<skill_directory>"   # 本 SKILL.md 所在目录
 node "$RESUME_SKILL/scripts/validate_resume.mjs" resume.json
 ```
 
-脚本与服务端 `/api/pdf` 跑**同一份**白名单（`server/sanitize.js`），输出结构与统计
+脚本与服务端 `/api/pdf` 跑**同一份**白名单（`server/sanitize.ts`），输出结构与统计
 外加质量警告（空要点、缺联系方式、疑似编造占位符等）。**警告清零或确认可接受后
 才算过稿**；校验失败必须回第 2 步修，带病提交会被服务端 400 或静默清洗。
 

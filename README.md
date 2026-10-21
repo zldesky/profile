@@ -281,7 +281,7 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 [`skills/resume-workshop/`](./skills/resume-workshop/SKILL.md) 是按 Agent Skills 标准（[anthropics/skills](https://github.com/anthropics/skills) 推广的 SKILL.md 格式）编写的技能包，Claude Code / Claude.ai / ZCode 等代理装载后，不打开编辑器就能产出与本编辑器完全兼容的简历 JSON 并交付：
 
 - `SKILL.md` — 工作流（收集 → 构建 JSON → 校验 → 导出）与硬性约束（不编造经历、一页纸配额、图片规则）；
-- `references/data-schema.md` — resume JSON 的结构、枚举与上限，服务端白名单（`server/sanitize.js`）的忠实转述；
+- `references/data-schema.md` — resume JSON 的结构、枚举与上限，服务端白名单（`server/sanitize.ts`）的忠实转述；
 - `references/headless-api.md` — `POST /api/pdf` Bearer 通道的请求格式、响应头与错误处置；
 - `scripts/validate_resume.mjs` — 离线校验器，与服务端跑同一份白名单：`node skills/resume-workshop/scripts/validate_resume.mjs resume.json`；
 - `assets/resume-template.json` — 可直接填充的简历骨架。
@@ -373,7 +373,7 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 
 - **格式与质量分工**：Prettier 管一切格式（无分号、单引号、100 列），ESLint 只管代码质量与 Vue 特有陷阱（响应性丢失、`v-html` 禁用、`key` 缺失等），风格规则由 `eslint-config-prettier` 关闭避免打架；
 - **提交门禁**：husky + lint-staged 在 commit 时对暂存文件自动格式化并修复 lint（首次克隆后跑一次 `npm install` 即自动启用）；
-- **配置分层**：`eslint.config.js` 按目录区分浏览器/Node 全局；`server/render.js` 的浏览器回调、`server/sanitize.js` 的控制字符正则都有注明原因的豁免，不让规则静默放过特例；
+- **配置分层**：`eslint.config.js` 按目录区分浏览器/Node 全局；`server/render.ts` 的浏览器回调、`server/sanitize.ts` 的控制字符正则都有注明原因的豁免，不让规则静默放过特例；
 - **编辑器一致性**：`.editorconfig` 统一缩进与换行，装上 EditorConfig 插件即生效；
 - **CI**：GitHub Actions 在 push/PR 时跑 lint → typecheck → test → build，绿了才能合。typecheck 必须单独跑：Vite 构建只转译不做类型校验，类型错误不会让 Build 失败。
 
@@ -414,9 +414,9 @@ tests/               Vitest 测试
 
 ## 数据与安全要点
 
-- 简历数据在服务端入库前全量过 `server/sanitize.js` 白名单清洗（分享出去的内容同样如此）；渲染页面禁止访问外部源；
+- 简历数据在服务端入库前全量过 `server/sanitize.ts` 白名单清洗（分享出去的内容同样如此）；渲染页面禁止访问外部源；
 - 密码 scrypt 摘要存储，会话为服务端 Session + httpOnly Cookie，登录失败按「IP+用户名」锁定；注册另设滑块验证码与限频；
-- AI API Key 只存用户浏览器本地，`/api/ai/chat` 转发即用即弃，不落库不打日志；AI 转发与图片代理均带 SSRF 防线（`aiGuard.js` / `imageProxy.js`）；
+- AI API Key 只存用户浏览器本地，`/api/ai/chat` 转发即用即弃，不落库不打日志；AI 转发与图片代理均带 SSRF 防线（`aiGuard.ts` / `imageProxy.ts`）；
 - 所有运行时数据集中在 `server/.data/`（SQLite 单文件），备份/迁移拷这一个目录即可。
 
 **`PreviewPane` 已迁完**（420 行，就地编辑 / 框选 / 拖拽的编排）。过程中遇到一个值得记的取舍：它读 `bandRect.value.left` 报「`never` 上不存在该属性」，根因是上游 `usePaperSelection.js` 里 `shallowRef(null)` 被推成 `Ref<null>`。

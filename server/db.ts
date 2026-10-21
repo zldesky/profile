@@ -2,7 +2,7 @@
  * SQLite 数据层（node:sqlite，Node 22.13+ 内置，无原生编译依赖）。
  *
  * 存五类数据：
- *  1. users    —— 账号。密码只存 scrypt 摘要（见 auth.js），绝不落明文；
+ *  1. users    —— 账号。密码只存 scrypt 摘要（见 auth.ts），绝不落明文；
  *  2. sessions —— 服务端会话。令牌只存库，Cookie 里那份丢了可随时吊销；
  *  3. resumes  —— 每用户一份简历快照（JSON 文本），云端同步的权威源；
  *  4. export_quota —— 按主体（用户 / 匿名脚本）与自然日计的导出次数；

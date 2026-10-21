@@ -6,7 +6,7 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 
-/** PDF 渲染服务端口，需与 server/index.js 的 PORT 保持一致 */
+/** PDF 渲染服务端口，需与 server/index.ts 的 PORT 保持一致 */
 const PDF_PORT = process.env.PDF_PORT || 3001
 
 /**

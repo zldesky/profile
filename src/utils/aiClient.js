@@ -1,7 +1,7 @@
 /**
  * AI 调用客户端（OpenAI 兼容 chat/completions）。
  * 请求发往本机服务 /api/ai/chat 转发：Key 每次随请求携带，
- * 服务端即用即弃（见 server/index.js），前端不做任何直连。
+ * 服务端即用即弃（见 server/index.ts），前端不做任何直连。
  */
 
 function unauthorized() {

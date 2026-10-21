@@ -152,7 +152,7 @@ Environment=ALLOWED_ORIGINS=https://resume.example.com
 WantedBy=multi-user.target
 ```
 
-Windows：任务计划程序开机运行，或 `nssm install resume "C:\Program Files\nodejs\node.exe" "--env-file-if-exists=.env server\index.js"`（工作目录设为项目根），或 `pm2 start npm --name resume -- run pdf`。
+Windows：任务计划程序开机运行，或 `nssm install resume "C:\Program Files\nodejs\node.exe" "--env-file-if-exists=.env server\index.ts"`（工作目录设为项目根），或 `pm2 start npm --name resume -- run pdf`。
 
 ## 形态三：Docker 部署（一键）
 
@@ -296,7 +296,7 @@ npm run build   # 上传/托管 dist/ 即可
 
 - **认证**：服务端 Session（SQLite）+ httpOnly SameSite=Lax Cookie，令牌 256 位随机；密码 scrypt 摘要（N=2^15）；登录失败按「IP+用户名」锁定 15 分钟；注册限每小时 5 次/IP。会话过期自动降级为本地编辑，不丢数据。
 - **导出防刷**：渲染并发信号量（默认 1 并发 3 排队，队满 429）→ 每用户每日额度 → 全站每日额度 → 同内容 10 分钟缓存命中不扣额度。四层叠加，任何一层被绕过都不会造成实质伤害。
-- **输入**：所有简历数据入库/渲染前过 `sanitize.js` 白名单清洗（枚举、颜色、数值、长度、数量），文本剥标签，图片仅限 dataURL 白名单格式。
+- **输入**：所有简历数据入库/渲染前过 `sanitize.ts` 白名单清洗（枚举、颜色、数值、长度、数量），文本剥标签，图片仅限 dataURL 白名单格式。
 - **渲染隔离**：渲染页面只允许访问应用自身源，注入内容无法外联；请求体上限 8MB；静态站点带 CSP。
 - **日志**：`/api` 请求按一行 JSON 记录（方法、路径、状态、耗时），健康检查除外。
 

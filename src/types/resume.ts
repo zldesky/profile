@@ -1,7 +1,7 @@
 /**
  * 简历领域类型。
  *
- * 以 server/sanitize.js 的白名单与 normalizeResume 的归一化结果为准：
+ * 以 server/sanitize.ts 的白名单与 normalizeResume 的归一化结果为准：
  * 这里的类型描述的是「归一化后」的数据形态；导入的原始数据允许缺字段，
  * 由 normalizeResume 补齐成下面的形状。
  */

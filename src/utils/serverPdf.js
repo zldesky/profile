@@ -1,5 +1,5 @@
 /**
- * 调用本地 PDF 渲染服务（server/index.js）。
+ * 调用本地 PDF 渲染服务（server/index.ts）。
  * 开发环境通过 Vite 代理访问 /api，生产环境由该服务自身托管静态站点，均为同源请求。
  *
  * 服务若设置了访问口令（PDF_ACCESS_PASSWORD），请求需带 Authorization: Bearer。
