@@ -100,6 +100,34 @@ describe('sanitizeResume：枚举与数值', () => {
     expect(value.sections[0].items[0].level).toBe(100)
   })
 
+  it('模块四个方向的间距都进白名单，且各自钳制到 -40~80', () => {
+    const { value } = sanitizeResume({
+      sections: [
+        {
+          type: 'text',
+          title: 't',
+          layout: { indent: 20, extraGap: -8, indentRight: 999, extraGapBottom: -999 },
+        },
+      ],
+    })
+    const { layout } = value.sections[0]
+    // 合法值原样保留，四向互不干扰
+    expect(layout.indent).toBe(20)
+    expect(layout.extraGap).toBe(-8)
+    // 越界钳到边界而不是丢成默认值 0 —— 后者会让人以为「设置没保存」
+    expect(layout.indentRight).toBe(80)
+    expect(layout.extraGapBottom).toBe(-40)
+  })
+
+  it('layout 缺失的新字段回退为 0，不产生 undefined', () => {
+    const { value } = sanitizeResume({
+      sections: [{ type: 'text', title: 't', layout: { indent: 4 } }],
+    })
+    const { layout } = value.sections[0]
+    expect(layout.indentRight).toBe(0)
+    expect(layout.extraGapBottom).toBe(0)
+  })
+
   it('结构由服务端定义，客户端多出来的字段被丢弃', () => {
     const { value } = sanitizeResume({
       admin: true,

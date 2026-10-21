@@ -115,11 +115,26 @@ export interface TextSection extends Identified {
 
 export type Section = GridSection | EntriesSection | SkillsSection | TextSection
 
-/** 模块的位置与对齐设置（indent / extraGap 用像素便于微调） */
+/**
+ * 模块的位置与对齐设置（间距一律用像素，便于微调）。
+ *
+ * 四个方向各自独立：
+ *  - indent / extraGap 是历史上就有的「左 / 上」，保留原名以免破坏已存的数据；
+ *  - indentRight / extraGapBottom 是后补的「右 / 下」，默认 0。
+ *
+ * 分成四个标量而不是一个 padding 简写，是因为模板里它们是分别叠加到
+ * 主题间距之上的：上/下要接 `--gap`，左/右是纯偏移。
+ */
 export interface SectionLayout {
   align: 'inherit' | 'left' | 'center' | 'right'
+  /** 左缩进 px */
   indent: number
+  /** 上方间距 px（叠加在主题模块间距之上） */
   extraGap: number
+  /** 右缩进 px */
+  indentRight: number
+  /** 下方间距 px（叠加在主题模块间距之上） */
+  extraGapBottom: number
   /** 'auto' 时按内容自适应，否则为列数字符串（'1' | '2' | '3' | '4'） */
   columns: string
 }

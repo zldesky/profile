@@ -15,7 +15,9 @@ import type { Section } from '@/types/resume'
  */
 export type SectionLayoutStyle = {
   paddingLeft?: string
+  paddingRight?: string
   marginTop?: string
+  marginBottom?: string
   '--sec-align'?: string
   '--sec-item-justify'?: string
   '--grid-template'?: string
@@ -44,9 +46,18 @@ export function sectionLayoutStyle(section: Section): SectionLayoutStyle {
     style.paddingLeft = `${layout.indent}px`
   }
 
+  if (Number(layout.indentRight)) {
+    style.paddingRight = `${layout.indentRight}px`
+  }
+
   if (Number(layout.extraGap)) {
     // 在主题模块间距的基础上叠加，负值把模块整体上提
     style.marginTop = `calc(1.15em * var(--gap) + ${layout.extraGap}px)`
+  }
+
+  if (Number(layout.extraGapBottom)) {
+    // 与上方对称：下方向同样叠加在主题间距之上，负值让下一个模块靠近
+    style.marginBottom = `calc(1.15em * var(--gap) + ${layout.extraGapBottom}px)`
   }
 
   // 只有显式指定列数时才覆盖；'auto' 交给 SectionBody 切到流式排布

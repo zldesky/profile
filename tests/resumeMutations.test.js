@@ -133,6 +133,20 @@ describe('模块增删改移', () => {
     expect(resume.sections[0].layout.columns).toBeTruthy()
   })
 
+  it('updateSectionLayout 四个方向的间距各自独立', () => {
+    const resume = resumeWith('text')
+    const id = resume.sections[0].id
+
+    tree.updateSectionLayout(resume, id, { indentRight: 12, extraGapBottom: -6 })
+
+    const { layout } = resume.sections[0]
+    expect(layout.indentRight).toBe(12)
+    expect(layout.extraGapBottom).toBe(-6)
+    // 未传的另外两个方向不受影响
+    expect(layout.indent).toBe(0)
+    expect(layout.extraGap).toBe(0)
+  })
+
   it('moveSection 调整顺序', () => {
     const resume = resumeWith('text', 'grid', 'skills')
     const [a, b, c] = resume.sections.map((s) => s.id)

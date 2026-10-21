@@ -82,6 +82,8 @@ const LIMITS = {
 const LAYOUT_RANGE = {
   indent: { min: -40, max: 80 },
   extraGap: { min: -40, max: 80 },
+  indentRight: { min: -40, max: 80 },
+  extraGapBottom: { min: -40, max: 80 },
 }
 
 /** 只接受内联图片，避免引入外部资源或非图片内容 */
@@ -165,6 +167,10 @@ const LAYOUT_SPEC: FieldSpec = {
   align: (value) => pickEnum(value, ALLOW.sectionAlign, 'inherit'),
   indent: (value) => clampNumber(value, LAYOUT_RANGE.indent.min, LAYOUT_RANGE.indent.max, 0),
   extraGap: (value) => clampNumber(value, LAYOUT_RANGE.extraGap.min, LAYOUT_RANGE.extraGap.max, 0),
+  indentRight: (value) =>
+    clampNumber(value, LAYOUT_RANGE.indentRight.min, LAYOUT_RANGE.indentRight.max, 0),
+  extraGapBottom: (value) =>
+    clampNumber(value, LAYOUT_RANGE.extraGapBottom.min, LAYOUT_RANGE.extraGapBottom.max, 0),
   columns: (value) => pickEnum(String(value ?? 'auto'), ALLOW.sectionColumns, 'auto'),
 }
 

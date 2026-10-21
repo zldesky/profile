@@ -121,6 +121,8 @@ export const DEFAULT_SECTION_LAYOUT: SectionLayout = {
   align: 'inherit',
   indent: 0,
   extraGap: 0,
+  indentRight: 0,
+  extraGapBottom: 0,
   columns: 'auto',
 }
 

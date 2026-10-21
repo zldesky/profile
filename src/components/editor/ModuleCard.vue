@@ -2,7 +2,13 @@
 /**
  * 单个简历模块卡片：标题重命名、显隐、排序、复制、删除，展开后编辑内容。
  * 展开状态由父级持有，便于新增模块后自动展开。
+ *
+ * 卡片头部集中了「这个模块在纸面上长什么样」的全部开关：拖动顺序、显隐、
+ * 位置与间距。布局面板的展开状态也由这里持有（layoutOpen），点头部按钮
+ * 即可展开卡片并直接打开面板 —— 否则用户得先展开卡片、再在面板里翻到它。
  */
+import { shallowRef, watch } from 'vue'
+
 import SectionEditor from '@/components/editor/SectionEditor.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import DragHandle from '@/components/editor/DragHandle.vue'
@@ -27,8 +33,28 @@ const store = useResumeStore()
 // 纸面上选中模块时，对应卡片同步高亮，方便在两侧之间对照
 const selection = useSelectionStore()
 
+const layoutOpen = shallowRef(false)
+
+/*
+ * 卡片收起时布局面板也一并收起：
+ * 面板是卡片体的一部分（v-if="open"），收起后它不再渲染，但状态位若还留着 true，
+ * 下次展开会在用户没点过的情况下自动弹开，看起来像「自己乱开了」。
+ */
+watch(
+  () => props.open,
+  (isOpen) => {
+    if (!isOpen) layoutOpen.value = false
+  },
+)
+
 const toggleVisible = () =>
   store.updateSection(props.section.id, { visible: !props.section.visible })
+
+/** 头部「布局」按钮：展开卡片并打开位置面板，让间距随时可调 */
+function openLayout() {
+  emit('toggle')
+  layoutOpen.value = true
+}
 </script>
 
 <template>
@@ -64,6 +90,15 @@ const toggleVisible = () =>
         @click="toggleVisible"
       >
         <SvgIcon :name="section.visible ? 'eye' : 'eyeOff'" :size="14" />
+      </button>
+
+      <button
+        class="ed-icon-btn"
+        title="调整位置与间距"
+        :aria-expanded="open && layoutOpen"
+        @click="openLayout"
+      >
+        <SvgIcon name="layout" :size="14" />
       </button>
 
       <button
@@ -103,7 +138,11 @@ const toggleVisible = () =>
         </button>
       </div>
 
-      <SectionEditor :section="section" />
+      <SectionEditor
+        :section="section"
+        :layout-open="layoutOpen"
+        @update:layout-open="layoutOpen = $event"
+      />
     </div>
   </div>
 </template>

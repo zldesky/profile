@@ -78,8 +78,10 @@
   "visible": true,           // false = 保留数据但不渲染
   "layout": {
     "align": "inherit",      // inherit left center right
-    "indent": 0,             // -40 ~ 80（px）
-    "extraGap": 0,           // -40 ~ 80（px）
+    "indent": 0,             // 左侧间距 -40 ~ 80（px）
+    "extraGap": 0,           // 上方间距 -40 ~ 80（px）
+    "indentRight": 0,        // 右侧间距 -40 ~ 80（px）
+    "extraGapBottom": 0,     // 下方间距 -40 ~ 80（px）
     "columns": "auto"        // "auto" | "1" | "2" | "3" | "4"（字符串）
   },
   ...按 type 二选一的字段

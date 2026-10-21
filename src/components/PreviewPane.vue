@@ -272,9 +272,25 @@ function batchToggleVisible() {
   if (anyVisible) selection.clear()
 }
 
-/** 批量微调左缩进 / 上方间距，步长与范围与编辑面板的滑杆一致 */
-function batchAdjustLayout(field: 'indent' | 'extraGap', step: number) {
-  const range = field === 'indent' ? { min: -24, max: 48 } : { min: -12, max: 48 }
+/**
+ * 批量微调四个方向的间距，步长与范围与编辑面板的滑杆一致。
+ *
+ * 上下（extraGap / extraGapBottom）的范围是 -12~48，左右（indent / indentRight）
+ * 是 -24~48 —— 与 SectionLayoutPanel 的 SPACING_FIELDS 和 server/sanitize.ts
+ * 的 LAYOUT_RANGE 三处必须一致，否则会出现「面板里能拖到 48、工具条却卡在 40」
+ * 这类看起来像 bug 的不一致（服务端越界会静默钳制，不会报错）。
+ */
+const LAYOUT_RANGES = {
+  extraGap: { min: -12, max: 48 },
+  extraGapBottom: { min: -12, max: 48 },
+  indent: { min: -24, max: 48 },
+  indentRight: { min: -24, max: 48 },
+} as const
+
+type LayoutAxis = keyof typeof LAYOUT_RANGES
+
+function batchAdjustLayout(field: LayoutAxis, step: number) {
+  const range = LAYOUT_RANGES[field]
   store.sections
     .filter((s) => selection.has(s.id))
     .forEach((s) => {
@@ -390,8 +406,7 @@ async function compressToOnePage() {
       :anchor="toolbarAnchor"
       :count="selection.count"
       @toggle-visible="batchToggleVisible"
-      @gap="(step) => batchAdjustLayout('extraGap', step)"
-      @indent="(step) => batchAdjustLayout('indent', step)"
+      @adjust="batchAdjustLayout"
       @clear="selection.clear()"
     />
 
