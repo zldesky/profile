@@ -13,3 +13,19 @@ nginx
 !.env.example
 *.log
 .github
+
+# 只对开发者/协作者有用、运行时不读的目录。
+# 已核对：src/ 与 server/ 都不引用它们，server 运行时只读 dist/ 与 server/.data/，
+# npm run build 只依赖 index.html + src/，所以排除不影响构建与运行。
+# 排除的理由是让镜像只含运行所需内容 —— 文档与测试脚本进镜像既没用又暴露内部细节。
+.agent
+tools
+tests
+skills
+markdown-hosts
+gui-test-screenshots
+.husky
+.vscode
+
+# 开发期文档。DEPLOY.md / README.md 同理不进镜像。
+*.md

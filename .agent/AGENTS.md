@@ -91,9 +91,22 @@ npm run format:check
 | `localhost:5173` | 先 `npm run dev`                                  | `verify:drag` `verify:paper` `verify:drag-ux` `verify:panel` `verify:selects` `verify:markdown` `verify:pdf` `verify:pages` `verify:spacing` `verify:toolbar` `build:host-template` `shoot-drag-state` |
 | `127.0.0.1:3001` | 先 `npm run build` + `npm run pdf`（托管 `dist`） | `audit:ui` `audit:interaction` `audit:el` `audit:admin` `verify:templates` `verify:dialogs` `verify:captcha` `probe:perf` `probe:mobile` `probe:session` `audit:trace` `shoot-pages` `shoot:dialog`    |
 
-两者都支持用第一个 `http://...` 参数覆盖默认地址。**跑之前先读脚本头部注释**，
-那里写了前提条件和它自己踩过的坑。连错了会得到 `ERR_CONNECTION_REFUSED`——
+两者都支持用第一个 `http://...` 参数覆盖默认地址。连错了会得到 `ERR_CONNECTION_REFUSED`——
 那不是代码坏了。
+
+### 上面那张表**不是全部前提**，它只解决"连哪个端口"
+
+有几个脚本还各自需要额外条件，**漏了会得到"覆盖面严重缩水"的绿报告**：
+
+| 脚本             | 额外前提                                                   | 漏了会怎样                                                                                                           |
+| ---------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `audit:ui`       | 要带 `--token <会话令牌>`（用 `npm run audit:login` 生成） | **只量到未登录界面**，而模块面板 / 设计面板 / 管理页都要登录才渲染 —— 恰恰是问题最集中的地方。会得到漂亮的「0 问题」 |
+| `verify:pdf`     | `.env` 里要有 `PDF_ACCESS_PASSWORD`（走 Bearer 通道）      | 无法通过认证。它自带 `pdf-harness` 起独立实例，所以**不依赖 3001**，但仍需要 5173 在跑                               |
+| `verify:selects` | 若审 3001，`dist` 必须是最新的                             | 对着旧产物验证，得出「改动没生效」的错误结论（脚本内有 `assertDistFresh()`）                                         |
+| 导出类验证       | 别连生产实例反复跑                                         | 双层配额会被验证吃掉，当天真实导出失败                                                                               |
+
+**这就是为什么「跑之前先读脚本头部注释」不能省。** 上面这张表已经踩过一次坑：
+第一版只有端口表、没有这张前提表，而端口表看起来足够完整，反而让人不去读注释。
 
 ---
 

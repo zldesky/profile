@@ -17,14 +17,18 @@
 ```
 src/composables/  9 个   useAvatarDrag useCloudSync useMediaQuery usePageMetrics
                          usePaperSelection usePaperZoom usePdfExport usePdfPassword useResumeFile
-src/utils/        15 个  aiClient aiKeyStore avatarStore backup cloudResume completeness
+src/utils/        13 个  aiClient aiKeyStore avatarStore backup cloudResume completeness
                          exporters history imageCrop imageTemplate selection serverPdf validators
-                         + 已迁移的 .ts（aiFill helpers markdownSource pdfImport resumeStyle
-                           sectionStyle shareApi collectionApi）
-src/router/       2 个   index routes
-src/templates/    1 个   index
-src/main.js       1 个
+src/router/        2 个  index routes
+src/templates/     1 个  index
+src/main.js        1 个
+                   ────
+                   26 个
 ```
+
+注意 `src/utils/` 里还有 8 个**已经迁完的 `.ts`**（`aiFill` `helpers` `markdownSource`
+`pdfImport` `resumeStyle` `sectionStyle` `shareApi` `collectionApi`）—— 它们受类型检查，
+不要算进上面那 26 个。同一个目录里 `.ts` 与 `.js` 混住，是这个项目迁移到一半的现状。
 
 **这对 AI 的直接影响**：你要用的函数如果来自上面那些 `.js`，它的参数与返回值
 **没有任何类型保证**。读实现确认形状，不要照着直觉写。
@@ -60,19 +64,39 @@ src/main.js       1 个
 
 ---
 
-## 新增一个简历字段：三处都要动
+## 新增一个简历字段：先判断是不是「枚举字段」
 
 服务端是白名单制，**未登记的键会被静默丢弃**，不报错。所以只改前端会「保存后没了」。
 
-| 顺序 | 文件                                               | 做什么                                                     |
-| ---- | -------------------------------------------------- | ---------------------------------------------------------- |
-| 1    | `src/types/resume.ts`                              | 加类型                                                     |
-| 2    | `src/data/normalizeResume.ts`                      | 旧数据补齐默认值（导入路径也走这里）                       |
-| 3    | `server/sanitize.ts`                               | 登记字段与取值范围；数值要 `clampNumber`，枚举要进 `ALLOW` |
-| 4    | `src/data/defaultResume.ts`                        | 默认简历里给初始值（可选但通常需要）                       |
-| 5    | `skills/resume-workshop/references/data-schema.md` | 与 `sanitize.ts` 一一对应，必须同步                        |
+### 若是枚举字段（取值来自固定选项表），`presets.ts` 也要动
 
-第 5 步容易被忘：那个文档写的是「服务端会接受什么」，不同步就是**文档在说谎**。
+这一条最容易漏：`server/sanitize.ts` 的枚举**不是自己写的字面量**，而是从
+`src/data/presets.ts` 跨端 import 进来的（`sanitize.ts` 顶部第 22 行
+`from '../src/data/presets.ts'`，注释写明「保证与服务端白名单永不脱节」）。
+
+所以加枚举值时顺序是：
+
+1. `src/data/presets.ts` 加选项（`SECTION_ALIGN_OPTIONS` / `TITLE_STYLES` 这类导出）
+2. `src/types/resume.ts` 把联合类型同步
+3. `server/sanitize.ts` **不用手改枚举** —— `valuesOf()` 会自动从 presets 取值；
+   但若这个字段是**新键**，仍要在对应 `*_SPEC` 里登记
+4. 其余同下表
+
+**只改 `sanitize.ts` 的 `ALLOW` 而不动 `presets.ts` 是无效的** —— `ALLOW` 本身就是
+从 presets 算出来的（`valuesOf(...)`），改它反而是改错了地方。
+
+### 完整清单
+
+| 顺序 | 文件                                               | 做什么                                   |
+| ---- | -------------------------------------------------- | ---------------------------------------- |
+| 1    | `src/data/presets.ts`                              | **仅枚举字段需要**：加选项               |
+| 2    | `src/types/resume.ts`                              | 加类型 / 同步联合                        |
+| 3    | `src/data/normalizeResume.ts`                      | 旧数据补齐默认值（导入路径也走这里）     |
+| 4    | `server/sanitize.ts`                               | 登记字段与取值范围；数值要 `clampNumber` |
+| 5    | `src/data/defaultResume.ts`                        | 默认简历里给初始值（可选但通常需要）     |
+| 6    | `skills/resume-workshop/references/data-schema.md` | 与 `sanitize.ts` 一一对应，必须同步      |
+
+第 6 步容易被忘：那个文档写的是「服务端会接受什么」，不同步就是**文档在说谎**。
 
 **验证**：`npm test` 里 `tests/sanitize.test.js` 覆盖白名单行为，加用例比手测可靠。
 

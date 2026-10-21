@@ -114,6 +114,28 @@ if (claimedCount > 0) {
   } else {
     ok(`未受类型检查的 .js 数量与文档一致（${actual}）`)
   }
+
+  /*
+   * 分布表必须自己加得起来。
+   *
+   * 加这条是因为真踩过：分布表里写 `src/utils/ 15 个`，而那一行后面列出的名字
+   * 数一遍只有 13 个；9+15+2+1+1=28 也不等于它自己声称的 26。
+   * 总数对了、分布错了，比两个都错更难发现 —— 读者看到总数正确就会信整张表。
+   * 这正是本文档反复警告的「分母没对」。
+   */
+  const distBlock = conventions.match(/```\n(src\/composables\/[\s\S]*?)```/)
+  if (distBlock) {
+    const rows = [...distBlock[1].matchAll(/^(src\/[\w./-]+|src\/main\.js)\s+(\d+)\s*个/gm)]
+    const sum = rows.reduce((acc, m) => acc + Number(m[2]), 0)
+    if (rows.length && sum !== claimedCount) {
+      fail(
+        `conventions.md 的分布表加总是 ${sum}，但总数写的是 ${claimedCount}（差 ${sum - claimedCount}）`,
+        '逐行核对每个目录的真实 .js 数量：git ls-tree -r --name-only HEAD -- src',
+      )
+    } else if (rows.length) {
+      ok(`分布表加总与总数一致（${rows.length} 个目录，合计 ${sum}）`)
+    }
+  }
 }
 
 /* ---------------- 4. 关键约定在代码里仍然成立 ---------------- */
@@ -203,6 +225,9 @@ const keyFiles = [
   'src/types/resume.ts',
   'src/data/normalizeResume.ts',
   'src/data/defaultResume.ts',
+  // 枚举的单一来源：sanitize.ts 从这里跨端 import，加枚举字段必须动它。
+  // 这一条是漏过的 —— 最初的新增字段清单里完全没有它。
+  'src/data/presets.ts',
   'src/styles/paper.css',
   'server/sanitize.ts',
   'server/render.ts',
@@ -220,6 +245,26 @@ if (missing.length) {
   fail(`文档点名的文件不存在：${missing.join('、')}`, '改名或移动后要同步文档')
 } else {
   ok(`文档点名的 ${keyFiles.length} 个关键文件都在`)
+}
+
+/* ---------------- 6. sanitize 的枚举来源仍是 presets.ts ---------------- */
+
+/*
+ * conventions.md 现在写着「枚举从 presets.ts 来，改 ALLOW 是改错了地方」。
+ * 这个断言依赖 sanitize.ts 真的还在跨端 import presets；哪天它改成自己写字面量，
+ * 文档那句话就变成误导，必须一起改。
+ */
+{
+  const sanitize = read('server/sanitize.ts')
+  const importsPresets = /from '\.\.\/src\/data\/presets\.ts'/.test(sanitize)
+  if (importsPresets) {
+    ok('sanitize.ts 的枚举仍来自 presets.ts（文档的新增字段流程成立）')
+  } else {
+    fail(
+      'sanitize.ts 不再从 presets.ts 导入枚举',
+      'conventions.md 里「枚举字段要改 presets.ts、改 ALLOW 是改错地方」那段要重写',
+    )
+  }
 }
 
 /* ---------------- 汇总 ---------------- */
