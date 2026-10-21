@@ -37,3 +37,8 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # .agent/ 是给 AI 协作者读的文档，过期比缺失更危险（会让 AI 产生"幻读"）。
+      # 这一步只核对可机械验证的部分：链接可达、脚本存在、关键约定仍在代码里成立。
+      - name: Check agent docs
+        run: npm run check:agent-docs
