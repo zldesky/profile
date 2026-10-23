@@ -107,8 +107,17 @@ export const AI_PRESETS = [
     id: 'opencode',
     label: 'OpenCode Zen',
     baseUrl: 'https://opencode.ai/inference/v1',
-    model: 'deepseek-v4.1-flash',
-    models: ['deepseek-v4.1-flash', 'glm-5.3-flash', 'kimi-k2.5', 'gpt-5.5'],
+    /*
+     * models 刻意留空：这条预设唯一可以被核实的是 baseUrl（实测 /inference/v1 是
+     * OpenAI 兼容前缀，/inference/openai/v1 返回 404）。此前这里列的
+     * deepseek-v4.1-flash / glm-5.3-flash / kimi-k2.5 / gpt-5.5 都无法核实，
+     * 用户照着选只会拿到 404 —— 一条选了就报错的预设比没有更糟。
+     *
+     * 留空的效果是「地址帮你填好，模型名请按你自己的控制台填」，
+     * 界面会退化成输入框而不是下拉（tests/aiKeyStore.test.js 对此有断言）。
+     */
+    model: '',
+    models: [],
   },
   { id: 'custom', label: '自定义（任意 OpenAI 兼容）', baseUrl: '', model: '', models: [] },
 ]

@@ -52,7 +52,31 @@ describe('AI 预设', () => {
   it('非自定义预设的默认模型都在候选列表里（否则界面会退化成手填）', () => {
     for (const preset of AI_PRESETS) {
       if (preset.id === 'custom') continue
+      // 「没有候选模型」是合法状态（见下一条）：地址可信、模型名待用户自填。
+      // 但一旦给了候选，默认值就必须在候选里，否则下拉会显示空。
+      if (preset.models.length === 0) {
+        expect(preset.model).toBe('')
+        continue
+      }
       expect(preset.models).toContain(preset.model)
+    }
+  })
+
+  it('候选模型名不得是无法核实的自造名（选了只会 404）', () => {
+    /*
+     * 起因：OpenCode 这条预设曾经列出 deepseek-v4.1-flash / glm-5.3-flash /
+     * kimi-k2.5 / gpt-5.5 四个模型，全部无法核实。预设的价值是「选了就能用」，
+     * 列一个不存在的模型只会让用户填完 Key 立刻拿到 404 —— 比没有预设更糟。
+     *
+     * 这条断言故意只钉「名字必须有出处」：凡是看起来像编排出来的版本号
+     * （v4.1 / 5.3 / 2.5 这种本项目内部才有的编号）都算可疑。
+     * 名单继续增长时，这一条会提醒你先去服务商控制台核实。
+     */
+    const unverifiable = ['deepseek-v4.1-flash', 'glm-5.3-flash', 'kimi-k2.5', 'gpt-5.5']
+    for (const preset of AI_PRESETS) {
+      for (const name of preset.models) {
+        expect(unverifiable).not.toContain(name)
+      }
     }
   })
 
@@ -70,6 +94,8 @@ describe('AI 预设', () => {
     const opencode = presetById('opencode')
     // 实测确认：/inference/openai/v1/models 是 404，正确的 OpenAI 兼容前缀是 /inference/v1
     expect(opencode.baseUrl).toBe('https://opencode.ai/inference/v1')
+    // 地址可信、模型名不可核实 —— 这一条钉住「不要把自造模型名加回来」
+    expect(opencode.models).toEqual([])
   })
 
   it('未知 id 退回自定义而不是抛错', () => {

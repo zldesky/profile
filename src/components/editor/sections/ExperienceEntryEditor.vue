@@ -2,11 +2,11 @@
 /**
  * 单段经历编辑：时间、单位、职位、机构图标、补充字段与要点。
  * 由 EntriesSectionEditor 按段渲染，自身只负责一段。
- * 要点行的 ✦ 按钮走 AI 润色（用户自带 Key，确认后才应用）。
+ * 要点行的 ✦ 按钮打开「表达助手」：默认给本地规则判断，需要时才走措辞改写。
  */
-import { shallowRef, useTemplateRef } from 'vue'
+import { computed, shallowRef, useTemplateRef } from 'vue'
 
-import AIPolishDialog from '@/components/AIPolishDialog.vue'
+import ExpressionAssistantDialog from '@/components/ExpressionAssistantDialog.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import DragHandle from '@/components/editor/DragHandle.vue'
 import DraggableList from '@/components/editor/DraggableList.vue'
@@ -14,6 +14,7 @@ import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
 import { readImageAsDataUrl } from '@/utils/helpers'
 import type { Bullet, EntriesSection, EntryItem, EntryMeta } from '@/types/resume'
+import type { EntryKind } from '@/utils/expression'
 
 /*
  * 用具体类型而不是 { type: Object }，并且 section 收成 EntriesSection ——
@@ -39,13 +40,35 @@ const updateEntry = (patch: Partial<EntryItem>) =>
 const updateMeta = (metaId: string, patch: Partial<EntryMeta>) =>
   store.updateEntryMeta(props.section.id, props.entry.id, metaId, patch)
 
-/** 当前正在润色的要点：{ id, text }，null 表示弹窗关闭 */
+/** 当前正在编辑的要点：{ id, text }，null 表示面板关闭 */
 const polishTarget = shallowRef<Bullet | null>(null)
+
+/**
+ * 这段经历属于哪一类，决定表达助手要不要套「动词开头」那套规则。
+ * 用模块标题做启发式判断而不是新增数据字段：加字段要同时改
+ * types / normalizeResume / sanitize 三处，而这里只需要一个提示口径。
+ */
+const entryKind = computed<EntryKind>(() => {
+  const title = props.section.title || ''
+  if (/教育|学历|学校/.test(title)) return 'education'
+  if (/项目/.test(title)) return 'project'
+  if (/校园|社团|实践|志愿/.test(title)) return 'campus'
+  if (/工作|实习|任职/.test(title)) return 'work'
+  return 'unknown'
+})
+
+/** 同段其它要点，交给规则引擎做重复检测 */
+const siblingBullets = computed(() =>
+  props.entry.bullets
+    .filter((bullet) => bullet.id !== polishTarget.value?.id)
+    .map((bullet) => bullet.text)
+    .filter((text) => text.trim() !== ''),
+)
 
 function applyPolish(text: string) {
   if (!polishTarget.value) return
   store.updateBullet(props.section.id, props.entry.id, polishTarget.value.id, text)
-  toast('已应用润色结果，Ctrl+Z 可撤销')
+  toast('已应用，Ctrl+Z 可撤销')
   polishTarget.value = null
 }
 
@@ -243,8 +266,8 @@ function reorderBullets(ids: string[]): void {
           ></textarea>
           <button
             class="ed-icon-btn"
-            title="AI 润色这条要点"
-            aria-label="AI 润色这条要点"
+            title="表达助手：检查这条要点，或让模型改写"
+            aria-label="打开表达助手"
             @click="polishTarget = { id: bullet.id, text: bullet.text }"
           >
             <SvgIcon name="sparkles" :size="14" />
@@ -274,11 +297,13 @@ function reorderBullets(ids: string[]): void {
       @change="onLogoChange"
     />
 
-    <AIPolishDialog
+    <ExpressionAssistantDialog
       :open="!!polishTarget"
       kind="bullet"
-      title="AI 润色要点"
+      title="表达助手 · 要点"
       :text="polishTarget?.text || ''"
+      :entry-kind="entryKind"
+      :siblings="siblingBullets"
       @apply="applyPolish"
       @close="polishTarget = null"
     />

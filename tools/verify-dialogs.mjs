@@ -19,9 +19,9 @@ const url = process.argv.find((a) => a.startsWith('http')) || 'http://127.0.0.1:
  */
 const TARGETS = [
   { name: '简历体检', trigger: '简历体检' },
-  { name: 'JD 匹配', trigger: 'JD 匹配' },
+  { name: '岗位对照', trigger: '岗位对照' },
   { name: '我的简历', trigger: '我的简历' },
-  { name: 'AI 设置', menu: '导入数据', trigger: 'AI 补充导入' },
+  { name: '分享', trigger: '分享' },
   { name: '快捷键', press: '?' },
 ]
 

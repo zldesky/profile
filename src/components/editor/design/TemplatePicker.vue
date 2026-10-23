@@ -70,7 +70,7 @@ function lockedTitle(kind: 'tpl' | 'style', name: string) {
   <div class="ed-group">
     <div class="ed-group-title">
       <span>风格</span>
-      <span class="ed-count">一键换气质</span>
+      <span class="ed-count">整套套用</span>
     </div>
 
     <div class="style-row">

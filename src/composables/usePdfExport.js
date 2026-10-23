@@ -14,11 +14,11 @@ const PRINT_HINT = '打印窗口请将「边距」设为默认、勾选「背景
 /**
  * PDF 导出的两条路径，产物都是矢量文本：
  *  1. 打印导出——走浏览器打印，零依赖、不消耗额度，但需要用户手动勾选「背景图形」；
- *  2. 一键导出——走渲染服务，服务端自动开启背景，按用户计每日额度。
+ *  2. 导出 PDF——走渲染服务，服务端自动开启背景，按用户计每日额度。
  *
  * 服务端鉴别身份靠会话 Cookie（登录后自动携带）或脚本口令 Bearer：
  * 口令只在本地保存，服务端用常量时间比较校验，连续错误会被临时锁定。
- * 未登录点击一键导出时弹出登录/注册弹窗，成功后自动续跑导出（可配置关闭）。
+ * 未登录点击导出时弹出登录/注册弹窗，成功后自动续跑导出（可配置关闭）。
  */
 export function usePdfExport() {
   const store = useResumeStore()
@@ -101,7 +101,7 @@ export function usePdfExport() {
   async function requireAuthThen(action) {
     const opened = await authDialog.open({ mode: 'login', onAuthed: action })
     if (!opened) {
-      toast('登录后即可一键导出，正在前往登录页…', 2600)
+      toast('登录后即可导出 PDF，正在前往登录页…', 2600)
       router.push({ name: 'login' })
     }
   }
@@ -136,7 +136,7 @@ export function usePdfExport() {
         clearPassword()
         passwordOpen.value = false
         passwordError.value = ''
-        toast(`一键导出失败：${message}`, 5200)
+        toast(`导出没有成功：${message}`, 5200)
         return
 
       default: {
@@ -145,7 +145,7 @@ export function usePdfExport() {
         const hint = /额度|来源/.test(message)
           ? '可改用「打印导出」'
           : '请确认已运行 npm run pdf，或改用「打印导出」'
-        toast(`一键导出失败：${message}。${hint}`, 4800)
+        toast(`导出没有成功：${message}。${hint}`, 4800)
       }
     }
   }

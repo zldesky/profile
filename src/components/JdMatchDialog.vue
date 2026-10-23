@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * JD 匹配弹窗：粘贴目标岗位 JD → AI 比对简历 → 已覆盖/缺失关键词与修改建议。
- * 走与 AI 润色相同的 BYOK 通道（本机服务转发，Key 即用即弃）；
- * 未配置 AI 服务时内嵌提示并可直接打开设置弹窗。结果只做参考，改动仍由用户手动完成。
+ * 岗位对照弹窗：粘贴目标岗位 JD → 与简历逐条比对 → 已覆盖/缺失关键词与修改建议。
+ * 走与「表达助手」同一条通道（本机服务转发，Key 即用即弃）；
+ * 未配置模型服务时内嵌提示并可直接打开设置弹窗。结果只做参考，改动仍由用户手动完成。
  */
 import { shallowRef, useTemplateRef, watch } from 'vue'
 
@@ -51,7 +51,7 @@ const result = shallowRef<JdMatchResult | null>(null)
 const busy = shallowRef(false)
 const error = shallowRef('')
 const settingsOpen = shallowRef(false)
-/** AI 服务是否已配置；打开弹窗与保存设置后各检查一次 */
+/** 模型服务是否已配置；打开弹窗与保存设置后各检查一次 */
 const configured = shallowRef(false)
 
 watch(
@@ -93,9 +93,9 @@ async function match() {
   } catch (requestError) {
     const err = requestError as { code?: string; message?: string }
     if (err.code === 'AUTH_EXPIRED') {
-      error.value = 'AI 功能需要先登录'
+      error.value = '这一步需要先登录'
     } else {
-      error.value = err.message || 'JD 匹配失败，请稍后再试'
+      error.value = err.message || '对照失败，请稍后再试'
     }
   } finally {
     busy.value = false
@@ -106,7 +106,7 @@ async function match() {
 async function copyReport() {
   if (!result.value) return
   const { matched, missing, suggestions } = result.value
-  const lines = ['JD 匹配报告', '']
+  const lines = ['岗位对照报告', '']
   if (matched.length) {
     lines.push('已覆盖的关键词：')
     matched.forEach((item) => lines.push(`- ${item.kw}${item.note ? `（${item.note}）` : ''}`))
@@ -138,13 +138,13 @@ async function copyReport() {
         class="jd-card"
         role="dialog"
         aria-modal="true"
-        aria-label="JD 匹配"
+        aria-label="岗位对照"
         tabindex="-1"
       >
         <div class="jd-head">
           <h3 class="jd-title">
             <SvgIcon name="sparkles" :size="15" />
-            <span>JD 匹配</span>
+            <span>岗位对照</span>
           </h3>
           <button class="jd-close" title="关闭" aria-label="关闭" @click="emit('close')">
             <SvgIcon name="close" :size="14" />
@@ -162,7 +162,7 @@ async function copyReport() {
         </label>
 
         <p v-if="!configured" class="jd-setup">
-          还没有配置 AI 服务。填入你自己的 API Key 即可使用，配置只保存在本机。
+          还没有配置模型服务。填入你自己的 API Key 即可使用，配置只保存在本机。
           <button class="jd-setup-btn" @click="settingsOpen = true">去设置</button>
         </p>
 

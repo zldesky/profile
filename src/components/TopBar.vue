@@ -33,7 +33,6 @@ const ShareDialog = defineAsyncComponent(() => import('@/components/ShareDialog.
 const ResumeManagerDialog = defineAsyncComponent(
   () => import('@/components/ResumeManagerDialog.vue'),
 )
-const AiFillDialog = defineAsyncComponent(() => import('@/components/AiFillDialog.vue'))
 const PasswordDialog = defineAsyncComponent(() => import('@/components/PasswordDialog.vue'))
 
 const props = defineProps({
@@ -134,7 +133,7 @@ async function confirmLogout() {
 const serverExportText = computed(() => {
   if (exporting.value) return '渲染中…'
   if (quotaExhausted.value) return '今日额度已用完'
-  return '一键导出 PDF'
+  return '导出 PDF'
 })
 
 /** 服务要口令时换成锁图标，让按钮在点击前就说明为什么会被拦下 */
@@ -174,13 +173,11 @@ function onFileChange(event: Event) {
   importFromFile((event.target as HTMLInputElement).files?.[0])
 }
 
-/** 导入菜单：JSON/备份 与 PDF 两条入口共用 */
+/** 导入菜单：JSON/备份、PDF 与 Markdown 三条入口共用 */
 const importMenuOpen = shallowRef(false)
 const pdfInput = useTemplateRef<HTMLInputElement>('pdfInput')
 /** PDF 解析在主线程外的 worker 里跑，但整包可能要一两秒，按钮给出忙态 */
 const pdfParsing = shallowRef(false)
-/** AI 补充导入弹窗开关 */
-const aiFillOpen = shallowRef(false)
 
 /** 内容源 Markdown 的文件选择器，与 PDF 那条入口同一套写法 */
 const markdownInput = useTemplateRef<HTMLInputElement>('markdownInput')
@@ -260,11 +257,6 @@ function runExport(action: () => void) {
 function runImport(action: () => void) {
   importMenuOpen.value = false
   action()
-}
-
-/** 打开 AI 补充导入。同样包一层，避免模板里出现多语句行内表达式。 */
-function openAiFill() {
-  aiFillOpen.value = true
 }
 </script>
 
@@ -365,10 +357,6 @@ function openAiFill() {
           <span class="menu-name">Markdown 简历导入</span>
           <span class="menu-desc">VSCode / Obsidian 里写的 .md</span>
         </button>
-        <button role="menuitem" @click="runImport(openAiFill)">
-          <span class="menu-name">AI 补充导入</span>
-          <span class="menu-desc">按提示词填到指定位置</span>
-        </button>
       </div>
     </div>
 
@@ -409,14 +397,19 @@ function openAiFill() {
       </div>
     </div>
 
-    <button class="ed-btn is-compact" title="恢复示例" aria-label="恢复示例" @click="resetResume">
+    <button
+      class="ed-btn is-compact"
+      title="返回示例简历：当前内容会先记入历史，可用 Ctrl+Z 撤销"
+      aria-label="返回示例简历"
+      @click="resetResume"
+    >
       <SvgIcon name="refresh" :size="14" />
-      <span class="btn-label">恢复示例</span>
+      <span class="btn-label">示例简历</span>
     </button>
 
     <button
       class="ed-btn is-compact"
-      title="简历体检：检查完成度与常见问题"
+      title="简历体检：逐条指出缺什么、为什么判它缺，点一条可跳到对应位置"
       aria-label="简历体检"
       @click="checkOpen = true"
     >
@@ -426,12 +419,12 @@ function openAiFill() {
 
     <button
       class="ed-btn is-compact"
-      title="JD 匹配：AI 比对简历与目标岗位的差距"
-      aria-label="JD 匹配"
+      title="岗位对照：把目标岗位的要求逐条对到你的简历上，看哪些词没落到纸面"
+      aria-label="岗位对照"
       @click="jdOpen = true"
     >
       <SvgIcon name="sparkles" :size="14" />
-      <span class="btn-label">JD 匹配</span>
+      <span class="btn-label">岗位对照</span>
     </button>
 
     <div class="spacer"></div>
@@ -517,7 +510,6 @@ function openAiFill() {
     <ShareDialog :open="shareOpen" @close="shareOpen = false" />
     <CompletenessDialog :open="checkOpen" @close="checkOpen = false" />
     <JdMatchDialog :open="jdOpen" @close="jdOpen = false" />
-    <AiFillDialog :open="aiFillOpen" @close="aiFillOpen = false" />
     <AuthDialog />
     <ConfirmDialog
       :open="logoutConfirmOpen"
