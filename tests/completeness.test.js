@@ -202,3 +202,108 @@ describe('checkResume · 可定位（体检弹窗「去修改」依赖它）', (
     expect(report.total).toBe(report.issues.reduce((sum, issue) => sum + (issue.count ?? 1), 0))
   })
 })
+
+describe('checkResume · 跨模块一致性', () => {
+  /** 造一个只含一段经历模块的简历 */
+  const withEntries = (title, entries) => {
+    const resume = createResume()
+    resume.sections = [
+      {
+        id: 'sec-x',
+        type: 'entries',
+        title,
+        visible: true,
+        items: entries.map((e, i) => ({
+          id: `e${i}`,
+          org: e.org ?? '某公司',
+          role: e.role ?? '工程师',
+          time: e.time,
+          logo: '',
+          meta: [],
+          bullets: [],
+        })),
+      },
+    ]
+    return resume
+  }
+
+  it('同一模块内两段经历时间重叠会报 warn', () => {
+    const resume = withEntries('工作经历', [
+      { org: '甲公司', time: '2020-01 - 2023-01' },
+      { org: '乙公司', time: '2022-06 - 2024-06' },
+    ])
+    const issue = checkResume(resume).issues.find((i) => i.title.includes('时间重叠'))
+    expect(issue).toBeTruthy()
+    expect(issue.sectionId).toBe('sec-x')
+    // 文案里点名了两家公司，用户才知道是哪两段
+    expect(issue.detail).toContain('甲公司')
+    expect(issue.detail).toContain('乙公司')
+  })
+
+  it('同月交接不算重叠（换工作是常态）', () => {
+    const resume = withEntries('工作经历', [
+      { org: '甲公司', time: '2019-01 - 2022-01' },
+      { org: '乙公司', time: '2022-01 - 2024-01' },
+    ])
+    expect(checkResume(resume).issues.some((i) => i.title.includes('时间重叠'))).toBe(false)
+  })
+
+  it('时间解析不出来时不报（宁可漏报，也不猜一个区间去误报）', () => {
+    const resume = withEntries('工作经历', [
+      { org: '甲公司', time: '大学期间' },
+      { org: '乙公司', time: '2022-06 - 2024-06' },
+    ])
+    expect(checkResume(resume).issues.some((i) => i.title.includes('时间重叠'))).toBe(false)
+  })
+
+  it('同一模块三段互相重叠时只报一条，不刷屏', () => {
+    const resume = withEntries('项目经历', [
+      { org: 'A 项目', time: '2022-01 - 2023-01' },
+      { org: 'B 项目', time: '2022-06 - 2023-06' },
+      { org: 'C 项目', time: '2022-09 - 2024-01' },
+    ])
+    const hits = checkResume(resume).issues.filter((i) => i.title.includes('时间重叠'))
+    expect(hits.length).toBe(1)
+  })
+
+  it('跨模块的时间重叠不报（在职做项目是常态）', () => {
+    const resume = createResume()
+    const work = resume.sections.find((s) => s.title === '工作经历')
+    const project = resume.sections.find((s) => s.title === '项目经历')
+    // 示例里工作 2022-06 至今、项目 2023-03 起，本来就有重叠
+    expect(work.items.length).toBeGreaterThan(0)
+    expect(project.items.length).toBeGreaterThan(0)
+    expect(checkResume(resume).issues.some((i) => i.title.includes('时间重叠'))).toBe(false)
+  })
+
+  it('求职意向与顶部职位不一致时提示，并指向意向模块', () => {
+    const resume = createResume()
+    resume.basics.jobTitle = '产品经理'
+    const intent = resume.sections.find((s) => s.title === '求职意向')
+    intent.items.find((it) => it.label === '求职岗位').value = '前端开发工程师'
+    const issue = checkResume(resume).issues.find((i) => i.title.includes('不一致'))
+    expect(issue).toBeTruthy()
+    expect(issue.sectionId).toBe(intent.id)
+  })
+
+  it('包含关系不算不一致（前端工程师 vs 前端开发工程师）', () => {
+    const resume = createResume()
+    resume.basics.jobTitle = '前端开发工程师'
+    const intent = resume.sections.find((s) => s.title === '求职意向')
+    intent.items.find((it) => it.label === '求职岗位').value = '前端工程师'
+    expect(checkResume(resume).issues.some((i) => i.title.includes('不一致'))).toBe(false)
+  })
+
+  it('任一处为空不报冲突（那属于「没填」）', () => {
+    const resume = createResume()
+    const intent = resume.sections.find((s) => s.title === '求职意向')
+    intent.items.find((it) => it.label === '求职岗位').value = ''
+    expect(checkResume(resume).issues.some((i) => i.title.includes('不一致'))).toBe(false)
+  })
+
+  it('两条新规则都不误伤示例简历（否则用户一打开就看到满屏提示）', () => {
+    const report = checkResume(createResume())
+    expect(report.issues.some((i) => i.title.includes('时间重叠'))).toBe(false)
+    expect(report.issues.some((i) => i.title.includes('不一致'))).toBe(false)
+  })
+})

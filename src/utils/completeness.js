@@ -8,6 +8,7 @@
  * 分数只是「把明显能补的补上」的参考，不是投递门槛。
  */
 
+import { parseTimeRange, rangesOverlap } from '@/utils/expression'
 import { contactFieldIssue } from '@/utils/validators'
 
 const LEVEL_WEIGHT = { error: 18, warn: 9, tip: 4 }
@@ -137,6 +138,9 @@ export function checkResume(resume) {
       detail: '确认是有意隐藏，别让重要经历被挡在纸面之外。',
     })
   }
+
+  /* ---------------- 跨模块一致性 ---------------- */
+  issues.push(...checkTimeOverlaps(sections), ...checkIntentMismatch(resume, sections))
 
   // 同名问题合并计数：两条目都没写机构名，是一条「3 处」而不是两条一样的
   const merged = new Map()
@@ -284,6 +288,97 @@ function checkSection(section, issues) {
       add('tip', '段落内容偏短', '展开说说核心优势与代表性成果，三四句话比较合适。')
     }
   }
+}
+
+/**
+ * 同一经历类模块内，两段经历的时间区间是否重叠。
+ *
+ * 只看经历类模块（工作 / 实习 / 项目 / 教育），而且只在同一模块内部比较 ——
+ * 跨模块重叠是常态：在职期间读研、在职做项目都会同时写在工作与项目里，
+ * 跨模块报警会变成满屏误报，而这正是让人关掉检查功能的最快方式。
+ *
+ * 同月交接不算重叠（换工作是常态），这条判定在 rangesOverlap 里。
+ */
+function checkTimeOverlaps(sections) {
+  const out = []
+  sections.forEach((section) => {
+    if (section.type !== 'entries') return
+    const items = Array.isArray(section.items) ? section.items : []
+    const parsed = items
+      .map((entry) => ({ entry, range: parseTimeRange(str(entry?.time)) }))
+      // 解析不出时间的一律不参与比较：宁可漏报，也不猜一个区间去误报
+      .filter((item) => item.range)
+
+    for (let i = 0; i < parsed.length; i += 1) {
+      for (let j = i + 1; j < parsed.length; j += 1) {
+        if (!rangesOverlap(parsed[i].range, parsed[j].range)) continue
+        const a = str(parsed[i].entry.org) || str(parsed[i].entry.role) || '上一段'
+        const b = str(parsed[j].entry.org) || str(parsed[j].entry.role) || '下一段'
+        out.push({
+          level: 'warn',
+          title: `「${str(section.title) || '未命名模块'}」有两段经历时间重叠`,
+          detail: `「${a}」与「${b}」的时间区间有交叉。除非确有其事（如在职读研），否则面试时会被追问。`,
+          sectionId: section.id,
+        })
+        // 同一模块只报一条：三条经历互相重叠时报三条只会让人不知所措
+        return
+      }
+    }
+  })
+  return out
+}
+
+/**
+ * 顶部的「求职职位」与求职意向里的「求职岗位」是否一致。
+ *
+ * 只做提示、不自动改：两处谁对谁错是用户才知道的事，
+ * 自动同步会制造「改 A 变 B」的惊吓，也会污染撤销栈。
+ */
+function checkIntentMismatch(resume, sections) {
+  const jobTitle = str(resume?.basics?.jobTitle)
+  if (!jobTitle) return []
+
+  const intent = sections.find((section) => {
+    if (section.type !== 'grid') return false
+    if (!/求职意向|求职意向|期望岗位/.test(str(section.title))) return false
+    return (Array.isArray(section.items) ? section.items : []).some((item) =>
+      /求职岗位|意向岗位|目标岗位/.test(str(item?.label)),
+    )
+  })
+  if (!intent) return []
+
+  const item = intent.items.find((it) => /求职岗位|意向岗位|目标岗位/.test(str(it?.label)))
+  const wanted = str(item?.value)
+  // 任一处为空不算冲突：那属于「没填」，不属「填了两个不同的」
+  if (!wanted) return []
+  if (wanted === jobTitle) return []
+  /*
+   * 包含关系不报：「前端开发工程师」与「前端工程师」是同一个岗位的两种写法。
+   * 但不能只判子串 —— 「前端开发工程师」里并不包含「前端工程师」四个字连着（中间隔了「开发」），
+   * 所以按**共同前缀**判：去掉岗位/职位/工程师这类通用词后，前缀相同就算同一个方向。
+   * 例子：
+   *   前端开发工程师 / 前端工程师     → 去通用词后都是「前端」，同向，不报
+   *   前端开发工程师 / 产品经理       → 「前端」vs「产品」不同，报
+   */
+  const core = (text) =>
+    text.replace(/高级|资深|初级|中级|实习|工程师|开发|岗位|职位|专员|经理/g, '')
+  const a = core(wanted)
+  const b = core(jobTitle)
+  if (a && b) {
+    const shared = [...a].findIndex((ch, i) => b[i] !== ch)
+    const prefixLen = shared === -1 ? Math.min(a.length, b.length) : shared
+    // 两个汉字以上的共同开头，就认为说的是同一个方向
+    if (prefixLen >= 2) return []
+  }
+
+  return [
+    {
+      level: 'warn',
+      title: '求职意向与顶部职位不一致',
+      detail: `顶部写的是「${jobTitle}」，求职意向里写的是「${wanted}」。招聘方会不确定你投的是哪一个。`,
+      sectionId: intent.id,
+    },
+  ]
 }
 
 /** 统计全部可见条目的要点数与没有数字的要点数 */
