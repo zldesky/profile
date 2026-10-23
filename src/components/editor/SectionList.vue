@@ -5,17 +5,20 @@
  * 每张卡片由 ModuleCard 承载，本组件只负责列表编排与新增。
  */
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import BaseSelect from '@/components/BaseSelect.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DraggableList from '@/components/editor/DraggableList.vue'
 import ModuleCard from '@/components/editor/ModuleCard.vue'
-import BaseSelect from '@/components/BaseSelect.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { usePaperJump } from '@/composables/usePaperJump'
 import { useDragPreview } from '@/composables/useDragPreview'
+import { useToast } from '@/composables/useToast'
 import { SECTION_PRESETS, SECTION_TYPES } from '@/data/defaultResume'
 import { useResumeStore } from '@/stores/resume'
 import type { Section, SectionType } from '@/types/resume'
 
 const store = useResumeStore()
+const { toast } = useToast()
 
 /*
  * 下拉选项。SECTION_PRESETS 用的是 { key, title }、SECTION_TYPES 用 { value, label }，
@@ -52,20 +55,52 @@ function expand(id: string) {
   if (!isOpen(id)) expandedIds.value = [...expandedIds.value, id]
 }
 
-/** 删除模块：确认、清理展开状态、再改数据，避免留下悬空的展开项 */
+/**
+ * 删除模块：确认、清理展开状态、再改数据，避免留下悬空的展开项。
+ *
+ * 用 ConfirmDialog 而不是 window.confirm：原生 confirm 无法样式化、
+ * 在移动端是系统弹窗、且会被部分浏览器拦截；更重要的是它没法写「可撤销」这层信息 ——
+ * 而本项目所有删除都能 Ctrl+Z。界面里混一种系统弹窗，也是最明显的「不像产品」的信号。
+ */
+const pendingRemove = shallowRef<Section | null>(null)
+
 function removeSection(section: Section) {
-  if (!window.confirm(`确定删除模块「${section.title}」？该模块内容将一并移除。`)) return
+  pendingRemove.value = section
+}
+
+function confirmRemove() {
+  const section = pendingRemove.value
+  pendingRemove.value = null
+  if (!section) return
   expandedIds.value = expandedIds.value.filter((item) => item !== section.id)
   store.removeSection(section.id)
+  toast('已删除该模块，Ctrl+Z 可撤销')
 }
 
-/** 按常用模块预设新增，并自动展开便于继续填写 */
-function addFromPreset() {
+/**
+ * 按常用模块预设新增，并自动展开、聚焦到第一个输入框。
+ * 只展开不聚焦的话，用户还得自己找到该填哪儿 —— 新建之后立刻能打字才算顺手。
+ */
+async function addFromPreset() {
   expand(store.addSectionFromPreset(presetKey.value))
+  await focusFirstEmptyInput()
 }
 
-function addSection() {
+async function addSection() {
   expand(store.addSection(addingType.value))
+  await focusFirstEmptyInput()
+}
+
+/**
+ * 把焦点放到最后一首张卡片里第一个空输入框。
+ * 用 `nextTick` 之后查 DOM：卡片是 v-if 挂载的，同一 tick 里还不存在。
+ */
+async function focusFirstEmptyInput() {
+  await nextTick()
+  const cards = document.querySelectorAll('.ed-card')
+  const card = cards[cards.length - 1]
+  const input = card?.querySelector<HTMLInputElement>('input.ed-input')
+  input?.focus()
 }
 
 /** 卡片上闪一下的描边（跳转落点提示），动画结束即摘掉以便再次触发 */
@@ -184,6 +219,16 @@ watch(requestSeq, async () => {
       </button>
     </div>
     <p class="ed-hint">{{ typeHint }}</p>
+
+    <ConfirmDialog
+      :open="!!pendingRemove"
+      title="删除模块"
+      :description="`「${pendingRemove?.title ?? ''}」里的内容会一并移除。删除后可用 Ctrl+Z 撤销。`"
+      confirm-text="删除"
+      danger
+      @confirm="confirmRemove"
+      @cancel="pendingRemove = null"
+    />
   </div>
 </template>
 

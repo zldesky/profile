@@ -49,7 +49,7 @@ function onReorder(ids: string[]): void {
           <input
             class="ed-input"
             :value="item.label"
-            placeholder="标签"
+            placeholder="标签，如 求职岗位"
             @input="updateItem(item.id, { label: ($event.target as HTMLInputElement).value })"
           />
           <button
@@ -63,7 +63,7 @@ function onReorder(ids: string[]): void {
         <input
           class="ed-input"
           :value="item.value"
-          placeholder="内容"
+          placeholder="内容，如 前端开发工程师"
           @input="updateItem(item.id, { value: ($event.target as HTMLInputElement).value })"
         />
       </div>

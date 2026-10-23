@@ -50,7 +50,7 @@ function reorderSkills(ids: string[]): void {
           <input
             class="ed-input ed-meta-label"
             :value="field.label"
-            placeholder="标签"
+            placeholder="分类，如 技术栈"
             @input="updateField(field.id, { label: ($event.target as HTMLInputElement).value })"
           />
           <button
@@ -64,7 +64,7 @@ function reorderSkills(ids: string[]): void {
         <textarea
           class="ed-textarea"
           :value="field.value"
-          placeholder="描述内容"
+          placeholder="用它们做过什么，如「三年 Vue3 项目经验，主导过两个中后台系统」"
           @input="updateField(field.id, { value: ($event.target as HTMLInputElement).value })"
         ></textarea>
       </div>
@@ -82,7 +82,7 @@ function reorderSkills(ids: string[]): void {
           <input
             class="ed-input"
             :value="skill.name"
-            placeholder="技能名称"
+            placeholder="技能名，如 Vue3 / TypeScript"
             @input="updateSkill(skill.id, { name: ($event.target as HTMLInputElement).value })"
           />
           <button

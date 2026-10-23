@@ -1,9 +1,26 @@
+import { shallowRef } from 'vue'
+
 import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
 import { BACKUP_KIND } from '@/utils/backup'
 import { resumeToMarkdown, resumeToPlainText } from '@/utils/exporters'
 import { markdownToResume, resumeToSourceMarkdown } from '@/utils/markdownSource'
 import { downloadFile, formatTime } from '@/utils/helpers'
+
+/**
+ * 待确认的危险操作。模块级单例（与 useToast 同一做法），
+ * 由 TopBar 统一渲染 ConfirmDialog —— 组合式函数里不持有 UI。
+ *
+ * 为什么不是「在函数里 await 一个 Promise<boolean>」那种写法：
+ * 那样确认框的生命周期会悬在调用栈里，用户中途切文档、刷新页面都会让它永远挂起。
+ * 把「请求」与「执行」拆成两步，状态就只是一份可被清空的数据。
+ *
+ * @type {import('vue').ShallowRef<null | {
+ *   title: string, description: string, confirmText: string, danger: boolean,
+ *   run: () => void
+ * }>}
+ */
+const pendingConfirm = shallowRef(null)
 
 /**
  * 简历数据的导入、导出与重置。
@@ -14,6 +31,32 @@ export function useResumeFile() {
   const { toast } = useToast()
 
   const baseName = () => store.basics.name || '简历'
+
+  /**
+   * 请求用户确认一次危险操作，确认后执行 run。
+   * @param {{title: string, description: string, confirmText: string, danger?: boolean}} dialog
+   * @param {() => void} run
+   */
+  function askConfirm(dialog, run) {
+    pendingConfirm.value = {
+      title: dialog.title,
+      description: dialog.description,
+      confirmText: dialog.confirmText,
+      danger: dialog.danger !== false,
+      run,
+    }
+  }
+
+  /** 由 TopBar 在用户点「确认」时调用 */
+  function confirmPending() {
+    const task = pendingConfirm.value
+    pendingConfirm.value = null
+    task?.run?.()
+  }
+
+  function cancelPending() {
+    pendingConfirm.value = null
+  }
 
   /** 导出为 JSON，可用于备份或换设备继续编辑 */
   function exportJSON() {
@@ -78,21 +121,36 @@ export function useResumeFile() {
         const data = JSON.parse(reader.result)
         if (data && typeof data === 'object' && data.kind === BACKUP_KIND) {
           const count = Array.isArray(data.docs) ? data.docs.length : 0
-          const message = count
-            ? `导入整包备份将覆盖本机全部 ${count} 份简历与历史版本，确定继续？`
-            : '导入整包备份将覆盖本机全部数据，确定继续？'
-          if (!window.confirm(message)) return
-          const restored = store.importAllData(data)
-          toast(`已恢复整包备份：${restored} 份简历`)
+          askConfirm(
+            {
+              title: '恢复整包备份',
+              description: count
+                ? `会用备份里的 ${count} 份简历与历史版本覆盖本机全部数据。备份文件本身不会被改动。`
+                : '会用备份内容覆盖本机全部数据。备份文件本身不会被改动。',
+              confirmText: '覆盖并恢复',
+            },
+            () => {
+              const restored = store.importAllData(data)
+              toast(`已恢复整包备份：${restored} 份简历`)
+            },
+          )
           return
         }
         if (!data || typeof data !== 'object' || !Array.isArray(data.sections)) {
           throw new Error('缺少 sections 字段')
         }
         const currentName = store.basics.name || '未命名简历'
-        if (!window.confirm(`导入将覆盖当前简历「${currentName}」，确定继续？`)) return
-        store.replaceResume(data)
-        toast('已导入简历数据')
+        askConfirm(
+          {
+            title: '导入简历数据',
+            description: `会覆盖当前简历「${currentName}」。若现在这份还要留，先导出 JSON 备份再导入。`,
+            confirmText: '覆盖并导入',
+          },
+          () => {
+            store.replaceResume(data)
+            toast('已导入简历数据')
+          },
+        )
       } catch (error) {
         toast(`导入失败：${error.message}`)
       }
@@ -124,18 +182,20 @@ export function useResumeFile() {
         }
 
         const currentName = store.basics.name || '未命名简历'
-        if (
-          !window.confirm(
-            `导入将覆盖当前简历「${currentName}」，读到 ${sections} 个模块。\n\n` +
-              '只还原内容：主题、模板、模块布局与头像会取默认值。确定继续？',
-          )
-        ) {
-          return
-        }
-
-        // replaceResume 内部会走 normalizeResume 补 id 与缺省字段
-        store.replaceResume(draft)
-        toast(`已从 Markdown 导入：${sections} 个模块`)
+        askConfirm(
+          {
+            title: '从 Markdown 导入',
+            description:
+              `会覆盖当前简历「${currentName}」，读到 ${sections} 个模块。` +
+              '只还原内容：主题、模板、模块布局与头像会取默认值。',
+            confirmText: '覆盖并导入',
+          },
+          () => {
+            // replaceResume 内部会走 normalizeResume 补 id 与缺省字段
+            store.replaceResume(draft)
+            toast(`已从 Markdown 导入：${sections} 个模块`)
+          },
+        )
       } catch (error) {
         toast(`导入失败：${error.message}`)
       }
@@ -145,9 +205,17 @@ export function useResumeFile() {
   }
 
   function resetResume() {
-    if (!window.confirm('恢复为示例简历？当前所有修改都会丢失。')) return
-    store.resetAll()
-    toast('已恢复示例简历')
+    askConfirm(
+      {
+        title: '返回示例简历',
+        description: '当前内容会被示例简历替换。这一步不会清空历史版本，可用 Ctrl+Z 撤销。',
+        confirmText: '换成示例简历',
+      },
+      () => {
+        store.resetAll()
+        toast('已恢复示例简历')
+      },
+    )
   }
 
   return {
@@ -159,5 +227,9 @@ export function useResumeFile() {
     importFromFile,
     importMarkdownFile,
     resetResume,
+    /* 确认框的读取端：状态在这里，渲染交给 TopBar */
+    pendingConfirm,
+    confirmPending,
+    cancelPending,
   }
 }

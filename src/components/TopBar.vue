@@ -114,6 +114,9 @@ const {
   importFromFile,
   importMarkdownFile,
   resetResume,
+  pendingConfirm,
+  confirmPending,
+  cancelPending,
 } = useResumeFile()
 const {
   exporting,
@@ -539,6 +542,20 @@ function runImport(action: () => void) {
       danger
       @confirm="confirmLogout"
       @cancel="logoutConfirmOpen = false"
+    />
+
+    <!--
+      导入 / 恢复示例这类「会覆盖数据」的确认框。
+      文案来自 useResumeFile 的 askConfirm，这里只负责渲染 —— 组合式函数不持有 UI。
+    -->
+    <ConfirmDialog
+      :open="!!pendingConfirm"
+      :title="pendingConfirm?.title ?? ''"
+      :description="pendingConfirm?.description ?? ''"
+      :confirm-text="pendingConfirm?.confirmText ?? '确定'"
+      :danger="pendingConfirm?.danger ?? true"
+      @confirm="confirmPending"
+      @cancel="cancelPending"
     />
     <PasswordDialog
       :open="passwordOpen"

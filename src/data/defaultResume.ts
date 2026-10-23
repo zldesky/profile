@@ -128,6 +128,13 @@ export const DEFAULT_SECTION_LAYOUT: SectionLayout = {
 
 /**
  * 按模块类型创建空白模块。
+ *
+ * 新建模块里的条目一律留空，把示例文字放到输入框的 placeholder 里。
+ * 这个区别不是洁癖：写进数据的示例文字会被当成真实内容，
+ * 一路渲染到纸面、导出到 PDF、同步到云端。用户点了「添加」却没填，
+ * 导出时纸上就会印着「项目名 / 内容 / 技能」—— 那是最难堪的一种 bug：
+ * 它不报错，只是在别人看到的简历里。
+ *
  * @param {string} type grid | entries | skills | text
  * @param {string} title 模块标题
  */
@@ -145,14 +152,14 @@ export function createSection(type: SectionType, title = '新模块'): Section {
       return {
         ...base,
         type: 'grid',
-        items: [createGridItem({ label: '项目名', value: '内容' })],
+        items: [createGridItem({ label: '', value: '' })],
       } as GridSection
     case 'skills':
       return {
         ...base,
         type: 'skills',
-        fields: [createMeta('技能描述', '')],
-        items: [createSkill({ name: '技能', level: 80 })],
+        fields: [createMeta('', '')],
+        items: [createSkill({ name: '', level: 80 })],
         showBars: false,
       } as SkillsSection
     case 'text':
