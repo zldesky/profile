@@ -129,3 +129,76 @@ describe('checkResume', () => {
     expect([...ranks].sort((a, b) => a - b)).toEqual(ranks)
   })
 })
+
+describe('checkResume · 可定位（体检弹窗「去修改」依赖它）', () => {
+  it('模块级问题带上 sectionId，弹窗才能跳到那一处', () => {
+    const resume = createResume()
+    resume.sections = [
+      { id: 'sec-work', type: 'entries', title: '工作经历', visible: true, items: [] },
+    ]
+    const issue = checkResume(resume).issues.find((i) => i.title.includes('模块是空的'))
+    expect(issue.sectionId).toBe('sec-work')
+  })
+
+  it('基本信息类问题标记 target=basics（不是模块，滚到面板顶部）', () => {
+    const resume = createResume()
+    resume.basics.name = ''
+    const issue = checkResume(resume).issues.find((i) => i.title === '缺少姓名')
+    expect(issue.target).toBe('basics')
+    // 有 target 就不该再有 sectionId，否则弹窗会二选一地乱跳
+    expect(issue.sectionId).toBeUndefined()
+  })
+
+  it('合并后仍保留第一处落点：合并是为了不刷屏，不是丢掉可操作性', () => {
+    const resume = createResume()
+    // 两个条目都没写机构名 → 合并成「2 处」，但必须还带得动一个 sectionId
+    const work = resume.sections.find((s) => s.title === '工作经历')
+    work.items.forEach((entry) => (entry.org = ''))
+    const merged = checkResume(resume).issues.find((i) => i.title.includes('没写机构'))
+    expect(merged.title).toContain('2 处')
+    expect(merged.sectionId).toBe(work.id)
+  })
+
+  it('没有单一落点的问题不带 target（界面据此隐藏按钮，而不是给个点了没反应的）', () => {
+    const resume = createResume()
+    resume.sections = [
+      {
+        id: 's1',
+        type: 'entries',
+        title: '工作经历',
+        visible: true,
+        items: [
+          {
+            id: 'e1',
+            org: '某公司',
+            role: '工程师',
+            time: '2020-01 - 至今',
+            logo: '',
+            meta: [],
+            bullets: [
+              { id: 'b1', text: '负责需求开发' },
+              { id: 'b2', text: '参与方案设计' },
+              { id: 'b3', text: '推动流程优化' },
+              { id: 'b4', text: '支持线上运维' },
+            ],
+          },
+        ],
+      },
+    ]
+    const issue = checkResume(resume).issues.find((i) => i.title === '多数要点缺少量化数据')
+    expect(issue.target).toBeUndefined()
+    expect(issue.sectionId).toBeUndefined()
+  })
+
+  it('total 按处数计，不受同名合并影响（顶栏角标要诚实）', () => {
+    const resume = createResume()
+    const work = resume.sections.find((s) => s.title === '工作经历')
+    work.items.forEach((entry) => (entry.org = ''))
+    const report = checkResume(resume)
+    const mergedRow = report.issues.find((i) => i.title.includes('没写机构'))
+    // 合并后这一条只算 1 条 issue，但 total 数的是「处」
+    expect(mergedRow.title).toContain('2 处')
+    expect(report.total).toBeGreaterThanOrEqual(2)
+    expect(report.total).toBe(report.issues.reduce((sum, issue) => sum + (issue.count ?? 1), 0))
+  })
+})

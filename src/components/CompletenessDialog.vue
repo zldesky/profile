@@ -1,12 +1,18 @@
 <script setup lang="ts">
 /**
- * 简历体检弹窗：完成度评分 + 按严重度分级的问题清单。
- * 检查逻辑在 utils/completeness.js（纯函数），这里只做打开时的即时体检与展示。
+ * 体检弹窗：完成度评分 + 按严重度分级的问题清单。
+ * 检查逻辑在 utils/completeness.js（纯函数），这里只做展示与「带我去改」。
+ *
+ * 「带我去改」一个关键点：体检的价值不在于告诉人「有 7 个问题」，
+ * 而在于把人直接送到出问题的那一处。原来的弹窗只给一句描述，
+ * 用户还得自己在 6 个模块里找 —— 那正是这类功能做完没人用的原因。
+ * 跳转复用 usePaperJump：它已经会切到「内容」页签、展开卡片、滚到位置并闪一下。
  */
-import { shallowRef, useTemplateRef, watch } from 'vue'
+import { computed, shallowRef, useTemplateRef, watch } from 'vue'
 
 import SvgIcon from '@/components/SvgIcon.vue'
 import { useDialogA11y } from '@/composables/useDialogA11y.ts'
+import { usePaperJump } from '@/composables/usePaperJump'
 import { useResumeStore } from '@/stores/resume'
 import { checkResume } from '@/utils/completeness'
 
@@ -35,25 +41,73 @@ useDialogA11y(
 interface CompletenessReport {
   score: number
   counts: { error: number; warn: number; tip: number }
-  issues: { level: 'error' | 'warn' | 'tip'; title: string; detail: string }[]
+  /** 未修复问题总处数（不受同名合并影响），顶栏角标与这里共用口径 */
+  total: number
+  issues: {
+    level: 'error' | 'warn' | 'tip'
+    title: string
+    detail: string
+    /** 该问题属于哪个模块；缺省表示没有单一落点 */
+    sectionId?: string
+    /** 'basics' 表示落到右侧面板顶部的「基本信息」 */
+    target?: 'basics'
+  }[]
 }
 
 const report = shallowRef<CompletenessReport | null>(null)
 
+const { focusSection } = usePaperJump()
+
 watch(
   () => props.open,
   (open) => {
-    if (open) report.value = checkResume(store.resume)
+    if (open) report.value = checkResume(store.resume) as CompletenessReport
   },
 )
 
-/** 评分的一句话解读 */
-const scoreText = (score: number) => {
-  if (score >= 90) return '完成度很好，投递前可再对照 JD 微调'
-  if (score >= 70) return '主体完整，把下面的问题补一补更有竞争力'
-  if (score >= 40) return '还有明显缺口，建议逐项修复后再投递'
-  return '内容还很少，先从基本信息和核心经历补起'
+/**
+ * 「去修改」：只对有落点的问题显示按钮。
+ *
+ * 没有落点的问题（例如「多数要点缺少量化数据」分散在多个模块里）不显示按钮 ——
+ * 一个点了没反应的按钮比没有按钮更糟。
+ */
+function issueTarget(issue: CompletenessReport['issues'][number]): 'basics' | string | null {
+  if (issue.target === 'basics') return 'basics'
+  if (issue.sectionId) return issue.sectionId
+  return null
 }
+
+function goFix(issue: CompletenessReport['issues'][number]): void {
+  const target = issueTarget(issue)
+  if (!target) return
+  emit('close')
+  if (target === 'basics') {
+    /*
+     * 基本信息不是「模块」，usePaperJump 只认模块 id。
+     * 这里滚到面板顶部即可 —— 基本信息永远在内容页签的最上面。
+     */
+    document.querySelector('.editor-panel')?.scrollTo?.({ top: 0, behavior: 'smooth' })
+    return
+  }
+  focusSection(target)
+}
+
+/**
+ * 评分的一句话解读。
+ *
+ * 原则：说「下一步做什么」，不说「你做得怎么样」。
+ * 原先的「完成度很好 / 更有竞争力 / 投递前微调」都是评价，读完不知道该干点什么；
+ * 现在每档都带一个具体动作，且数字来自真实的计数，不是形容词。
+ */
+const scoreText = computed(() => {
+  const r = report.value
+  if (!r) return ''
+  const { error, warn } = r.counts
+  if (error > 0) return `有 ${error} 处会影响阅读的硬伤，先把它们补上`
+  if (warn > 0) return `主体完整，还有 ${warn} 处建议补充，逐条改完可信度会明显不同`
+  if (r.counts.tip > 0) return `没有硬伤。下面 ${r.counts.tip} 条是可选的优化，时间够再改`
+  return '没有发现问题。投递前建议再对照目标岗位的通告看一遍关键词'
+})
 
 /** 问题计数徽标：按级别着色 */
 const levelChipText = { error: '硬伤', warn: '待补', tip: '优化' }
@@ -87,7 +141,7 @@ const levelChipText = { error: '硬伤', warn: '待补', tip: '优化' }
             </span>
             <span class="ck-score-side">
               <span class="ck-score-label">完成度评分（满分 100）</span>
-              <span class="ck-score-desc">{{ scoreText(report.score) }}</span>
+              <span class="ck-score-desc">{{ scoreText }}</span>
             </span>
           </div>
 
@@ -109,6 +163,11 @@ const levelChipText = { error: '硬伤', warn: '待补', tip: '优化' }
                 <p class="ck-item-title">{{ issue.title }}</p>
                 <p class="ck-item-detail">{{ issue.detail }}</p>
               </div>
+              <!-- 只对有落点的问题给按钮：点了没反应比没有按钮更糟 -->
+              <button v-if="issueTarget(issue)" class="ed-btn ck-go" @click="goFix(issue)">
+                <span>去修改</span>
+                <SvgIcon name="redo" :size="12" />
+              </button>
             </li>
           </ul>
           <div v-else class="ed-empty">没有发现问题，这份简历已经很完整了。</div>
@@ -292,7 +351,29 @@ const levelChipText = { error: '硬伤', warn: '待补', tip: '优化' }
 }
 
 .ck-item-body {
+  flex: 1 1 auto;
   min-width: 0;
+}
+
+/*
+ * 「去修改」按钮：靠右、次按钮样式、命中区 ≥24px。
+ * 它比问题描述更弱一级（dashed 边、无阴影），因为它是辅助动作而不是主操作 ——
+ * 主操作永远是「先把内容写好」，不是「把分数刷上去」。
+ */
+.ck-go {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  min-height: 24px;
+  padding: 2px 8px;
+  border-style: dashed;
+  box-shadow: none;
+  color: var(--ed-text-2);
+  font-size: 12px;
+}
+
+.ck-go:hover {
+  border-style: solid;
+  color: var(--ed-ink);
 }
 
 .ck-item-title {

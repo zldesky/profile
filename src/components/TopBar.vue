@@ -27,6 +27,7 @@ import { TEMPLATES } from '@/data/presets'
 import { useResumeStore } from '@/stores/resume'
 import { formatTime } from '@/utils/helpers'
 import { parseResumePdf } from '@/utils/pdfImport'
+import { checkResume } from '@/utils/completeness'
 const CompletenessDialog = defineAsyncComponent(() => import('@/components/CompletenessDialog.vue'))
 const JdMatchDialog = defineAsyncComponent(() => import('@/components/JdMatchDialog.vue'))
 const ShareDialog = defineAsyncComponent(() => import('@/components/ShareDialog.vue'))
@@ -48,9 +49,22 @@ const emit = defineEmits(['toggle-panel'])
 const managerOpen = shallowRef(false)
 /** 分享弹窗（要求登录，未登录先走登录流程） */
 const shareOpen = shallowRef(false)
-/** 简历体检 / JD 匹配弹窗 */
+/** 简历体检 / 岗位对照弹窗 */
 const checkOpen = shallowRef(false)
 const jdOpen = shallowRef(false)
+
+/**
+ * 体检角标：还剩多少处可以改进。
+ *
+ * 为什么要做这个数字：体检快照只在打开弹窗时算一次，用户在编辑器里改了半天，
+ * 完全不知道自己离「没问题」还有多远。角标把这件事变成可看见的目标，
+ * 也让人有动力点开它。
+ *
+ * 用 computed 而不是 watch + ref：checkResume 是纯函数、几百微秒级别，
+ * 每次简历变化重算一次完全够快，而 watch 会引入「什么时候该刷新」的状态问题。
+ * 数字来自 completeness 的 total（按处数计），不是「合并后的条数」。
+ */
+const checkTotal = computed(() => (checkResume(store.resume) as { total: number }).total)
 /** 导出菜单：JSON / Markdown / 纯文本 / 整包备份 */
 const exportMenuOpen = shallowRef(false)
 
@@ -409,12 +423,18 @@ function runImport(action: () => void) {
 
     <button
       class="ed-btn is-compact"
-      title="简历体检：逐条指出缺什么、为什么判它缺，点一条可跳到对应位置"
+      :class="{ 'has-badge': checkTotal > 0 }"
+      :title="
+        checkTotal > 0
+          ? `简历体检：还有 ${checkTotal} 处可以改进，逐条说明为什么，点一条可跳到对应位置`
+          : '简历体检：目前没有发现问题'
+      "
       aria-label="简历体检"
       @click="checkOpen = true"
     >
       <SvgIcon name="check" :size="14" />
       <span class="btn-label">简历体检</span>
+      <span v-if="checkTotal > 0" class="tb-badge">{{ checkTotal }}</span>
     </button>
 
     <button
@@ -679,6 +699,21 @@ function runImport(action: () => void) {
   padding: 1px 6px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.24);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * 体检角标：与主按钮上的 quota-badge 区分开 —— 那个是白字压在主色底上，
+ * 这个压在普通按钮上，所以用浅色底 + 深色字，保证在两种按钮上都可读。
+ * 不用红色：这些都不是硬伤，用告警色会让人焦虑，而「还剩几处可以改」应该是中性的。
+ */
+.tb-badge {
+  margin-left: 2px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--ed-fill);
+  color: var(--ed-text-2);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
