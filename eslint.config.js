@@ -135,9 +135,125 @@ export default [
     },
   },
 
+  /*
+   * ---------------- 分层依赖护栏 ----------------
+   *
+   * 下面两组规则把 README / .agent/conventions.md 里靠口头约定的分层**变成机器校验**。
+   * 约定写进文档只会被读一次，写进 lint 才会被每一次改动拦住。
+   *
+   * 三条边界的理由：
+   *  - 模板必须纯渲染：同一套模板组件被编辑器、分享页（/share/:id）与 PDF 渲染服务
+   *    三处复用。模板一旦 import store 或组合式函数，分享页就会连带把整个编辑器
+   *    状态机拉进公开页面，PDF 渲染也可能读到上一个请求的残留状态。
+   *  - 纯逻辑层必须可单测：src/utils 在 Node 里被 tests/ 直接 import。
+   *    引用组件或 store 会让它拖进 Vue 运行时，测试就必须装 DOM 桩。
+   *  - 网络只能有一个出口：手写 fetch 散开之后，401/非 JSON/超时的处理会各写一套
+   *    （本项目历史上 20 处手写 fetch 演变成四五种错误语义），统一走 utils/api.ts。
+   *    这一条由下面的 no-restricted-globals 配 no-restricted-imports 双重兜住：
+   *    既拦「新写的 fetch」，也拦「绕过 api.ts 直连其他请求封装」。
+   */
   {
-    // normalizeResume 的 RawRecord = Record<string, any> 是刻意的：
-    // 这个函数的职责就是逐字段收窄完全不可信的导入数据，入口处的 any 正是「尚未校验」的表达。
+    files: ['src/templates/**/*.vue'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@/stores/*'],
+              message: '模板只负责渲染：不要把 store 引进来。数据一律走 props。',
+            },
+            {
+              group: ['@/composables/*'],
+              message: '模板只负责渲染：分享页与 PDF 渲染不需要编辑器状态机。',
+            },
+            {
+              group: ['@/utils/api', '@/utils/api.ts'],
+              message: '模板不发请求：需要的数据由调用方传入。',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
+    files: ['src/utils/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@/components/*'],
+              message: 'src/utils 是纯逻辑层，必须能在 Node 里直接单测，不要依赖组件。',
+            },
+            {
+              group: ['@/stores/*'],
+              message: 'src/utils 不认识 Pinia：数据以参数传入、以返回值传出。',
+            },
+            {
+              group: ['vue'],
+              message: 'src/utils 应保持框架无关，才能在 Node 测试里直接跑。',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
+    /*
+     * components / pages / composables 一律走 @/utils/api 的 request()/requestBlob()。
+     * 这里用 no-restricted-globals 而不是 no-restricted-imports：fetch 是浏览器全局，
+     * 拦它才拦得住「手写一遍 fetch + 自己定义一套错误语义」这种漂移
+     * （本项目历史上 20 处手写 fetch 演变成四五种错误语义）。
+     * stores/ 与 utils/ 不在此列 —— 它们本来就该保持框架无关、网络无关。
+     */
+    files: ['src/components/**', 'src/pages/**', 'src/composables/**'],
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        {
+          name: 'fetch',
+          message: '请走 @/utils/api 的 request()/requestBlob()：它统一了错误码与降级。',
+        },
+      ],
+    },
+  },
+
+  {
+    /*
+     * 组件与页面里禁止 console：线上 console.error 会原样出现在用户浏览器里，
+     * 且没有任何采集。需要提示用户的一律走 useToast；确实要给开发者的用 console.warn
+     * 并在调用点写清为什么留。
+     * tools/、server/、tests/ 不受此限（它们本来就跑在 Node，输出是产物）。
+     */
+    files: ['src/**/*.{js,ts,vue}'],
+    rules: {
+      'no-console': ['error', { allow: ['warn'] }],
+    },
+  },
+
+  /*
+   * no-console 的两处具名豁免。
+   *
+   * 这两处的 console.error 是**降级路径的信号**，不是调试残留：
+   *  - templates/index.js：某个模板 chunk 加载失败（网络/缓存）时回退经典单栏，
+   *    不报出来就变成「切模板没反应」这种查不到的静默失效；
+   *  - utils/avatarStore.js：IndexedDB 不可用（隐私模式/配额满）时回退内联存储，
+   *    用户看不到任何界面变化，只有控制台能说明存储条数为什么突然变大。
+   * 其余位置一律走 useToast，不允许新增 console。
+   */
+  {
+    files: ['src/templates/index.js', 'src/utils/avatarStore.js'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+
+  {
+    // normalizeResume 的 RawRecord = Record<string, any> 是刻意的：    // 这个函数的职责就是逐字段收窄完全不可信的导入数据，入口处的 any 正是「尚未校验」的表达。
     // 换成 unknown 会在这里逼出十余处断言，把收窄逻辑本身搅浑，安全性并不会提高
     //（真正的边界是导入后的白名单与 normalizeResume 的产出类型）。
     files: ['src/data/normalizeResume.ts'],

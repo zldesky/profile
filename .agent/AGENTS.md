@@ -151,7 +151,8 @@ npm run format:check
 
 - 子目录的补充说明：[`conventions.md`](./conventions.md)（工程约定与类型策略）、
   [`testing.md`](./testing.md)（测试与验证脚本怎么选）、
-  [`prompts.md`](./prompts.md)（常见任务的标准做法）。
+  [`prompts.md`](./prompts.md)（常见任务的标准做法）、
+  [`guards.md`](./guards.md)（**哪些约定已经被 lint / 校验脚本兜住、怎么证明它会拦**）。
 - 服务端细节：[`../server/README.md`](../server/README.md)。
 - 部署：[`../DEPLOY.md`](../DEPLOY.md)。
 - **本目录不是产品代码**，不要从这里 import 任何东西。

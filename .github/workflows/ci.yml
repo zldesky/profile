@@ -27,6 +27,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # 格式检查以前只在本地跑，于是本地红、CI 绿的差异会一路带进 main。
+      # 它和 lint 的分工写在 eslint.config.js 顶部：ESLint 管质量，Prettier 管格式。
+      - name: Format check
+        run: npm run format:check
+
       # 类型检查必须单独跑：Vite 构建只转译不做类型校验，类型错误不会让 Build 失败，
       # 少了这一步 TS 迁移就形同虚设（错的类型照样能合进 main）
       - name: Typecheck
@@ -37,6 +42,25 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # 构建产物起来了不等于服务能起来。历史上有个 500 的 bug 是「单测全绿、
+      # 服务起不来 / 端点报 500」才发现的（导出端点误用了只支持会话通道的访问器）。
+      # 所以这里真的启动一次 server/index.ts，并打一次 /api/health。
+      - name: Server boots and answers /api/health
+        run: |
+          node --env-file-if-exists=.env server/index.ts &
+          SERVER_PID=$!
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3001/api/health > /tmp/health.json; then
+              cat /tmp/health.json
+              kill $SERVER_PID
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "服务 30 秒内没有响应 /api/health"
+          kill $SERVER_PID 2>/dev/null || true
+          exit 1
 
       # .agent/ 是给 AI 协作者读的文档，过期比缺失更危险（会让 AI 产生"幻读"）。
       # 这一步只核对可机械验证的部分：链接可达、脚本存在、关键约定仍在代码里成立。

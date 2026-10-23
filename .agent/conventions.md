@@ -26,14 +26,24 @@ src/main.js       1 个
                   22 个
 ```
 
-注意 `src/utils/` 里还有 11 个**已经迁完的 `.ts`**（`aiClient` `aiFill` `api` `cloudResume`
-`collectionApi` `helpers` `markdownSource` `pdfImport` `resumeStyle` `sectionStyle` `serverPdf`
-`shareApi` `styleMatrix`）—— 它们受类型检查，不要算进上面那 22 个。同一个目录里 `.ts` 与 `.js`
-混住，是这个项目迁移到一半的现状。
+**每一行都要能自己数对上**：点名文件名个数 = 该行声明的数量，各行之和 = 底部总数。
+这条之所以单列：曾经总数写 22、`utils` 行却列了 11 个名字（多写了 `selection`，
+少写了 `history`），总数对、分布错，读者看到总数正确就会信整张表。
+`npm run check:agent-docs` 只比对**总数**，**名单要人自己数** —— 这是它明确的覆盖边界。
 
-**这一轮从 26 降到 22**：`aiClient` `cloudResume` `serverPdf`（`src/utils/`）与
-`useCloudSync`（`src/composables/`）四个文件已转 `.ts`。选它们的理由是它们都是**网络边界**：
-类型在这里最值钱（响应体形状、错误码），而且它们的手写 `fetch` 正好一并收进了 `utils/api.ts`。
+注意 `src/utils/` 里还有 13 个**已经迁完的 `.ts`**（`aiClient` `aiFill` `api` `cloudResume`
+`collectionApi` `fieldLayout` `helpers` `markdownSource` `pdfImport` `resumeStyle`
+`sectionStyle` `serverPdf` `shareApi` `styleMatrix`）—— 它们受类型检查，不要算进上面那 22 个。
+同一个目录里 `.ts` 与 `.js` 混住，是这个项目迁移到一半的现状。
+
+**迁移进度**：上一轮把 26 降到 22，方法是先动**网络边界** —— `aiClient` `cloudResume`
+`serverPdf`（`src/utils/`）与 `useCloudSync`（`src/composables/`）四个文件转 `.ts`。
+选它们的理由是类型在这里最值钱（响应体形状、错误码），而且它们的手写 `fetch`
+正好一并收进了 `utils/api.ts`。
+
+此后 `fieldLayout` 与 `styleMatrix` 等新增文件直接以 `.ts` 起步，
+所以基线仍是 **22 个 `.js`**、`src/utils/` 下 13 个 `.ts`。
+下一步迁什么要按「出事代价」排，不要按文件大小排 —— 见 `guards.md` 的诚实清单。
 
 **这对 AI 的直接影响**：你要用的函数如果来自上面那些 `.js`，它的参数与返回值
 **没有任何类型保证**。读实现确认形状，不要照着直觉写。
