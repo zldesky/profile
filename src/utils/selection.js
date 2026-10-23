@@ -37,6 +37,79 @@ export function sectionContainerKey(templateId, sectionType) {
 }
 
 /**
+ * 依据「被拖块当前的中点」算出它应插入到第几个可见成员之前。
+ *
+ * **单一判据，不分方向。** 原先按拖动方向分了两套比较：
+ * 往下 `groupBottom > mid`、往上 `groupTop < mid`。向上的那套把方向写反了 ——
+ * 它把「中线在被拖块上边缘之下」也计入，于是**位于拖动块下方的所有模块
+ * 都被算成已越过**。实测把「项目经历」往上拖到最顶，算出的索引是 2
+ * （应为 0），松手后它直接掉到了最后一名。用户的描述是「无法拖到原位置上方」，
+ * 正是这个方向错误的表现。
+ *
+ * 改成「统一比较中点」后，向上 / 向下走同一段代码，方向上不可能再写反；
+ * 插入点用整块中点、门槛也仍是半个模块高，与成熟库（SortableJS / dnd-kit）
+ * 的直觉一致。
+ *
+ * @param {{ id: string, top: number, bottom: number }[]} others 其它可见成员的矩形（按当前顺序）
+ * @param {number} groupTop 被拖块整块的当前顶部（含拖动位移）
+ * @param {number} groupBottom 被拖块整块的当前底部（含拖动位移）
+ * @returns {number} 落点索引：第几块之前；0 表示插到最前
+ */
+export function resolveVisibleInsertIndex(others, groupTop, groupBottom) {
+  const groupMid = (groupTop + groupBottom) / 2
+  let index = 0
+  for (const item of others) {
+    const mid = (item.top + item.bottom) / 2
+    if (mid < groupMid) index += 1
+  }
+  return index
+}
+
+/**
+ * 算出拖动中「其它模块各自要位移多少」，模拟重排后的真实位置。
+ *
+ * 这是让纸面动效与右侧面板（SortableJS）一致的**核心**：
+ * 拖走一个模块后，它原来的位置要**被下面的模块补上**，插入点之后才腾出空位。
+ *
+ * 原先只做了后半句（插入点之后下移），前半句没做 —— 于是被拖块的原位置
+ * 留着一个空洞，下面的模块不会补上来。用户看到的是「拖走一个，底下不动」，
+ * 与右侧面板那种"整列跟着流动"的手感完全不同。
+ *
+ * 正确语义 = 模拟「把整块从原位置摘掉、再插到 targetIndex」之后的相对位移：
+ *  - 被拖块**原位置之后、插入点之前**的模块 → 整体**上移**一个块高（补空洞）；
+ *  - 插入点**及之后**的模块 → 整体**下移**一个块高（腾空位）；
+ *  - 其余不动。
+ *
+ * @param {string[]} others 其它可见成员 id，按当前视觉顺序
+ * @param {number} originIndex 被拖块在 others 中的「原位置」序号：
+ *        即它原来排在第几个 other 之前（等于它原来的可见索引，扣掉自身）
+ * @param {number} targetIndex 插入点：插到第几个 other 之前
+ * @returns {Record<string, -1|0|1>} 每个 id 的位移方向：-1 上移、1 下移、0 不动
+ */
+export function resolveShiftDirections(others, originIndex, targetIndex) {
+  /** @type {Record<string, -1|0|1>} */
+  const dirs = {}
+  const from = Math.max(0, Math.min(originIndex, others.length))
+  const to = Math.max(0, Math.min(targetIndex, others.length))
+
+  others.forEach((id, index) => {
+    if (from < to) {
+      // 往下拖：原位置之后、插入点之前的补上来（−1）；插入点及之后的让位下移（+1）
+      if (index >= from && index < to) dirs[id] = -1
+      else if (index >= to) dirs[id] = 1
+      else dirs[id] = 0
+    } else if (to < from) {
+      // 往上拖：插入点到原位置之间的让位下移（+1）；其余不动
+      // （原位置之后的模块，上方总高度没变，所以视觉上不动）
+      dirs[id] = index >= to && index < from ? 1 : 0
+    } else {
+      dirs[id] = 0
+    }
+  })
+  return dirs
+}
+
+/**
  * 把 groupIds 作为整块插回容器成员序列，落点为「第 targetVisibleIndex 个可见成员之前」。
  *
  * 隐藏模块不渲染、没有视觉位置，不占可见序位，但保留其在序列中的相对位置：

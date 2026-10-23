@@ -65,8 +65,12 @@ const bodySections = computed(() => sections.value.filter((s) => !railTypes.incl
         <div class="rail-list">
           <div v-for="field in basics.fields" :key="field.id" class="rail-item">
             <SvgIcon v-if="field.icon !== 'none'" :name="field.icon" :size="13" />
-            <span class="r-lab">{{ field.label }}</span>
-            <span class="r-val">{{ field.value }}</span>
+            <span class="r-lab" data-field="basicsLabel" :data-item-id="field.id">{{
+              field.label
+            }}</span>
+            <span class="r-val" data-field="basicsValue" :data-item-id="field.id">{{
+              field.value
+            }}</span>
           </div>
         </div>
       </section>

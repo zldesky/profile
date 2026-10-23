@@ -50,9 +50,15 @@ import {
   getRenderStats,
   renderResumePdf,
 } from './render.ts'
-import { sanitizeFilename, sanitizeResume } from './sanitize.ts'
+import { sanitizeFilename, sanitizeResume, valuesOf } from './sanitize.ts'
 import { EDITOR_PATH } from './renderTarget.ts'
 import { redactForShare } from './redact.ts'
+/*
+ * 风格枚举的单一出处。与 sanitize.ts 同一个手法：跨端 import presets.ts，
+ * Node 的类型剥离直接执行 .ts，不需要构建步骤。
+ * 只取「值的清单」，不取 UI 用的 label —— 服务端要判断的只有合法取值。
+ */
+import { FONTS, TITLE_BOTTOM_STYLES, TITLE_MARKERS, TITLE_STYLES } from '../src/data/presets.ts'
 
 /**
  * 给 Express 的 Request 补上 req.auth。
@@ -475,46 +481,21 @@ app.get('/api/auth/me', (req, res) => {
 
 /* ---------------- 样式配置（管理后台编辑，编辑器运行时读取） ---------------- */
 
-/** 与 src/data/presets.js 的枚举保持一致；漂移只影响新风格的合法值范围 */
-const STYLE_TITLE_STYLES = [
-  'fill',
-  'pill',
-  'gradient',
-  'underline',
-  'bar',
-  'boxed',
-  'center',
-  'leader',
-  'plain',
-]
-const STYLE_TITLE_MARKERS = ['square', 'diamond', 'circle', 'ring', 'triangle', 'bar', 'none']
-const STYLE_TITLE_BOTTOMS = [
-  'none',
-  'solid',
-  'dashed',
-  'dotted',
-  'gradient',
-  'double',
-  'trapezoid',
-  'ribbon',
-  'chevron',
-]
-const STYLE_FONT_KEYS = [
-  'yahei',
-  'sourceHei',
-  'pingfang',
-  'dengxian',
-  'heiti',
-  'sourceSong',
-  'songti',
-  'fangsong',
-  'kaiti',
-  'arial',
-  'helvetica',
-  'times',
-  'georgia',
-  'calibri',
-]
+/**
+ * 风格枚举的可选值。
+ *
+ * **不要在这里写第二份字面量。** 这些值原先是在本文件里手抄的一遍，与
+ * `src/data/presets.ts` 各存一份 —— 正是 conventions.md 明令禁止的形态：
+ * 前端加一个标题样式，服务端这份不会跟着变，于是后台保存时被 400 拒绝，
+ * 而报错信息只说「不在可选范围」，看不出真因是两处清单漂移了。
+ *
+ * `sanitize.ts` 早就改成从 presets.ts 取值（同一个跨端 import 手法），
+ * 这里补齐同样的做法：单一出处，加枚举值只改 presets.ts 一处。
+ */
+const STYLE_TITLE_STYLES = valuesOf(TITLE_STYLES)
+const STYLE_TITLE_MARKERS = valuesOf(TITLE_MARKERS)
+const STYLE_TITLE_BOTTOMS = valuesOf(TITLE_BOTTOM_STYLES)
+const STYLE_FONT_KEYS = Object.keys(FONTS)
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/
 const STYLE_KEY_RE = /^[a-z0-9-]{1,24}$/
 const STYLE_PRESET_MAX = 40

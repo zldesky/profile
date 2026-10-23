@@ -115,6 +115,43 @@ export function updateSectionLayout(
   section.layout = { ...DEFAULT_SECTION_LAYOUT, ...(section.layout || {}), ...patch }
 }
 
+/**
+ * 更新某个**字段**的间距微调（叠加在模块级布局之上）。
+ *
+ * 只覆盖传入的那个轴，其余轴保留；若四个轴都被调回 0，则把该字段的条目删掉，
+ * 免得 fieldLayouts 里堆积大量全零的死数据（导出的 JSON 也干净）。
+ */
+export function updateFieldLayout(
+  resume: Resume,
+  id: string,
+  key: string,
+  patch: Partial<Section['layout']>,
+): void {
+  const section = findSection(resume, id)
+  if (!section) return
+  const current = section.fieldLayouts?.[key] || {
+    indent: 0,
+    indentRight: 0,
+    extraGap: 0,
+    extraGapBottom: 0,
+  }
+  const next = {
+    indent: current.indent ?? 0,
+    indentRight: current.indentRight ?? 0,
+    extraGap: current.extraGap ?? 0,
+    extraGapBottom: current.extraGapBottom ?? 0,
+    ...patch,
+  }
+  const layouts = { ...(section.fieldLayouts || {}) }
+  if (!next.indent && !next.indentRight && !next.extraGap && !next.extraGapBottom) {
+    delete layouts[key]
+  } else {
+    layouts[key] = next
+  }
+  // 空表就不写回去，保持「没有微调」的模块结构最简
+  section.fieldLayouts = Object.keys(layouts).length ? layouts : undefined
+}
+
 export function moveSection(resume: Resume, from: number, to: number): void {
   resume.sections = moveItem(resume.sections, from, to)
 }

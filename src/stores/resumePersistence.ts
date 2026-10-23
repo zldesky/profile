@@ -11,7 +11,7 @@
  *      否则一次自动保存失败会顺着 watch 抛到 Vue 的调度里变成未捕获错误。
  */
 
-import { clone, debounce, uid } from '@/utils/helpers'
+import { clone, debounce } from '@/utils/helpers'
 import {
   flushAvatarWrites,
   isAvailable as isAvatarStoreAvailable,
@@ -214,6 +214,3 @@ export function createAutosave(options: AutosaveOptions): Autosave {
 
   return { saveNow: runSave, scheduleSave, bindUnloadFlush, schedulePrune }
 }
-
-/** 打开一份新文档时的 id 生成（与 store 的 doc id 同源，集中在这里便于统一前缀） */
-export const newDocId = (): string => uid('doc')

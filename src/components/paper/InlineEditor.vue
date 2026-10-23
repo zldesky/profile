@@ -1,18 +1,20 @@
 <script setup lang="ts">
 /**
- * 纸面就地编辑浮层。
+ * 纸面就地编辑。
  *
- * 点纸上的某段文字就地弹出一个输入框，改完回车 / 点别处即写回简历。
- * 位置上跟随被点的元素（见 useInlineEdit 的字段解析），
- * 因此模板怎么排版都不用为「编辑框该放哪儿」做适配。
+ * 点纸上的某段文字，**那段文字原地变成输入框**：无遮罩、无标题栏、无保存/取消按钮，
+ * 看起来就是「这段字进入了可编辑状态」。回车或点别处即写回，Esc 放弃。
  *
- * 为什么不做 contenteditable 直接改：
- *  - 纸面是按 --zoom 缩放渲染的（见 usePaperZoom），contenteditable 里的选区、
- *    光标与输入法候选框在缩放层里都会错位；
- *  - 纸上元素同时也是拖拽排序与框选多选的命中目标，两者会抢指针事件；
- *  - 渲染件是各模板的私有结构（<h1 class="name"> / <h2 class="r-title">），
- *    让它们全部变成表单控件会渗进每一个模板。
- * 浮层的代价是「编辑时离纸面稍远」，但换来的是所有模板自动可用。
+ * 为什么仍然用一个浮层（而不是把模板元素变成 contenteditable）：
+ *  - 纸上元素同时是**拖拽排序**与**框选多选**的命中目标，contenteditable 会与之抢指针；
+ *  - 渲染件是各模板的私有结构（`<h1 class="r-name">` / `<h2 class="r-title">`），
+ *    让它们全部变成表单控件会把可编辑逻辑渗进 12 个模板；
+ *  - 浮层可以精确覆盖在被点元素上，所有模板自动可用。
+ *
+ * 关于纸面缩放：纸面用的是 CSS `zoom`（不是 `transform: scale`），
+ * 输入框放在纸面内会**跟着一起缩放**，光标与输入法候选框跟随缩放、不会错位。
+ * 所以本组件的字号与盒子尺寸都按锚点的**实际渲染尺寸**（getBoundingClientRect）
+ * 反向补偿，缩放下视觉上也与被替换的文字一样大。
  */
 import {
   computed,
@@ -24,11 +26,10 @@ import {
   watch,
 } from 'vue'
 
-import SvgIcon from '@/components/SvgIcon.vue'
 import type { EditTarget } from '@/composables/useInlineEdit'
 
 const props = defineProps<{
-  /** 被编辑的字段；为 null 时浮层不显示 */
+  /** 被编辑的字段；为 null 时不显示 */
   target: EditTarget | null
   /** 锚点元素（被点的那个纸面元素） */
   anchor: HTMLElement | null
@@ -38,77 +39,135 @@ const props = defineProps<{
 
 const emit = defineEmits<{ close: [] }>()
 
-const GAP = 8
-const EDGE = 8
+/** 浮层相对锚点的外扩量，让它正好盖住原文字又不切边 */
+const PAD_X = 4
+const PAD_Y = 2
+/** 单行输入框的最小宽度，避免只改一个字时框窄到点不中 */
+const MIN_WIDTH = 64
 
 const draft = shallowRef('')
 const inputRef = useTemplateRef('inputRef')
 const boxRef = useTemplateRef('boxRef')
-/** 浮层位置，未定位前置空以免闪一下 */
-const pos = shallowRef<{ top: number; left: number } | null>(null)
-
-/** 被编辑的字段（模板与键盘处理都用它，故在 watch 之前先定义） */
-const target = computed(() => props.target)
+/** 浮层位置与尺寸，未定位前置空以免闪一下 */
+const pos = shallowRef<{ top: number; left: number; width: number; height: number } | null>(null)
+/** 字号（已按缩放补偿后的像素值） */
+const fontSize = shallowRef<number | null>(null)
 
 /**
- * 定位前的落位方式用 class 而不是 style：
- * 位置是一个「有 top/left」或「只有 visibility」的联合，直接绑到 :style 上
- * Vue 的属性类型不接受这种联合（会报不可赋值），用 class 表达更干净。
- * 不用 v-if 隐藏：不渲染就拿不到浮层尺寸，也就算不出该放哪儿。
+ * 本次打开是否已经收尾（提交或取消）。
+ *
+ * 回车保存、失焦保存、Esc 取消可能在同一瞬间先后触发（回车会让输入框失焦，
+ * 从而再触发一次 blur），重复提交会把同一笔改动压两次历史。
  */
+let settled = false
+
+const target = computed(() => props.target)
+
 const boxStyle = computed(() => {
   const at = pos.value
-  return at ? { top: `${at.top}px`, left: `${at.left}px` } : {}
+  if (!at) return {}
+  return {
+    top: `${at.top}px`,
+    left: `${at.left}px`,
+    width: `${at.width}px`,
+    height: `${at.height}px`,
+    fontSize: fontSize.value ? `${fontSize.value}px` : undefined,
+  }
 })
 
 /**
- * 定位：优先贴在元素下方，下方放不下则翻到上方；
- * 水平居中于元素，并夹在纸张范围内。
+ * 用锚点的**实际渲染矩形**决定浮层的位置与大小。
+ *
+ * 单行字段（姓名 / 年龄 / 岗位…）要贴着文字本身，不能用元素宽度：
+ * 姓名所在的 `<h1>` 是块级元素，宽度占满整个页头，
+ * 直接取 rect.width 会让输入框拉成整行 —— 看起来又像"弹了个框"，
+ * 而不是"这两个字变成可编辑"。
+ * 因此单行用 Range 量出**文字实际占的宽度**，再留一点余量。
+ *
+ * 多行字段（正文 / 要点）相反：要盖住整个段落块，所以取整块矩形。
+ * 全部基于 getBoundingClientRect，因此纸面缩放（zoom<1）时自动得到正确的视觉尺寸。
  */
-function place() {
+function place(): void {
   const anchor = props.anchor
-  const box = boxRef.value
-  if (!anchor || !box) return
+  if (!anchor) return
 
   const rect = anchor.getBoundingClientRect()
-  const size = box.getBoundingClientRect()
-  const bounds = props.boundary?.getBoundingClientRect()
+  const multiline = target.value?.kind === 'multiline'
 
-  let top = rect.bottom + GAP
-  if (top + size.height > window.innerHeight - EDGE) {
-    top = rect.top - size.height - GAP
+  // 单行：量文字本身（Range 比元素矩形准，块级元素会被父容器撑满）
+  let textWidth = rect.width
+  if (!multiline) {
+    try {
+      const range = document.createRange()
+      range.selectNodeContents(anchor)
+      const textRect = range.getBoundingClientRect()
+      if (textRect.width > 0) textWidth = textRect.width
+    } catch {
+      /* 量不到就用元素宽度兜底 */
+    }
   }
-  top = Math.max(EDGE, Math.min(top, window.innerHeight - size.height - EDGE))
 
-  let left = rect.left + rect.width / 2 - size.width / 2
-  const minLeft = bounds ? bounds.left + EDGE : EDGE
-  const maxLeft = bounds ? bounds.right - size.width - EDGE : window.innerWidth - size.width - EDGE
-  // 纸张比浮层还窄时（小屏缩放后）夹取会反转，此时以纸张左边界为准
-  left = maxLeft < minLeft ? minLeft : Math.max(minLeft, Math.min(left, maxLeft))
+  const width = multiline ? Math.max(rect.width, 120) : Math.max(textWidth + 12, MIN_WIDTH)
+  const height = multiline ? Math.max(rect.height, 28) : Math.max(rect.height, 22)
 
-  pos.value = { top, left }
+  let left = rect.left - PAD_X
+  let top = rect.top - PAD_Y
+
+  // 夹在纸张范围内，避免浮层伸到纸外（窄屏缩放后纸张可能比输入框还窄）
+  const bounds = props.boundary?.getBoundingClientRect()
+  if (bounds) {
+    left = Math.max(bounds.left, Math.min(left, bounds.right - width))
+    top = Math.max(bounds.top, Math.min(top, bounds.bottom - height))
+  }
+  // 再夹一次视口，防止纸面滚出屏幕时浮层跑到看不见的地方
+  left = Math.max(0, Math.min(left, window.innerWidth - width))
+  top = Math.max(0, Math.min(top, window.innerHeight - height))
+
+  // 字号取锚点的计算字号 —— 它是 zoom 之前的值，浏览器再按 zoom 缩小，
+  // 视觉大小正好与原文字一致（实测 zoom=0.78 下渲染高度与原文字相符）
+  const computedFont = parseFloat(getComputedStyle(anchor).fontSize)
+  fontSize.value = Number.isFinite(computedFont) && computedFont > 0 ? computedFont : null
+
+  pos.value = { top, left, width, height }
 }
 
-/** 打开时填值、定位、聚焦并全选（改的是已有内容，全选最省事） */
-async function sync() {
+/**
+ * 打开时填值、定位、聚焦并全选（改的是已有内容，全选最省事）。
+ *
+ * 焦点为什么要在**两帧之后**再确认一次：
+ * 纸面的 pointerdown 里调了 `event.preventDefault()`（阻止原生文字选择），
+ * 它同时也阻止了浏览器「按下即聚焦」的默认行为，所以浮层的 input 挂上来后
+ * 焦点会落在 BODY 上。`nextTick` 只保证 DOM 补丁完成，不保证 Teleport
+ * 已经把节点插进 body，因此这里用 rAF 再等一帧，并在焦点仍然不在输入框时补一次。
+ */
+async function sync(): Promise<void> {
   if (!props.target) {
     pos.value = null
     return
   }
+  // 新目标 / 重新打开：允许本轮的提交或取消
+  settled = false
   draft.value = props.target.value
   pos.value = null
   await nextTick()
   place()
-  const input = inputRef.value
-  input?.focus()
-  input?.select?.()
+
+  const focusInput = (): void => {
+    const input = inputRef.value
+    if (!input) return
+    input.focus({ preventScroll: true })
+    input.select?.()
+  }
+
+  focusInput()
+  // 下一帧再兜一次：等 Teleport 节点真正入 body、且 pointerdown 的默认行为彻底结束
+  requestAnimationFrame(() => {
+    if (!inputRef.value) return
+    if (document.activeElement === inputRef.value) return
+    focusInput()
+  })
 }
 
-/**
- * 目标变化时才重新填值与定位。
- * 用 watch 而不是只在挂载时同步：同一个浮层会被复用于不同字段 ——
- * 用户改完一处直接点另一处文字时，浮层并不重新创建。
- */
 const stopWatch = watch([() => props.target, () => props.anchor], sync, { immediate: true })
 
 onMounted(() => {
@@ -123,195 +182,143 @@ onBeforeUnmount(() => {
   window.removeEventListener('scroll', place, true)
 })
 
-function commit() {
-  const target = props.target
-  if (!target) return
+/**
+ * 每次打开只允许收尾一次。
+ */
+function commit(): void {
+  if (settled) return
+  settled = true
+  const t = props.target
+  if (!t) return
   // 值没变就不写回：避免给撤销历史塞一条空记录
-  if (draft.value !== target.value) target.commit(draft.value)
+  if (draft.value !== t.value) t.commit(draft.value)
   emit('close')
 }
 
-function cancel() {
+function cancel(): void {
+  if (settled) return
+  settled = true
   emit('close')
 }
 
-function onKeydown(event: KeyboardEvent) {
+/*
+ * 供父级在「按到纸面别处」时主动收尾。
+ *
+ * 为什么需要它：纸面 pointerdown 的 preventDefault 会阻止焦点转移，
+ * 输入框**不会失焦**，blur 永远不触发 —— 只靠 @blur 收尾会静默丢改动。
+ * 父级在按下那一刻调这个方法，先把草稿写回，再关浮层。
+ */
+defineExpose({ commitNow: () => commit() })
+
+function onKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') {
     event.preventDefault()
     event.stopPropagation()
     cancel()
     return
   }
+  // 多行框里回车换行，Ctrl/Cmd+Enter 才保存；单行框直接回车保存
   if (event.key !== 'Enter') return
-  // 多行框里回车要能换行（提示文案也写的是 Ctrl+Enter 保存）
   if (target.value?.kind === 'multiline' && !event.ctrlKey && !event.metaKey) return
   event.preventDefault()
+  commit()
+}
+
+/**
+ * 失焦即保存。
+ *
+ * 没有遮罩之后，「点别处」不会经过某个 layer 的 click，只能靠 blur 收尾。
+ *
+ * **必须在 blur 事件里同步提交，不要放进 setTimeout。** 原先这里用
+ * `setTimeout(() => { if (!inputRef.value) return; commit() })`，而点击空白处时
+ * 纸面的 pointerdown 会先一步 `closeInlineEdit()` 把浮层卸载，等定时器跑起来
+ * `inputRef.value` 已是 null，于是 `return` 掉了 —— **改的内容静默丢失**。
+ * 现在直接调 commit()，它只依赖 `props.target` 与 `draft`，不依赖 DOM 是否还在。
+ */
+function onBlur(): void {
   commit()
 }
 </script>
 
 <template>
   <Teleport to="body">
-    <div v-if="target" class="ie-layer" @click.self="commit">
-      <div
-        ref="boxRef"
-        class="ie-box"
-        :class="{ 'is-placing': !pos }"
-        :style="boxStyle"
-        role="dialog"
+    <div
+      v-if="target"
+      ref="boxRef"
+      class="ie-box"
+      :class="{ 'is-placing': !pos }"
+      :style="boxStyle"
+    >
+      <textarea
+        v-if="target.kind === 'multiline'"
+        ref="inputRef"
+        v-model="draft"
+        class="ie-input ie-textarea"
         :aria-label="target.label"
-      >
-        <div class="ie-head">
-          <span class="ie-title">{{ target.label }}</span>
-          <button class="ie-close" title="取消（Esc）" aria-label="取消" @click="cancel">
-            <SvgIcon name="close" :size="12" />
-          </button>
-        </div>
-
-        <textarea
-          v-if="target.kind === 'multiline'"
-          ref="inputRef"
-          v-model="draft"
-          class="ie-input ie-textarea"
-          rows="3"
-          @keydown="onKeydown"
-        ></textarea>
-        <input
-          v-else
-          ref="inputRef"
-          v-model="draft"
-          class="ie-input"
-          :type="target.kind === 'number' ? 'number' : 'text'"
-          :min="target.kind === 'number' ? 0 : undefined"
-          :max="target.kind === 'number' ? 100 : undefined"
-          @keydown="onKeydown"
-        />
-
-        <div class="ie-actions">
-          <span class="ie-tip">
-            {{ target.kind === 'multiline' ? 'Ctrl+Enter 保存' : '回车保存' }} · Esc 取消
-          </span>
-          <button class="ie-btn" @click="cancel">取消</button>
-          <button class="ie-btn ie-btn-primary" @click="commit">保存</button>
-        </div>
-      </div>
+        :title="`${target.label} · Ctrl+Enter 保存，Esc 取消`"
+        @keydown="onKeydown"
+        @blur="onBlur"
+      ></textarea>
+      <input
+        v-else
+        ref="inputRef"
+        v-model="draft"
+        class="ie-input"
+        type="text"
+        :aria-label="target.label"
+        :title="`${target.label} · 回车保存，Esc 取消`"
+        @keydown="onKeydown"
+        @blur="onBlur"
+      />
     </div>
   </Teleport>
 </template>
 
 <style scoped>
-/* 透明遮罩：接住「点别处即保存」，同时挡住下层纸面的点击与拖拽 */
-.ie-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 96;
-}
-
+/*
+ * 浮层 = 一枚「贴着原文字」的输入框。
+ * 没有遮罩、没有标题栏、没有按钮：视觉上就是这段字进入了编辑态。
+ * 用 accent 描边 + 轻微提亮，明确「这里正在编辑」，但不弹窗、不打断视线。
+ */
 .ie-box {
   position: fixed;
-  width: 280px;
-  padding: 10px 12px 8px;
-  border: 1px solid var(--ed-line-2);
-  border-radius: var(--ed-radius-md);
-  background: var(--ed-surface);
-  box-shadow: var(--ed-shadow-lg);
+  z-index: 96;
+  box-sizing: border-box;
 }
 
-/* 尚未算出位置：占位但不可见，据此测出真实尺寸再定位 */
+/* 尚未算出位置：占位但不可见，据此测出真实尺寸 */
 .ie-box.is-placing {
   visibility: hidden;
 }
 
-.ie-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 7px;
-}
-
-.ie-title {
-  color: var(--ed-text-2);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.ie-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: none;
-  border-radius: var(--ed-radius-xs);
-  background: transparent;
-  color: var(--ed-text-4);
-  cursor: pointer;
-}
-
-.ie-close:hover {
-  background: var(--ed-fill);
-  color: var(--ed-brand-strong);
-}
-
 .ie-input {
   width: 100%;
-  padding: 6px 9px;
-  border: 1px solid var(--ed-line-2);
-  border-radius: var(--ed-radius-sm);
-  background: var(--ed-surface);
-  color: var(--ed-ink);
+  height: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 2px;
+  border: 1px solid var(--accent, #2563eb);
+  border-radius: 2px;
+  background: #fff;
+  color: inherit;
   font: inherit;
-  font-size: 13px;
-}
-
-.ie-input:focus {
-  border-color: var(--ed-brand);
+  font-size: inherit;
+  line-height: 1.4;
   outline: none;
-  box-shadow: 0 0 0 3px var(--ed-brand-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #2563eb) 18%, transparent);
 }
 
+/* 多行：允许在框内滚动，不撑破纸张 */
 .ie-textarea {
-  min-height: 58px;
-  line-height: 1.6;
-  resize: vertical;
+  min-height: 28px;
+  padding: 1px 2px;
+  line-height: inherit;
+  resize: none;
+  overflow: auto;
 }
 
-.ie-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 7px;
-}
-
-.ie-tip {
-  flex: 1 1 auto;
-  color: var(--ed-text-4);
-  font-size: 11px;
-}
-
-.ie-btn {
-  padding: 4px 9px;
-  border: 1px solid var(--ed-line-2);
-  border-radius: 7px;
-  background: var(--ed-surface);
-  color: var(--ed-text);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.ie-btn:hover {
-  background: var(--ed-fill);
-}
-
-.ie-btn-primary {
-  border-color: var(--ed-brand-strong);
-  background: var(--ed-brand);
-  color: #fff;
-}
-
-.ie-btn-primary:hover {
-  background: var(--ed-brand-deep);
+.ie-textarea:focus,
+.ie-input:focus {
+  border-color: var(--accent, #2563eb);
 }
 </style>

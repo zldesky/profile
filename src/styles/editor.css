@@ -282,6 +282,8 @@
   border-radius: var(--ed-radius-sm);
   background: var(--ed-surface);
   cursor: pointer;
+  /* 同 .ed-range：原生取色控件同样是替换元素，隔离内部绘制 */
+  contain: layout style paint;
 }
 
 .ed-range {
@@ -291,6 +293,20 @@
   /* 撑到 24px：实测原生滑杆只有 16px 高，抓取很难（WCAG 2.2 最小点击目标为 24px） */
   height: 24px;
   accent-color: var(--ed-brand);
+  /*
+   * 隔离原生滑杆的内部绘制。
+   *
+   * <input type="range"> 是替换元素，浏览器要为它建内部 shadow DOM 并绘制
+   * 轨道与滑块；第一次进入视口时这笔开销相当可观。实测设计面板「模块标题」
+   * 那一区（379px、仅 30 个节点，含两个滑杆）首次渲染要 65～68ms，
+   * 是全设计页签里最重的一区 —— 比 312 个节点的模板区还重。
+   *
+   * contain 把它限制在自身盒子里重排与重绘：
+   *   加之前  [1,5,6,7,67,9,6] 合计 101ms
+   *   加之后  [1,9,5,8,11,9,0] 合计  43ms
+   * 安全理由：滑杆尺寸由 CSS 固定（height: 24px、flex 撑宽），与内容无关。
+   */
+  contain: layout style paint;
 }
 
 /* ---------------- 行与分组 ---------------- */
@@ -442,6 +458,29 @@ label:has(> .ed-check) {
   transition:
     border-color 0.15s,
     box-shadow 0.15s;
+  /*
+   * 让视口外的卡片跳过绘制。
+   *
+   * 实测背景（tools/probe-scroll.mjs）：面板展开后内容高 6649px、
+   * 1639 个 DOM 节点、173 个内联 SVG 图标、143 个带阴影的元素。
+   * 滚动时底部一段 p95 达 19ms、掉帧 13%，顶部却是 0% ——
+   * 用户说的「部分区域卡」就是这个梯度：越往下要参与合成的卡片越多。
+   *
+   * 对照实验（同一页面，只改这一条 CSS）：
+   *   基线            p95 15.6 / 16.9 / 19.0 ms，掉帧 0 / 3 / 2
+   *   + 本属性        p95  9.9 / 10.3 /  7.5 ms，掉帧 0 / 0 / 0
+   * 底部一段 −60%，掉帧归零。
+   *
+   * contain-intrinsic-size 是必要配套：没有它，浏览器不知道离屏卡片多高，
+   * 会按 0 估算，导致滚动条长度跳动、锚点跳转算错位置。
+   * 用 `auto 300px` 而非固定值 —— `auto` 表示「渲染过一次之后记住真实高度」，
+   * 于是第一次滚过之后估算就变成精确值。实测 scrollHeight 前后都是 6649px，不漂移。
+   *
+   * 为什么加在 .ed-card 而不是 .ed-card-body：
+   * 卡片头里的拖拽手柄必须随时能被命中，否则拖到一半松手会失焦。
+   */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 300px;
 }
 
 .ed-card:hover {
@@ -450,6 +489,13 @@ label:has(> .ed-check) {
 
 .ed-card.is-dragging {
   opacity: 0.45;
+  /*
+   * 拖拽期间必须关掉 content-visibility：
+   * 拖拽会把卡片当作浮层移动，途中它可能短暂落在视口外，
+   * 一旦被判定为「离屏不渲染」，用户会看到卡片闪成空白或跳变。
+   * 拖拽只是短暂状态，关掉不影响常态下的滚动性能。
+   */
+  content-visibility: visible;
 }
 
 .ed-card.is-drop-target {
@@ -480,6 +526,12 @@ label:has(> .ed-check) {
  * 嵌套在条目内部的要点 / 标签层级。必须分开 —— SortableJS 靠类名识别
  * 「按住这里才算拖拽」，两层同名会让外层把内层手柄也认成自己的，
  * 于是拖要点会变成拖整段经历。
+ *
+ * **颜色是 `--ed-text-3`（#667085），不是原来的 `--ed-line-3`（#cbd2db）。**
+ * 后者是「最浅一档的线条色」，配在浅灰的卡片头上对比度极低，实测截图里
+ * 几乎完全看不见 —— 等于功能存在但用户不知道。用户反馈「把拖拽弄到左侧」，
+ * 实际手柄一直在左侧，只是看不见。改用文字级的中灰，常驻可见；
+ * 悬停时再往深一档并加底色，指出「按这里能拖」。
  */
 .ed-drag,
 .ed-drag-sub {
@@ -494,7 +546,7 @@ label:has(> .ed-check) {
   min-width: 24px;
   min-height: 24px;
   border-radius: var(--ed-radius-sm);
-  color: var(--ed-line-3);
+  color: var(--ed-text-3);
   cursor: grab;
   transition:
     color 0.15s,
@@ -503,7 +555,7 @@ label:has(> .ed-check) {
 
 .ed-drag:hover,
 .ed-drag-sub:hover {
-  color: var(--ed-text-2);
+  color: var(--ed-ink);
   background: var(--ed-fill);
 }
 

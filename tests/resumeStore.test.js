@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { installBrowserGlobals, uninstallBrowserGlobals } from './setup/browser-globals.js'
@@ -347,6 +347,48 @@ describe('历史快照', () => {
 })
 
 describe('超容量与写入失败的降级', () => {
+  /*
+   * 头像孤儿回收必须在保存成功后真的被排上。
+   *
+   * 这一条是针对一个真实回归：`autosave.schedulePrune` 定义了、也由
+   * `createAutosave` 返回了，但 store 里**没有任何调用点** —— 整条
+   * onPrune → pruneAvatars 链路不可达，换头像后旧的 IndexedDB blob 永远留着。
+   * 只测 createAutosave 自己不够（那样把 store 里的调用删掉仍然全绿），
+   * 所以这里从 store 的 save() 出发，观察 pruneAvatars 是否真被触达。
+   *
+   * 判据用「IndexedDB 不可用时 pruneAvatars 直接 return」这一层：
+   * 测试环境刻意没装 indexedDB（见 tests/setup/browser-globals.js），
+   * 所以这里改为断言 store 在保存后确实进入了回收路径 —— 通过给
+   * avatarStore.pruneAvatars 打桩来观察调用，而不是靠副作用猜。
+   */
+  it('保存成功后会把头像回收排进队列（schedulePrune 有调用点）', async () => {
+    const avatarStore = await import('@/utils/avatarStore')
+    const calls = []
+    // ESM 的模块命名空间是只读的，只能用 spy 包装，不能直接赋值替换
+    const spy = vi.spyOn(avatarStore, 'pruneAvatars').mockImplementation((refs) => {
+      calls.push(refs)
+    })
+
+    vi.useFakeTimers()
+    try {
+      const store = newStore()
+      store.setBasics({ name: '触发一次保存' })
+      store.save()
+
+      // 回收是防抖的：窗口内不该已经执行
+      expect(calls).toHaveLength(0)
+
+      // 跨过 PRUNE_DEBOUNCE_MS（6000），回收应被触发一次
+      vi.advanceTimersByTime(6000 + 50)
+      expect(calls.length).toBeGreaterThanOrEqual(1)
+      // 传进去的必须是「要保留的引用」数组
+      expect(Array.isArray(calls[0])).toBe(true)
+    } finally {
+      vi.useRealTimers()
+      spy.mockRestore()
+    }
+  })
+
   it('主文档写入失败时给出可读警告，不抛错', () => {
     const store = newStore()
     failStorageKey(STORAGE_KEY)

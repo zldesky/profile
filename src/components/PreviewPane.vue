@@ -17,8 +17,11 @@ import {
 import InlineEditor from '@/components/paper/InlineEditor.vue'
 import PreviewToolbar from '@/components/preview/PreviewToolbar.vue'
 import SelectionToolbar from '@/components/preview/SelectionToolbar.vue'
+import FieldNudgeHint from '@/components/preview/FieldNudgeHint.vue'
 import { useAvatarDrag } from '@/composables/useAvatarDrag'
-import { resolveEditTarget } from '@/composables/useInlineEdit'
+import { useFieldDrag } from '@/composables/useFieldDrag'
+import { reorderSectionsByPreview, useDragPreview } from '@/composables/useDragPreview'
+import { FIELD_LABELS, resolveEditTarget } from '@/composables/useInlineEdit'
 import type { EditTarget } from '@/composables/useInlineEdit'
 import { usePageMetrics } from '@/composables/usePageMetrics'
 import { usePaperSelection } from '@/composables/usePaperSelection'
@@ -27,6 +30,8 @@ import { usePaperZoom } from '@/composables/usePaperZoom'
 import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
 import { useSelectionStore } from '@/stores/selection'
+import { useFieldSelectionStore } from '@/stores/fieldSelection'
+import { getFieldLayout } from '@/utils/fieldLayout'
 import { resolveTemplate } from '@/templates'
 
 const PRINT_STYLE_ID = 'resume-print-page'
@@ -40,6 +45,8 @@ const { toast } = useToast()
 
 const scrollRef = useTemplateRef('scrollRef')
 const paperRef = useTemplateRef('paperRef')
+/** 就地编辑浮层；按下纸面别处时要先让它把草稿写回 */
+const inlineEditorRef = useTemplateRef<{ commitNow: () => void }>('inlineEditorRef')
 const compressing = shallowRef(false)
 
 const { zoom, autoFit, resizeTick, fit, zoomBy, resetFit } = usePaperZoom(scrollRef)
@@ -66,6 +73,7 @@ const {
   onPaperPointerDown: onAvatarPointerDown,
 } = useAvatarDrag(paperRef, zoom)
 const selection = useSelectionStore()
+const fieldSelection = useFieldSelectionStore()
 const {
   bandRect,
   dropLine,
@@ -75,6 +83,7 @@ const {
   syncToolbar,
 } = usePaperSelection(paperRef, scrollRef, zoom)
 const { focusSection } = usePaperJump()
+const { onFieldPointerDown } = useFieldDrag(paperRef, zoom)
 
 /**
  * 就地编辑：维护「正在编辑哪个字段 + 锚点元素」。
@@ -127,6 +136,100 @@ function closeInlineEdit() {
 }
 
 /**
+ * 单击字段：把它设为「当前调整对象」（高亮 + 浮条），并为随后的拖拽做好准备。
+ *
+ * 拖拽本身在 pointerdown 阶段由 useFieldDrag 接管（见 onPaperPointerDown）——
+ * 这里负责「单击且没拖」时字段仍保持选中，以及拦下这次点击、不让它跳右侧面板。
+ * 就地编辑改由**双击**触发（见 onPaperDblClick）：单击要留给选中/拖动。
+ *
+ * 命中返回 true，调用方据此不再把这次点击当成「选中模块 / 跳右侧面板」。
+ */
+function selectFieldForNudge(node: EventTarget | null): boolean {
+  if (!(node instanceof Element)) return false
+  const el = node.closest<HTMLElement>('[data-field-key]')
+  if (!el) return false
+  const key = el.dataset.fieldKey || ''
+  const field = el.dataset.field || ''
+  const sectionEl = el.closest<HTMLElement>('[data-sec-id]')
+  const sectionId = sectionEl?.dataset.secId || ''
+  if (!key || !field || !sectionId) return false
+
+  fieldSelection.select({
+    sectionId,
+    fieldKey: key,
+    field,
+    label: FIELD_LABELS[field] || '字段',
+  })
+  // 同时选中所属模块：右侧面板高亮，改完能对照，也和模块选中保持一致的视觉语言
+  selection.replace([sectionId])
+  return true
+}
+
+/**
+ * 被选中字段的高亮框（视口坐标）。null 表示没有字段被选中。
+ *
+ * 用 DOM 实测矩形，而不是把元素本身描个边 —— 字段分散在 12 套模板里，
+ * 有些是行内 span、有些是 li / p，统一加外框还要逐模板写样式。这里用一个
+ * 覆盖层（fixed 定位）盖在字段上方，与模板无关，也不影响排版与打印。
+ */
+const fieldBox = shallowRef<{ left: number; top: number; width: number; height: number } | null>(
+  null,
+)
+
+function syncFieldBox() {
+  if (!fieldSelection.active) {
+    fieldBox.value = null
+    return
+  }
+  const paper = paperRef.value
+  if (!paper) {
+    fieldBox.value = null
+    return
+  }
+  const el = paper.querySelector<HTMLElement>(
+    `[data-sec-id="${CSS.escape(fieldSelection.sectionId)}"] [data-field-key="${CSS.escape(fieldSelection.fieldKey)}"]`,
+  )
+  if (!el) {
+    fieldBox.value = null
+    return
+  }
+  const rect = el.getBoundingClientRect()
+  fieldBox.value = { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
+}
+
+const fieldBoxStyle = computed(() => {
+  const box = fieldBox.value
+  if (!box) return {}
+  return {
+    left: `${box.left}px`,
+    top: `${box.top}px`,
+    width: `${box.width}px`,
+    height: `${box.height}px`,
+  }
+})
+
+/** 被选中字段当前的间距值，浮条里展示 W/A/S/D 调到了多少 */
+const activeFieldLayout = computed(() => {
+  if (!fieldSelection.active) return null
+  const section = store.sections.find((s) => s.id === fieldSelection.sectionId)
+  if (!section) return null
+  return getFieldLayout(section, fieldSelection.fieldKey)
+})
+
+/**
+ * 字段浮条的锚点：水平居中于字段、默认贴在字段**上方**；
+ * 顶部空间不够时翻到字段下方，避免被顶栏 / 视口边缘裁掉。
+ */
+const fieldHintAnchor = computed<{ left: number; top: number } | null>(() => {
+  const box = fieldBox.value
+  if (!box) return null
+  const centerX = Math.min(Math.max(box.left + box.width / 2, 120), window.innerWidth - 120)
+  let top = box.top - 40
+  if (top < 8) top = box.top + box.height + 8
+  return { left: centerX, top }
+})
+
+/**
  * 纸面模块的操作提示。
  *
  * 光标是 grab（拖动排序仍是纸面上的主要直接操作），但这会让「点文字就能改」
@@ -137,7 +240,7 @@ function closeInlineEdit() {
  * 代价是光标停在纸张空白处也会显示该提示。相比逐模板改造的维护成本，这个取舍更划算；
  * 若以后觉得碍事，改成在 12 个模板里各写一次即可。
  */
-const SECTION_TIP = '点文字就地修改 · 点空白处跳到右侧编辑卡片 · 按住拖动可排序'
+const SECTION_TIP = '按住字段可拖动微调位置 · 双击文字编辑 · 按住模块空白处可排序'
 
 /**
  * 把提示挂到纸上每个模块。模板切换后 DOM 是新的，所以要重新挂。
@@ -158,6 +261,24 @@ function applySectionTips() {
 
 const templateComponent = computed(() => resolveTemplate(store.resume.template))
 const paperStyle = computed(() => ({ ...store.pageStyle, '--zoom': zoom.value }))
+
+/*
+ * 拖拽模块时按「草稿顺序」渲染纸面。
+ *
+ * 拖动中只写 useDragPreview 里的纯内存顺序（不碰 store，见该文件开头的说明），
+ * 松手才由 SectionList 落盘。这里把 resume 包一层：顺序用草稿的，其余字段不动。
+ * 不在拖动中时 previewOrder 为 null，直接返回原对象，模板拿到的是同一个引用，
+ * 不会产生多余的深层更新。
+ */
+const { previewOrder } = useDragPreview()
+const previewResume = computed(() => {
+  const order = previewOrder.value
+  if (!order) return store.resume
+  return {
+    ...store.resume,
+    sections: reorderSectionsByPreview(store.resume.sections, order),
+  }
+})
 
 /** 落点指示线的视口定位 */
 const dropLineStyle = computed(() => {
@@ -184,45 +305,79 @@ const bandStyle = computed(() => {
 
 /**
  * 纸面按下：头像拖拽与模块框选/整组拖拽各自判断命中目标，互不干扰。
+ *
+ * 另外要在**按下这一刻**先收尾上一次就地编辑。
+ * 原因：`pressSection` 会 `event.preventDefault()`（阻止原生文字选择），
+ * 这同时也**阻止了焦点转移** —— input 因此不会失焦，`blur` 事件永远不触发，
+ * 「点别处即保存」就会静默失效（实测 blur 计数为 0、浮层仍开着、改动丢失）。
+ * 所以这里不依赖 blur，按到纸面的瞬间主动提交。
  */
 function onPaperPointerDown(event: PointerEvent) {
+  if (editTarget.value) {
+    // 先让浮层把草稿写回（它自己会 emit close），再继续后续的按下逻辑
+    inlineEditorRef.value?.commitNow()
+    closeInlineEdit()
+  }
+  /*
+   * 先给「字段拖拽」一次接管机会：按在字段上要拖的是**这个字段**，
+   * 不能落进下面的模块整组拖拽（否则整个模块被拖走）。被接管就直接返回。
+   */
+  if (onFieldPointerDown(event)) return
   onSectionPointerDown(event)
   onAvatarPointerDown(event)
 }
 
 /**
- * 纸面点击：把「点哪个模块就在哪儿改」接起来。
+ * 纸面单击：把「点哪个模块 / 哪个字段就在哪儿操作」接起来。
  *
- * 普通点击分两种结果：
- *  - 点到**可编辑的文字**（页头姓名/职位、模块标题、正文、条目各字段）→ 就地弹出编辑框；
- *  - 点到模块的其它地方 → 只选中该模块，并跳到右侧对应的编辑卡片。
+ * 单击分三种结果：
+ *  - 点到**有 data-field-key 的字段**（正文、条目字段、要点…）→ 选中该字段，
+ *    可按住直接拖动微调间距（拖动在 pointerdown 阶段由 useFieldDrag 接管，
+ *    这里负责单击不拖时保持选中，见 selectFieldForNudge）；
+ *  - 点到模块的其它地方 → 只选中该模块，并跳到右侧对应的编辑卡片；
+ *  - 点到空白 / 页头 → 清空字段微调对象。
  * 按住 Ctrl/Cmd 时**直接返回，不跳也不动选中集** —— usePaperSelection 的
  * pressSection 已经在 pointerdown 里做了加选/去选；这里若再 toggle 一次，
  * 两次切换互相抵消，多选会彻底失效（此前踩过）。
  *
- * 三处守卫缺一不可：
+ * 就地编辑改由**双击**触发（见 onPaperDblClick）：单击要留给字段微调，
+ * 否则 WASD 会在文本框里打字。三处守卫仍缺一不可：
  *  1. secDragging —— 框选或整组拖拽结束时也会派发 click，此时不该跳转；
- *  2. event.detail > 1 —— 双击的第二次点击不重复跳；
- *  3. 命中 .r-sec[data-sec-id] —— 点到页头、空白或头像时忽略。
- * 注意模块正文里有链接与图片，点到它们同样按模块处理，不会误跳。
+ *  2. event.detail > 1 —— 双击的第二次点击不重复处理；
+ *  3. 命中 .r-sec[data-sec-id] —— 点到页头、空白或头像时忽略模块跳转。
  */
 function onPaperClick(event: MouseEvent) {
   if (secDragging.value) return
   if (event.detail > 1) return
   if (event.ctrlKey || event.metaKey) return
 
-  // 就地编辑优先：文字上有点击锚点时直接改，不再绕去右侧面板
-  if (openInlineEdit(event.target)) return
+  // 字段微调优先：点在字段上就选中它，不绕去右侧面板、也不弹编辑框
+  if (selectFieldForNudge(event.target)) return
 
   const target = event.target
   if (!(target instanceof Element)) return
   const hit = target.closest<HTMLElement>('.r-sec[data-sec-id]')
-  if (!hit) return
+  if (!hit) {
+    // 点在空白 / 页头：结束字段微调，避免 WASD 继续改一个看不见选中的旧字段
+    fieldSelection.clear()
+    return
+  }
   const id = hit.dataset.secId
   if (!id) return
 
   selection.replace([id])
   focusSection(id)
+}
+
+/**
+ * 纸面双击：在字段上就地改文字。
+ *
+ * 单击已被字段微调占用，双击作为「我要改这段文字」的显式手势。
+ * 仍走 openInlineEdit（它自己会做字段解析并选中模块）。
+ */
+function onPaperDblClick(event: MouseEvent) {
+  if (secDragging.value) return
+  openInlineEdit(event.target)
 }
 
 /** 页数、头像边界与多选工具条位置都必须在 DOM 稳定后测量 */
@@ -231,6 +386,7 @@ async function refreshLayout() {
   applySectionTips()
   syncLimits()
   syncToolbar()
+  syncFieldBox()
 }
 
 /**
@@ -318,17 +474,36 @@ watch(() => store.printCss, applyPrintCss, { immediate: true })
 onMounted(() => {
   fit()
   scheduleLayout()
+  scrollRef.value?.addEventListener('scroll', syncFieldBox, { passive: true })
 })
 
 onBeforeUnmount(() => {
   if (layoutFrame) cancelAnimationFrame(layoutFrame)
   layoutFrame = 0
+  scrollRef.value?.removeEventListener('scroll', syncFieldBox)
   document.getElementById(PRINT_STYLE_ID)?.remove()
 })
 
 watch(() => store.resume, scheduleLayout, { deep: true })
-watch(zoom, scheduleLayout)
-watch(resizeTick, scheduleLayout)
+watch(zoom, () => {
+  scheduleLayout()
+  syncFieldBox()
+})
+watch(resizeTick, () => {
+  scheduleLayout()
+  syncFieldBox()
+})
+
+// 字段微调对象变化后立刻贴高亮框；字段间距被 WASD 改动时也要重测（元素可能变宽/位移）
+watch(
+  () => [fieldSelection.sectionId, fieldSelection.fieldKey],
+  () => nextTick(syncFieldBox),
+)
+watch(
+  () => store.resume,
+  () => nextTick(syncFieldBox),
+  { deep: true },
+)
 
 /**
  * 逐步收紧字号、行距与模块间距，直到内容落进一页为止。
@@ -381,12 +556,24 @@ async function compressToOnePage() {
         :data-sec-tip="SECTION_TIP"
         @pointerdown="onPaperPointerDown"
         @click="onPaperClick"
+        @dblclick="onPaperDblClick"
       >
-        <component :is="templateComponent" :resume="store.resume" :selected-ids="selection.ids" />
+        <component :is="templateComponent" :resume="previewResume" :selected-ids="selection.ids" />
       </div>
     </div>
 
+    <!-- 选中字段的高亮框：盖在字段上，提示「现在调的是这个字段」 -->
+    <div v-if="fieldBox" class="field-box no-print" :style="fieldBoxStyle"></div>
+
+    <FieldNudgeHint
+      v-if="fieldHintAnchor && activeFieldLayout"
+      :anchor="fieldHintAnchor"
+      :label="fieldSelection.label"
+      :layout="activeFieldLayout"
+    />
+
     <InlineEditor
+      ref="inlineEditorRef"
       :target="editTarget"
       :anchor="editAnchor"
       :boundary="paperRef"
@@ -454,6 +641,21 @@ async function compressToOnePage() {
   box-shadow: var(--ed-paper-shadow);
 }
 
+/*
+ * 可拖动微调的字段：给 grab 光标，暗示「能抓住拖」。
+ * 拖动中切成 grabbing 并提到上层，避免被相邻文字盖住。
+ * 用 :deep 穿透到模板内部元素 —— 字段散落在 12 套模板里，逐个加类不现实。
+ */
+.paper :deep([data-field-key]) {
+  cursor: grab;
+}
+
+.paper :deep([data-field-key].is-field-dragging) {
+  position: relative;
+  z-index: 5;
+  cursor: grabbing;
+}
+
 /* 框选矩形：视口定位的 overlay，不参与打印（no-print）也不拦截指针 */
 /*
    * 落点指示线：2px 实线 + 两端圆点，压在纸面上方。
@@ -497,6 +699,16 @@ async function compressToOnePage() {
   border: 1px solid var(--ed-brand-strong);
   border-radius: 3px;
   background: var(--ed-brand-ring);
+  pointer-events: none;
+}
+
+/* 字段微调高亮框：只描边、不拦截指针（下面的文字仍可双击编辑） */
+.field-box {
+  position: fixed;
+  z-index: 55;
+  border: 1.5px solid var(--ed-brand-strong, #111);
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px var(--ed-brand-ring, rgba(0, 0, 0, 0.08));
   pointer-events: none;
 }
 

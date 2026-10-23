@@ -171,6 +171,14 @@ export const useResumeStore = defineStore('resume', () => {
 
   /* ---------------- 持久化与自动保存 ---------------- */
 
+  /**
+   * 落盘后顺手排一次头像回收（防抖，见 PRUNE_DEBOUNCE_MS）。
+   *
+   * 这一步原先漏了：`autosave.schedulePrune` 定义了却没有任何调用点，
+   * 于是 `onPrune` 与 `pruneAvatars` 整条链路不可达 —— 换头像后旧的
+   * IndexedDB blob 永远留着，容量只增不减，最终把用户顶到配额告警。
+   * 回收必须发生在「保存成功」之后：先落盘再删旧 blob，中途失败也不会丢头像。
+   */
   const autosave = createAutosave({
     getData: () => resume.value,
     onResult: (outcome) => {
@@ -181,7 +189,10 @@ export const useResumeStore = defineStore('resume', () => {
       }
       storageWarning.value = outcome.warning
     },
-    onSaved: () => sampleSnapshot(),
+    onSaved: () => {
+      sampleSnapshot()
+      autosave.schedulePrune()
+    },
     collectAvatarRefs: () => [
       ...collectOwnedAvatarRefs(),
       ...docs.collectSlotAvatarRefs(docList.value, activeDocId.value),
@@ -604,6 +615,11 @@ export const useResumeStore = defineStore('resume', () => {
     updateSection: (id: string, patch: tree.Patch) => tree.updateSection(resume.value, id, patch),
     updateSectionLayout: (id: string, patch: Parameters<typeof tree.updateSectionLayout>[2]) =>
       tree.updateSectionLayout(resume.value, id, patch),
+    updateFieldLayout: (
+      id: string,
+      key: string,
+      patch: Parameters<typeof tree.updateFieldLayout>[3],
+    ) => tree.updateFieldLayout(resume.value, id, key, patch),
     moveSection: (from: number, to: number) => tree.moveSection(resume.value, from, to),
     reorderSectionsByIds: (ids: string[]) => tree.reorderSectionsByIds(resume.value, ids),
     reorderEntriesByIds: (sid: string, ids: string[]) =>

@@ -61,8 +61,12 @@ const wideSections = computed(() => sections.value.filter((s) => wideTypes.inclu
         <div v-if="basics.fields.length" class="r-info-grid contact r-body">
           <div v-for="field in basics.fields" :key="field.id" class="r-info-item">
             <SvgIcon v-if="field.icon !== 'none'" :name="field.icon" :size="14" />
-            <span class="r-lab">{{ field.label }}：</span>
-            <span class="r-val">{{ field.value }}</span>
+            <span class="r-lab" data-field="basicsLabel" :data-item-id="field.id"
+              >{{ field.label }}：</span
+            >
+            <span class="r-val" data-field="basicsValue" :data-item-id="field.id">{{
+              field.value
+            }}</span>
           </div>
         </div>
       </div>
@@ -87,8 +91,12 @@ const wideSections = computed(() => sections.value.filter((s) => wideTypes.inclu
         <div v-if="basics.fields.length && headerKind === 'center'" class="meta">
           <span v-for="(field, index) in basics.fields" :key="field.id" class="meta-item">
             <SvgIcon v-if="field.icon !== 'none'" :name="field.icon" :size="13" />
-            <span class="r-lab">{{ field.label }}：</span>
-            <span class="r-val">{{ field.value }}</span>
+            <span class="r-lab" data-field="basicsLabel" :data-item-id="field.id"
+              >{{ field.label }}：</span
+            >
+            <span class="r-val" data-field="basicsValue" :data-item-id="field.id">{{
+              field.value
+            }}</span>
             <span v-if="index < basics.fields.length - 1" class="sep">·</span>
           </span>
         </div>
@@ -96,8 +104,12 @@ const wideSections = computed(() => sections.value.filter((s) => wideTypes.inclu
         <div v-else-if="basics.fields.length" class="r-info-grid contact r-body">
           <div v-for="field in basics.fields" :key="field.id" class="r-info-item">
             <SvgIcon v-if="field.icon !== 'none'" :name="field.icon" :size="14" />
-            <span class="r-lab">{{ field.label }}：</span>
-            <span class="r-val">{{ field.value }}</span>
+            <span class="r-lab" data-field="basicsLabel" :data-item-id="field.id"
+              >{{ field.label }}：</span
+            >
+            <span class="r-val" data-field="basicsValue" :data-item-id="field.id">{{
+              field.value
+            }}</span>
           </div>
         </div>
       </div>
@@ -150,7 +162,9 @@ const wideSections = computed(() => sections.value.filter((s) => wideTypes.inclu
             <div v-for="field in basics.fields" :key="field.id" class="rail-item">
               <SvgIcon v-if="field.icon !== 'none'" :name="field.icon" :size="13" />
               <span class="r-lab">{{ field.label }}</span>
-              <span class="r-val">{{ field.value }}</span>
+              <span class="r-val" data-field="basicsValue" :data-item-id="field.id">{{
+                field.value
+              }}</span>
             </div>
           </div>
         </section>

@@ -43,7 +43,12 @@ type FieldSanitizer = (value: unknown) => unknown
 /** 一组字段的规格：键集合就是保留白名单，未列出的键一律丢弃 */
 type FieldSpec = Record<string, FieldSanitizer>
 
-const valuesOf = (list: Array<{ value: string }>): string[] => list.map((item) => item.value)
+/**
+ * 取枚举清单里的合法取值。
+ * 导出是给 index.ts 用的：风格配置端点要校验同样的枚举，
+ * 各自手抄一份字面量就会漂移（那里原先就是手抄的）。
+ */
+export const valuesOf = (list: Array<{ value: string }>): string[] => list.map((item) => item.value)
 const idsOf = (list: Array<{ id: string }>): string[] => list.map((item) => item.id)
 
 const ALLOW = {
@@ -85,6 +90,22 @@ const LAYOUT_RANGE = {
   indentRight: { min: -40, max: 80 },
   extraGapBottom: { min: -40, max: 80 },
 }
+
+/**
+ * 字段级间距的轴范围。
+ *
+ * 取前端 rangeForField 各字段范围并集的上界（正文要点可到 ±96、短标签到 ±48），
+ * 服务端只需一个「不超出人类可理解范围」的兜底 —— 精确的每字段范围在前端 clamp，
+ * 这里放宽到并集即可，避免出现「前端能存到 96、服务端却裁成 80」的静默不一致。
+ */
+const FIELD_LAYOUT_RANGE = {
+  indent: { min: -48, max: 96 },
+  indentRight: { min: -48, max: 96 },
+  extraGap: { min: -16, max: 48 },
+  extraGapBottom: { min: -16, max: 48 },
+}
+/** 单个模块最多保留多少个字段的间距设置，防止塞入超大对象拖垮渲染 */
+const MAX_FIELD_LAYOUTS = 200
 
 /** 只接受内联图片，避免引入外部资源或非图片内容 */
 const DATA_IMAGE = /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/]+=*$/
@@ -174,6 +195,57 @@ const LAYOUT_SPEC: FieldSpec = {
   columns: (value) => pickEnum(String(value ?? 'auto'), ALLOW.sectionColumns, 'auto'),
 }
 
+/**
+ * 清洗字段级间距表（section.fieldLayouts）。
+ *
+ * 键是「字段种类:条目 id」这种稳定串，值只有四个数值轴。这里：
+ *  - 键做长度限制、只保留安全字符，防止被用来撑爆或注入；
+ *  - 每个轴按 FIELD_LAYOUT_RANGE 钳制；
+ *  - 四项全是 0 的条目丢弃，与前端 updateFieldLayout 的「归零即删除」一致。
+ */
+function sanitizeFieldLayouts(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== 'object') return {}
+  const out: Record<string, unknown> = {}
+  let kept = 0
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (kept >= MAX_FIELD_LAYOUTS) break
+    if (typeof key !== 'string' || key.length > 80 || !/^[\w:-]+$/.test(key)) continue
+    if (!value || typeof value !== 'object') continue
+    const v = value as Record<string, unknown>
+    const layout = {
+      indent: clampNumber(
+        v.indent,
+        FIELD_LAYOUT_RANGE.indent.min,
+        FIELD_LAYOUT_RANGE.indent.max,
+        0,
+      ),
+      indentRight: clampNumber(
+        v.indentRight,
+        FIELD_LAYOUT_RANGE.indentRight.min,
+        FIELD_LAYOUT_RANGE.indentRight.max,
+        0,
+      ),
+      extraGap: clampNumber(
+        v.extraGap,
+        FIELD_LAYOUT_RANGE.extraGap.min,
+        FIELD_LAYOUT_RANGE.extraGap.max,
+        0,
+      ),
+      extraGapBottom: clampNumber(
+        v.extraGapBottom,
+        FIELD_LAYOUT_RANGE.extraGapBottom.min,
+        FIELD_LAYOUT_RANGE.extraGapBottom.max,
+        0,
+      ),
+    }
+    if (layout.indent || layout.indentRight || layout.extraGap || layout.extraGapBottom) {
+      out[key] = layout
+      kept += 1
+    }
+  }
+  return out
+}
+
 const take = (value: unknown, max: number): unknown[] =>
   Array.isArray(value) ? value.slice(0, max) : []
 
@@ -224,13 +296,17 @@ function sanitizeSections(rawSections: unknown): Array<Record<string, unknown>> 
   return take(rawSections, LIMITS.sections).map((raw) => {
     const section = raw as Record<string, unknown>
     const type = pickEnum(section?.type, SECTION_TYPES, 'text')
-    return {
+    const fieldLayouts = sanitizeFieldLayouts(section?.fieldLayouts)
+    const result: Record<string, unknown> = {
       type,
       title: cleanText(section?.title, LIMITS.shortText),
       visible: section?.visible !== false,
       layout: pickFields(section?.layout, LAYOUT_SPEC),
       ...buildSectionBody({ ...section, type }),
     }
+    // 空表不写出，保持「无字段微调」的模块 JSON 最简
+    if (Object.keys(fieldLayouts).length) result.fieldLayouts = fieldLayouts
+    return result
   })
 }
 

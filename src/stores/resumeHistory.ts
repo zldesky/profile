@@ -10,7 +10,7 @@
  */
 
 import { uid } from '@/utils/helpers'
-import { SNAPSHOTS_KEY, errorMessage, writeJSON } from './resumePersistence'
+import { SNAPSHOTS_KEY, writeJSON } from './resumePersistence'
 
 export interface Snapshot {
   id: string
@@ -101,8 +101,9 @@ export function snapshotData(list: Snapshot[], id: string): string | null {
   return list.find((s) => s.id === id)?.data ?? null
 }
 
-/** 剔除结构不合法的快照（整包导入来的数据要先过这一关） */
-export function sanitizeSnapshots(list: unknown): Snapshot[] {
+/** 剔除结构不合法的快照（整包导入来的数据要先过这一关） */ export function sanitizeSnapshots(
+  list: unknown,
+): Snapshot[] {
   if (!Array.isArray(list)) return []
   return list
     .filter((s): s is Record<string, unknown> => Boolean(s) && typeof s === 'object')
@@ -113,9 +114,4 @@ export function sanitizeSnapshots(list: unknown): Snapshot[] {
       data: typeof s.data === 'string' ? s.data : '',
     }))
     .filter((s) => s.data !== '')
-}
-
-/** 把失败细节拼成给用户看的话（写入失败时 store 用来提示） */
-export function snapshotWriteWarning(error: unknown): string {
-  return `历史版本保存失败：${errorMessage(error)}`
 }

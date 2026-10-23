@@ -23,6 +23,7 @@
     "audit:el": "node tools/probe-el.mjs",
     "audit:session": "node tools/probe-session.mjs",
     "audit:perf": "node tools/probe-perf.mjs",
+    "audit:scroll": "node tools/probe-scroll.mjs",
     "audit:mobile": "node tools/probe-mobile.mjs",
     "audit:trace": "node tools/trace-startup.mjs",
     "audit:shot": "node tools/shoot-pages.mjs",
@@ -43,6 +44,8 @@
     "verify:share": "node tools/verify-share-privacy.mjs",
     "verify:spacing": "node tools/verify-spacing-four-way.mjs",
     "verify:toolbar": "node tools/verify-toolbar-four-way.mjs",
+    "verify:field-nudge": "node tools/verify-field-nudge.mjs",
+    "verify:field-icon-drag": "node tools/verify-field-icon-drag.mjs",
     "build:host-template": "node tools/build-host-template.mjs",
     "preview:host-theme": "node tools/preview-host-theme.mjs"
   },

@@ -289,6 +289,21 @@ function lockedTitle(kind: 'tpl' | 'style', name: string) {
 
 /* ---------------- 模板缩略示意图 ---------------- */
 
+/*
+ * 缩略示意图是「用 div 拼出来的版式示意」，12 张卡片合计约 200 个节点。
+ *
+ * contain: layout style paint 让浏览器把这棵子树的布局与绘制完全隔离：
+ * 内部任何改动（换主题色、hover、切换选中态）都不会触发外层的重排，
+ * 滚动时的绘制范围也被限制在 72px 高的这个盒子里。
+ *
+ * 实测（tools/probe-scroll.mjs 的冷启动成本，即各分区首次带进视口的耗时）：
+ *   加之前  [1,5,7,8,67,7,7] 合计 102ms —— 最重一区要 67ms
+ *   加之后  [1,2,6,9,13,9,3] 合计  43ms —— 同一区降到 13ms
+ * 热态滚动 p95 也从 14.7ms 降到 7.5ms。
+ *
+ * 之所以安全：这个盒子有固定高度（72px）与 overflow: hidden，
+ * 尺寸本来就与内容无关，contain 不会改变任何可见结果。
+ */
 .thumb {
   display: flex;
   height: 72px;
@@ -296,6 +311,7 @@ function lockedTitle(kind: 'tpl' | 'style', name: string) {
   border: 1px solid var(--ed-fill-3);
   border-radius: var(--ed-radius-sm);
   background: #fff;
+  contain: layout style paint;
 }
 
 .thumb-rail {

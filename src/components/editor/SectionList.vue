@@ -4,12 +4,13 @@
  * 拖拽排序交给 vue-draggable-plus，带位移动画并支持触屏；
  * 每张卡片由 ModuleCard 承载，本组件只负责列表编排与新增。
  */
-import { computed, nextTick, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import DraggableList from '@/components/editor/DraggableList.vue'
 import ModuleCard from '@/components/editor/ModuleCard.vue'
 import BaseSelect from '@/components/BaseSelect.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { usePaperJump } from '@/composables/usePaperJump'
+import { useDragPreview } from '@/composables/useDragPreview'
 import { SECTION_PRESETS, SECTION_TYPES } from '@/data/defaultResume'
 import { useResumeStore } from '@/stores/resume'
 import type { Section, SectionType } from '@/types/resume'
@@ -73,6 +74,26 @@ let flashTimer: ReturnType<typeof setTimeout> | null = null
 
 const { targetId, requestSeq, consume } = usePaperJump()
 
+/*
+ * 拖动模块时的纸面实时预览。
+ *
+ * 只把草稿顺序交给 useDragPreview 的纯内存状态，**不写 store** ——
+ * 拖动中顺序每秒可能变十几次，若每次都写 store，会压满撤销栈、
+ * 触发自动保存与云端推送（登录态下真的发请求）。
+ * 松手由 DraggableList emit('reorder') 一次性落盘。
+ */
+const dragPreview = useDragPreview()
+function onDragPreview(ids: string[] | null) {
+  if (ids) dragPreview.set(ids)
+  else dragPreview.clear()
+}
+
+/*
+ * 卸载时务必清掉预览顺序：拖到一半切页签 / 关面板，DragableList 不会再 emit end，
+ * 残留的草稿顺序会让纸面一直按一个不存在的顺序渲染。
+ */
+onBeforeUnmount(() => dragPreview.clear())
+
 /**
  * 把卡片滚到可见位置。
  *
@@ -131,6 +152,7 @@ watch(requestSeq, async () => {
       :items="store.sections"
       class="ed-card-list"
       @reorder="(ids) => store.reorderSectionsByIds(ids)"
+      @preview="onDragPreview"
     >
       <ModuleCard
         v-for="(section, index) in store.sections"

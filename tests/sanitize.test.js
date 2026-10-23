@@ -128,6 +128,35 @@ describe('sanitizeResume：枚举与数值', () => {
     expect(layout.extraGapBottom).toBe(0)
   })
 
+  it('字段级间距：保留合法键并按范围钳制，全零条目丢弃', () => {
+    const { value } = sanitizeResume({
+      sections: [
+        {
+          type: 'entries',
+          title: '经历',
+          fieldLayouts: {
+            'bulletText:b1': { indent: 9999, extraGap: -9999 },
+            'bad key!': { indent: 10 },
+            'entryTime:b1': { indent: 0, indentRight: 0, extraGap: 0, extraGapBottom: 0 },
+          },
+        },
+      ],
+    })
+    const { fieldLayouts } = value.sections[0]
+    // 非法键被丢弃、全零条目被丢弃
+    expect(Object.keys(fieldLayouts)).toEqual(['bulletText:b1'])
+    // 钳制到 FIELD_LAYOUT_RANGE：indent 上界 96、extraGap 下界 -16
+    expect(fieldLayouts['bulletText:b1'].indent).toBe(96)
+    expect(fieldLayouts['bulletText:b1'].extraGap).toBe(-16)
+  })
+
+  it('字段级间距为空对象时不写出该键', () => {
+    const { value } = sanitizeResume({
+      sections: [{ type: 'text', title: 't', fieldLayouts: {} }],
+    })
+    expect(value.sections[0].fieldLayouts).toBeUndefined()
+  })
+
   it('结构由服务端定义，客户端多出来的字段被丢弃', () => {
     const { value } = sanitizeResume({
       admin: true,

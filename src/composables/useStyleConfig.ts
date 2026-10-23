@@ -1,6 +1,9 @@
 import { shallowRef } from 'vue'
 
 import { STYLE_PRESETS, TEMPLATES } from '@/data/presets'
+import { API, request } from '@/utils/api'
+import { resolveStyleWhitelist } from '@/utils/styleMatrix'
+import type { StyleMatrix } from '@/utils/styleMatrix'
 import type { StylePreset } from '@/types/resume'
 
 /**
@@ -14,8 +17,8 @@ import type { StylePreset } from '@/types/resume'
  */
 
 /** 内置兜底：从 TEMPLATES 的静态白名单推导矩阵 */
-function builtinMatrix(): Record<string, string[]> {
-  const matrix: Record<string, string[]> = {}
+function builtinMatrix(): StyleMatrix {
+  const matrix: StyleMatrix = {}
   for (const tpl of TEMPLATES) {
     if (tpl.styles) matrix[tpl.id] = [...tpl.styles]
   }
@@ -23,7 +26,7 @@ function builtinMatrix(): Record<string, string[]> {
 }
 
 const presets = shallowRef<StylePreset[]>([])
-const matrix = shallowRef<Record<string, string[]>>({})
+const matrix = shallowRef<StyleMatrix>({})
 /** loaded = 已拿到运行时配置；source: builtin | server */
 const loaded = shallowRef(false)
 const source = shallowRef<'builtin' | 'server'>('builtin')
@@ -34,9 +37,10 @@ function applyBuiltin(): void {
   source.value = 'builtin'
 }
 
-interface ServerStyleConfig {
+/** 服务端 /api/styles 下发的配置形状（管理后台与编辑器共用） */
+export interface ServerStyleConfig {
   presets?: { key: string; name: string; patch: StylePreset['patch'] }[]
-  matrix?: Record<string, string[]>
+  matrix?: StyleMatrix
 }
 
 function applyServerConfig(config: ServerStyleConfig | null): void {
@@ -60,26 +64,31 @@ export function useStyleConfig() {
   async function load(force = false): Promise<void> {
     if (loaded.value && !force) return
     try {
-      const response = await fetch('/api/styles')
-      const data = await response.json().catch(() => ({}))
-      if (!response.ok || !data?.ok) throw new Error(data?.message || '配置读取失败')
+      const data = await request<{ config: ServerStyleConfig | null }>(API.styles)
       applyServerConfig(data.config)
     } catch {
+      // 配置读不到就用内置默认：编辑器永远可用，后台只是增强而非依赖
       applyBuiltin()
     }
   }
 
   /** 管理后台保存：直接以传入内容更新本地态，成功后无需再拉取 */
-  function applyLocal(nextPresets: StylePreset[], nextMatrix: Record<string, string[]>): void {
+  function applyLocal(nextPresets: StylePreset[], nextMatrix: StyleMatrix): void {
     presets.value = nextPresets
     matrix.value = nextMatrix
     loaded.value = true
     source.value = 'server'
   }
 
-  /** 兼容矩阵：模板未声明白名单 = 不限制 */
+  /**
+   * 兼容矩阵：模板未声明白名单 = 不限制。
+   *
+   * 判空走 `resolveStyleWhitelist`，**不要**写成 `matrix[id] || null` ——
+   * 空数组是 truthy，那样写会把「空行」解读成「一个风格都不允许」，
+   * 把该模板下的风格胶囊全部置灰（见 utils/styleMatrix.ts 开头的说明）。
+   */
   function stylesForTemplate(templateId: string): string[] | null {
-    return matrix.value[templateId] || null
+    return resolveStyleWhitelist(matrix.value, templateId)
   }
 
   load()

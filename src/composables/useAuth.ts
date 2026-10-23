@@ -1,5 +1,7 @@
 import { shallowRef } from 'vue'
 
+import { API, isAuthExpired, request } from '@/utils/api'
+
 export interface AuthUser {
   id: number
   username: string
@@ -20,12 +22,11 @@ let initPromise: Promise<void> | null = null
 
 async function requestMe(): Promise<AuthUser | null> {
   try {
-    const response = await fetch('/api/auth/me')
-    if (!response.ok) return null
-    const data = await response.json()
-    return data?.authenticated ? data.user : null
+    const data = await request<{ authenticated?: boolean; user?: AuthUser }>(API.authMe)
+    return data.authenticated ? (data.user ?? null) : null
   } catch {
-    // 服务未启动时按未登录处理，编辑器不依赖后端也能用
+    // 服务未启动时按未登录处理，编辑器不依赖后端也能用。
+    // 这是刻意的降级，不是吞错：未登录是合法状态，不该让首屏报错。
     return null
   }
 }
@@ -61,18 +62,11 @@ export function useAuth() {
     password: string,
     captchaToken?: string,
   ): Promise<AuthUser> {
-    const response = await fetch(`/api/auth/${action}`, {
+    const path = action === 'login' ? API.authLogin : API.authRegister
+    const data = await request<{ user: AuthUser }>(path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password, captchaToken }),
+      body: { username, password, captchaToken },
     })
-
-    const data = await response.json().catch(() => ({}))
-    if (!response.ok) {
-      const error: Error & { status?: number } = new Error(data?.message || '请求失败')
-      error.status = response.status
-      throw error
-    }
 
     user.value = data.user
     status.value = 'authed'
@@ -89,12 +83,12 @@ export function useAuth() {
 
   async function logout(): Promise<void> {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' })
+      await request(API.authLogout, { method: 'POST' })
     } catch {
       /* 即使请求失败也照样清本地态：服务端会话 30 天后自然过期 */
     }
     markExpired()
   }
 
-  return { user, status, init, login, register, logout, markExpired }
+  return { user, status, init, login, register, logout, markExpired, isAuthExpired }
 }

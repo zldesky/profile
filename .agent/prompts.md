@@ -64,10 +64,19 @@ npm run audit:interaction   # 同上
 4. 若是重出网端点                      加限频（参照 aiLimiter / imageLimiter）
 5. 返回                                { ok: true, ... } / 失败统一 { ok:false, message }
 6. tests/api.test.js                   加集成用例
+7. src/utils/api.ts                    路径加进 API 常量（前端调用点不拼字符串）
 ```
+
+**前端调用一律走 `src/utils/api.ts` 的 `request()`，不要再写 `fetch`。**
+这一层统一了 `{ ok, message }` 的读取、非 JSON 响应的兜底与 401/404/429 的分流；
+调用方按 `isAuthExpired(error)` 或 `error.code` 判断，**不要匹配中文文案**
+（文案会改，码不会）。细节见 [`conventions.md`](./conventions.md) 的「调接口」一节。
 
 验证：`npm test` **并且** `npm run pdf` 真启动一次，用 curl 打一遍。
 `/api/pdf` 当年就是靠真跑一次才发现的 500。
+
+> 新增端点**不需要**改 `tests/apiClient.test.js`（那测的是客户端本身），
+> 但要确认服务端失败时回的是 `{ ok:false, message }` —— 否则前端拿不到可读提示。
 
 ---
 

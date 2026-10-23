@@ -77,6 +77,8 @@ export interface GridSection extends Identified {
   title: string
   visible: boolean
   layout: SectionLayout
+  /** 字段级间距微调，按字段身份串索引；缺省表示全部为 0 */
+  fieldLayouts?: FieldLayouts
   items: GridItem[]
 }
 
@@ -86,6 +88,7 @@ export interface EntriesSection extends Identified {
   title: string
   visible: boolean
   layout: SectionLayout
+  fieldLayouts?: FieldLayouts
   /** 机构图标默认关闭，避免非顶尖院校的校徽反成减分项 */
   showLogo: boolean
   items: EntryItem[]
@@ -97,6 +100,7 @@ export interface SkillsSection extends Identified {
   title: string
   visible: boolean
   layout: SectionLayout
+  fieldLayouts?: FieldLayouts
   /** 旧「熟练度进度条」的开关，已不再被读取（保留字段以兼容旧数据） */
   showBars: boolean
   /** 文字描述（如「技术栈：熟练使用…」） */
@@ -110,6 +114,7 @@ export interface TextSection extends Identified {
   title: string
   visible: boolean
   layout: SectionLayout
+  fieldLayouts?: FieldLayouts
   content: string
 }
 
@@ -138,6 +143,26 @@ export interface SectionLayout {
   /** 'auto' 时按内容自适应，否则为列数字符串（'1' | '2' | '3' | '4'） */
   columns: string
 }
+
+/**
+ * 单个字段的间距微调（叠加在模块级 SectionLayout 之上）。
+ *
+ * 键为字段身份串（见 utils/fieldLayout.ts 的 fieldLayoutKey），
+ * 值是四个方向的额外位移（px）。缺省的轴视为 0。
+ */
+export interface FieldLayout {
+  /** 左缩进 px */
+  indent: number
+  /** 右缩进 px */
+  indentRight: number
+  /** 上方间距 px */
+  extraGap: number
+  /** 下方间距 px */
+  extraGapBottom: number
+}
+
+/** 按字段身份串索引的间距设置表 */
+export type FieldLayouts = Record<string, FieldLayout>
 
 /** 自由定制模板的布局参数 */
 export interface CustomLayout {

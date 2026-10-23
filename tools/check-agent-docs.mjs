@@ -13,7 +13,7 @@
  *   node tools/check-agent-docs.mjs
  * 退出码 0 = 全部一致；1 = 有漂移，逐条打印怎么修。
  */
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -92,23 +92,39 @@ const conventions = read('.agent/conventions.md')
 const claimedCount = Number((conventions.match(/(\d+) 个 `\.js` 文件/) || [])[1] || 0)
 if (claimedCount > 0) {
   /*
-   * 用 ls-tree 而不是 git ls-files 配 "src 双星号 斜杠 双星号点 js" 这种 pathspec：
-   * 后者要求至少一层子目录，**顶层 src/main.js 会被漏掉**（实测 25 vs 实际 26）。
-   * 这个差一本身很难发现，所以留这条注释，免得以后有人"优化"回去又悄悄少算一个。
+   * 数的是**工作区**的 .js，不是 git HEAD 里的。
+   *
+   * 原先这里用 `git ls-tree -r --name-only HEAD`，读的是**已提交**状态 ——
+   * 于是把 `.js` 迁成 `.ts` 之后、提交之前，脚本照样报「一致」，
+   * 而文档里那个数字已经错了。这个盲点在本项目真实发生过一次
+   * （一次迁移改了 4 个文件，本地校验全绿，提交后 CI 才红）。
+   *
+   * 用递归读目录而不是 glob 字符串，顺带避开 `src/**` 这类 pathspec
+   * 要求至少一层子目录、会漏掉顶层 `src/main.js` 的老问题。
    */
-  const { execSync } = await import('node:child_process')
-  // git 不可用时给 -1，下面按「没法核对」跳过，而不是误报成漂移
-  let actual
-  try {
-    actual = execSync('git ls-tree -r --name-only HEAD -- src', { cwd: root, encoding: 'utf8' })
-      .split('\n')
-      .filter((line) => line.endsWith('.js')).length
-  } catch {
-    actual = -1
+  function countJsFiles(dir) {
+    let total = 0
+    let entries
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return 0
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        if (entry.name === 'node_modules') continue
+        total += countJsFiles(path.join(dir, entry.name))
+      } else if (entry.name.endsWith('.js')) {
+        total += 1
+      }
+    }
+    return total
   }
-  if (actual > 0 && actual !== claimedCount) {
+
+  const actual = countJsFiles(path.join(root, 'src'))
+  if (actual !== claimedCount) {
     fail(
-      `conventions.md 写的是「${claimedCount} 个 .js 文件不受类型检查」，实际现在是 ${actual} 个`,
+      `conventions.md 写的是「${claimedCount} 个 .js 文件不受类型检查」，工作区实际是 ${actual} 个`,
       '改掉那个数字（或确认 tsconfig 的 include 是否变了）',
     )
   } else {
@@ -130,11 +146,48 @@ if (claimedCount > 0) {
     if (rows.length && sum !== claimedCount) {
       fail(
         `conventions.md 的分布表加总是 ${sum}，但总数写的是 ${claimedCount}（差 ${sum - claimedCount}）`,
-        '逐行核对每个目录的真实 .js 数量：git ls-tree -r --name-only HEAD -- src',
+        '逐行核对每个目录的真实 .js 数量：直接数 src 下各目录',
       )
     } else if (rows.length) {
       ok(`分布表加总与总数一致（${rows.length} 个目录，合计 ${sum}）`)
     }
+  }
+}
+
+/* ---------------- 3b. README 声称的 `.vue` 组件数量 ---------------- */
+
+/*
+ * README 的「工程约定」里有一张表写着「64 / 64 全部完成」，而实际是 67 个 `.vue`，
+ * 一直没人发现 —— 因为上面第 3 步只核对 `.js`，`.vue` 的数字从来没有校验过。
+ * 这正是文档漂移最典型的形态：数字写下的那天是对的，之后新增组件就悄悄过期了。
+ */
+{
+  let vueCount = 0
+  function countVue(dir) {
+    let entries
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory()) countVue(path.join(dir, entry.name))
+      else if (entry.name.endsWith('.vue')) vueCount += 1
+    }
+  }
+  countVue(path.join(root, 'src'))
+
+  const readme = read('README.md')
+  // 只认「N / N 全部完成」这种带分母的写法，这是 README 里真实的表述
+  const claims = [...readme.matchAll(/(\d+)\s*\/\s*(\d+)\s*全部完成/g)]
+  const wrong = claims.filter((m) => Number(m[1]) !== vueCount || Number(m[2]) !== vueCount)
+  if (wrong.length) {
+    fail(
+      `README 写的是「${wrong[0][1]} / ${wrong[0][2]} 全部完成」，实际有 ${vueCount} 个 .vue`,
+      '把 README 里那个分数改成实际组件数（两处：<script setup> 与 lang="ts"）',
+    )
+  } else if (claims.length) {
+    ok(`README 的 .vue 组件数与实际一致（${vueCount}）`)
   }
 }
 
@@ -197,13 +250,45 @@ const checks4 = [
     hint: 'conventions.md 说这是"刻意的单点豁免"',
   },
   {
-    label: 'PITFALLS.md 的 A 类仍是 18 条（AGENTS.md 引用了这个数字）',
+    label: 'PITFALLS.md 每个分类标题里声明的条数与实际条目数一致',
     run() {
+      /*
+       * 所有分类一起核对，不再只盯 A 类。
+       *
+       * 原先这条只断言「A 类仍是 18 条」，于是 B/C/D/E 的分类标题
+       * （`## E. 改代码方式上的坑（5 条）`）从来没有被校验过 ——
+       * 加了两条 E 类之后，那个「5 条」就变成了假话，而脚本照样全绿。
+       * 数与实际不符比缺失更危险：读者看到"共 5 条"会以为已经读完。
+       */
       const md = read('PITFALLS.md')
-      const count = (md.match(/^### A\d/gm) || []).length
-      return count === 18
+      // 分类标题形如 `## A. xxx（18 条）`，取字母与声明的条数
+      const sections = [...md.matchAll(/^## ([A-F])\. [^\n]*?（(\d+) 条）/gm)]
+      if (!sections.length) return false
+      for (const [, letter, claimed] of sections) {
+        const actual = (md.match(new RegExp(`^### ${letter}\\d`, 'gm')) || []).length
+        if (actual !== Number(claimed)) {
+          console.log(`      ${letter} 类声明 ${claimed} 条，实际 ${actual} 条`)
+          return false
+        }
+      }
+      return true
     },
-    hint: '条数变了就把 AGENTS.md 里那个「18 条」一起改',
+    hint: 'PITFALLS.md 的分类标题括号里要写该类的实际条数',
+  },
+  {
+    label: 'AGENTS.md 引用 PITFALLS.md 的 A 类条数与实际一致',
+    run() {
+      /*
+       * AGENTS.md 里写死了「A 类有 18 条」。这条独立性是有意的：
+       * 它校验的是**跨文件引用**，而不是 PITFALLS 自己的标题。
+       * 两处一起改才算完成，所以分开断言、分别给提示。
+       */
+      const actual = (read('PITFALLS.md').match(/^### A\d/gm) || []).length
+      const claimed = Number((read('.agent/AGENTS.md').match(/A 类有 \*\*(\d+) 条\*\*/) || [])[1] || 0)
+      if (!claimed) return false
+      return claimed === actual
+    },
+    hint: 'A 类条数变了就把 AGENTS.md 里那个数字一起改',
   },
 ]
 

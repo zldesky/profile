@@ -90,9 +90,15 @@ npm run format:check
 | ---------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `localhost:5173` | 先 `npm run dev`                                  | `verify:drag` `verify:paper` `verify:drag-ux` `verify:panel` `verify:selects` `verify:markdown` `verify:pdf` `verify:pages` `verify:spacing` `verify:toolbar` `build:host-template` `shoot-drag-state` |
 | `127.0.0.1:3001` | 先 `npm run build` + `npm run pdf`（托管 `dist`） | `audit:ui` `audit:interaction` `audit:el` `audit:admin` `verify:templates` `verify:dialogs` `verify:captcha` `probe:perf` `probe:mobile` `probe:session` `audit:trace` `shoot-pages` `shoot:dialog`    |
+| 两者皆可         | 有站点即可                                        | `audit:scroll`（右侧面板滚动流畅度，**两个页签都会量**）                                                                                                                                               |
 
 两者都支持用第一个 `http://...` 参数覆盖默认地址。连错了会得到 `ERR_CONNECTION_REFUSED`——
 那不是代码坏了。
+
+**动过 CSS 影响滚动性能时跑 `npm run audit:scroll`。** 它分段量内容页签与设计页签的
+滚动帧间隔，并单独报「冷启动」—— 一次性成本（`content-visibility` 首次渲染）
+不会混进分段 p95 里。设计页签必须单独量：它比内容页签短得多却更卡（密度问题），
+只测内容页签会漏掉它（见 `PITFALLS.md` D6/D7）。
 
 ### 上面那张表**不是全部前提**，它只解决"连哪个端口"
 

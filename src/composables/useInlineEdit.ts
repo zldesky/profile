@@ -37,9 +37,13 @@ export interface EditTarget {
 }
 
 /** 面板标题用的字段名 */
-const FIELD_LABELS: Record<string, string> = {
+export const FIELD_LABELS: Record<string, string> = {
   name: '姓名',
   jobTitle: '求职职位',
+  /** 页头「基本信息」的某一项（年龄 / 性别 / 电话 …）的**标签**，如「年龄」 */
+  basicsLabel: '字段名',
+  /** 页头「基本信息」的某一项的**内容**，如「28岁」 */
+  basicsValue: '内容',
   sectionTitle: '模块标题',
   content: '正文',
   gridLabel: '标签',
@@ -85,6 +89,27 @@ export function resolveEditTarget(resume: Resume, target: FieldTarget): EditTarg
       ...base,
       value: resume.basics.jobTitle,
       commit: (next) => (resume.basics.jobTitle = next),
+    }
+  }
+
+  /*
+   * 页头「基本信息」里的每一项（年龄 / 性别 / 电话 / 邮箱 / 现居城市 …）。
+   *
+   * 这些是 `basics.fields`（GridItem 数组），不是模块，之前**完全不能就地编辑** ——
+   * 模板渲染它们时没有挂任何 data-field，用户只能去右侧面板找。
+   * 现在按 itemId 精确定位，标签与内容都能改（改标签就变成「年龄」→「年纪」这类）。
+   */
+  if (target.field === 'basicsLabel' || target.field === 'basicsValue') {
+    const item = resume.basics.fields.find((f) => f.id === target.itemId)
+    if (!item) return null
+    const isLabel = target.field === 'basicsLabel'
+    return {
+      ...base,
+      value: isLabel ? item.label : item.value,
+      commit: (next) => {
+        if (isLabel) item.label = next
+        else item.value = next
+      },
     }
   }
   if (target.field === 'sectionTitle') {

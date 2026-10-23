@@ -106,6 +106,66 @@ describe('页头字段', () => {
       resolveEditTarget(resume, { sectionId: '', field: 'name', itemId: '', entryId: '' }),
     ).not.toBeNull()
   })
+
+  /*
+   * 页头「基本信息」的每一项（年龄 / 性别 / 电话 / 邮箱 / 现居城市…）。
+   *
+   * 这组是新增能力：这些项是 `basics.fields`（GridItem 数组），不属于任何模块，
+   * 之前模板渲染它们时没有挂任何锚点，**完全不能就地编辑** ——
+   * 用户只能去右侧面板里找。现在按 itemId 精确定位，标签与内容都能改。
+   */
+  it('基本信息项：按 itemId 定位并写回内容', () => {
+    const resume = fixture()
+    resume.basics.fields = [{ id: 'f-age', icon: 'none', label: '年龄', value: '28岁' }]
+
+    const target = resolve(resume, { field: 'basicsValue', itemId: 'f-age' })
+
+    expect(target.value).toBe('28岁')
+    target.commit('30岁')
+    expect(resume.basics.fields[0].value).toBe('30岁')
+    // 只改内容，标签不能被连带改掉
+    expect(resume.basics.fields[0].label).toBe('年龄')
+  })
+
+  it('基本信息项：标签也能改（「年龄」→「年纪」）', () => {
+    const resume = fixture()
+    resume.basics.fields = [{ id: 'f-age', icon: 'none', label: '年龄', value: '28岁' }]
+
+    const target = resolve(resume, { field: 'basicsLabel', itemId: 'f-age' })
+
+    expect(target.value).toBe('年龄')
+    target.commit('年纪')
+    expect(resume.basics.fields[0].label).toBe('年纪')
+    expect(resume.basics.fields[0].value).toBe('28岁')
+  })
+
+  it('基本信息项：itemId 不存在时返回 null，不写坏数据', () => {
+    const resume = fixture()
+    resume.basics.fields = [{ id: 'f-age', icon: 'none', label: '年龄', value: '28岁' }]
+
+    // 这条要断言「解析失败」，不能用会强制非空的 resolve 包装器
+    expect(
+      resolveEditTarget(resume, {
+        sectionId: '',
+        field: 'basicsValue',
+        itemId: '不存在',
+        entryId: '',
+      }),
+    ).toBeNull()
+  })
+
+  it('基本信息项改的是对应那一条，不会串到别的字段', () => {
+    const resume = fixture()
+    resume.basics.fields = [
+      { id: 'f-age', icon: 'none', label: '年龄', value: '28岁' },
+      { id: 'f-sex', icon: 'none', label: '性别', value: '男' },
+    ]
+
+    resolve(resume, { field: 'basicsValue', itemId: 'f-sex' }).commit('女')
+
+    expect(resume.basics.fields[0].value).toBe('28岁')
+    expect(resume.basics.fields[1].value).toBe('女')
+  })
 })
 
 describe('模块标题与正文', () => {

@@ -1,16 +1,11 @@
 /**
  * 简历分享读写（/api/share）。
- * 与 cloudResume.js 同一原则：同源相对路径，开发态走 Vite 代理。
+ * 与 cloudResume.ts 同一原则：同源相对路径，开发态走 Vite 代理。
  * 创建与撤销要求登录（401 → AUTH_EXPIRED，由调用方分流）；
  * 查看是公开的，任何拿到链接的人都能读。
  */
+import { API, API_ERROR, ApiError, request } from '@/utils/api'
 import type { Resume, ShareSnapshot } from '@/types/resume'
-
-function unauthorized(): Error & { code: string } {
-  const error = new Error('请先登录后使用') as Error & { code: string }
-  error.code = 'AUTH_EXPIRED'
-  return error
-}
 
 /** 服务端告知的屏蔽结果：屏蔽了哪些字段、正文里替换了几处 */
 export interface ShareRedaction {
@@ -36,49 +31,36 @@ export async function createShare(
     revealContacts?: boolean
   } = {},
 ): Promise<{ id: string; expiresAt: number; redacted: ShareRedaction }> {
-  const response = await fetch('/api/share', {
+  const data = await request<{
+    id: string
+    expiresAt: number
+    redacted?: { labels?: unknown; inText?: unknown }
+  }>(API.share, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ resume, listInCollection, revealContacts }),
+    body: { resume, listInCollection, revealContacts },
   })
 
-  if (response.status === 401) throw unauthorized()
-  const data = await response.json().catch(() => ({}))
-  if (!response.ok || !data?.ok) {
-    throw new Error(data?.message || `分享创建失败（${response.status}）`)
-  }
   return {
     id: data.id,
     expiresAt: data.expiresAt,
     redacted: {
-      labels: Array.isArray(data.redacted?.labels) ? data.redacted.labels : [],
+      labels: Array.isArray(data.redacted?.labels) ? (data.redacted.labels as string[]) : [],
       inText: Number(data.redacted?.inText) || 0,
     },
   }
 }
 
-/** 公开读取分享内容；404 表示不存在或已过期 */
+/** 公开读取分享内容；404 表示不存在或已过期（code = NOT_FOUND） */
 export async function fetchShare(id: string): Promise<ShareSnapshot> {
-  const response = await fetch(`/api/share/${encodeURIComponent(id)}`)
-  const data = await response.json().catch(() => ({}))
-  if (!response.ok || !data?.ok) {
-    const error = new Error(data?.message || `分享读取失败（${response.status}）`) as Error & {
-      code: string
-    }
-    error.code = response.status === 404 ? 'NOT_FOUND' : 'FETCH_FAILED'
-    throw error
-  }
+  const data = await request<{ resume: Resume; createdAt: number; expiresAt: number }>(
+    API.shareById(id),
+  )
   return { resume: data.resume, createdAt: data.createdAt, expiresAt: data.expiresAt }
 }
 
 /** 撤销自己创建的分享 */
 export async function deleteShare(id: string): Promise<void> {
-  const response = await fetch(`/api/share/${encodeURIComponent(id)}`, { method: 'DELETE' })
-  if (response.status === 401) throw unauthorized()
-  const data = await response.json().catch(() => ({}))
-  if (!response.ok || !data?.ok) {
-    throw new Error(data?.message || `撤销失败（${response.status}）`)
-  }
+  await request(API.shareById(id), { method: 'DELETE' })
 }
 
 /** 我创建的分享摘要（/api/share/mine，要求登录） */
@@ -94,11 +76,14 @@ export interface MyShareItem {
 
 /** 拉取当前用户的分享列表 */
 export async function fetchMyShares(): Promise<MyShareItem[]> {
-  const response = await fetch('/api/share/mine')
-  if (response.status === 401) throw unauthorized()
-  const data = await response.json().catch(() => ({}))
-  if (!response.ok || !data?.ok) {
-    throw new Error(data?.message || `分享列表读取失败（${response.status}）`)
-  }
-  return data.items
+  const data = await request<{ items?: MyShareItem[] }>(API.shareMine)
+  return Array.isArray(data.items) ? data.items : []
+}
+
+/**
+ * 把「分享链接已失效」与其它失败区分开。
+ * 调用方（SharePage）据此显示「链接已过期」而不是笼统的「加载失败」。
+ */
+export function isShareNotFound(error: unknown): boolean {
+  return error instanceof ApiError && error.code === API_ERROR.NOT_FOUND
 }

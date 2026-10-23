@@ -36,8 +36,12 @@ const selectedSet = computed(() => new Set(props.selectedIds ?? []))
         <div v-if="basics.fields.length" class="meta">
           <span v-for="(field, index) in basics.fields" :key="field.id" class="meta-item">
             <SvgIcon v-if="field.icon !== 'none'" :name="field.icon" :size="13" />
-            <span class="r-lab">{{ field.label }}：</span>
-            <span class="r-val">{{ field.value }}</span>
+            <span class="r-lab" data-field="basicsLabel" :data-item-id="field.id"
+              >{{ field.label }}：</span
+            >
+            <span class="r-val" data-field="basicsValue" :data-item-id="field.id">{{
+              field.value
+            }}</span>
             <span v-if="index < basics.fields.length - 1" class="sep">·</span>
           </span>
         </div>

@@ -4,6 +4,7 @@
  * 登录后同一接口返回完整分页；响应随会话 Cookie 变化，
  * 服务端已按 no-store 下发，这里不做本地缓存。
  */
+import { API, request } from '@/utils/api'
 import type { CollectionItem } from '@/types/resume'
 
 export interface StyleFacet {
@@ -33,15 +34,20 @@ export async function fetchCollection({
 }: { offset?: number; limit?: number; category?: string } = {}): Promise<CollectionPage> {
   const query = new URLSearchParams({ offset: String(offset), limit: String(limit) })
   if (category && category !== 'all') query.set('category', category)
-  const response = await fetch(`/api/collection?${query}`)
-  const data = await response.json().catch(() => ({}))
-  if (!response.ok || !data?.ok) {
-    throw new Error(data?.message || `合集读取失败（${response.status}）`)
-  }
+
+  const data = await request<{
+    total: number
+    items: CollectionItem[]
+    categories?: unknown
+    authenticated: boolean
+    guestLimited: boolean
+    guestVisible: number
+  }>(`${API.collection}?${query}`)
+
   return {
     total: data.total,
     items: data.items,
-    categories: Array.isArray(data.categories) ? data.categories : [],
+    categories: Array.isArray(data.categories) ? (data.categories as StyleFacet[]) : [],
     authenticated: data.authenticated,
     guestLimited: data.guestLimited,
     guestVisible: data.guestVisible,

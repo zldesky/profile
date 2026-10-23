@@ -1,5 +1,6 @@
 /**
- * 验证纸面多选工具条：四个方向的间距按钮真的能改到纸面，且窄屏不溢出。
+ * 验证纸面多选工具条：上/左两个方向的间距按钮真的能改到纸面，且窄屏不溢出。
+ * （「下」「右」不设悬浮快捷按钮，下方间距 / 右侧缩进在编辑面板「位置与对齐」的滑杆里调，见 verify:spacing。）
  *
  * 两条踩过的坑都写在下面的 selectTwo() 与窄屏循环里，因为它们是
  * 「工具报绿、其实没测到」的典型：
@@ -16,7 +17,11 @@
  */
 import { chromium } from '../server/node_modules/playwright-core/index.mjs'
 
-const BASE = 'http://localhost:5173'
+/*
+ * 站点地址。与其余 20+ 个 verify 脚本同一约定：第一个 http:// 参数可覆盖默认值。
+ * 原先这里是写死的常量 —— 唯一两个不能改目标的脚本之一，想在 3001 上跑就只能改源码。
+ */
+const BASE = process.argv.find((a) => a.startsWith('http')) || 'http://localhost:5173'
 
 function log(ok, label, extra = '') {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${extra ? `  — ${extra}` : ''}`)
@@ -83,36 +88,32 @@ const toolbarVisible = await toolbar.isVisible()
 log(toolbarVisible, '多选工具条出现')
 
 if (toolbarVisible) {
-  // 四组「标签 + 减/加」都应该在
+  // 悬浮工具条只保留「上 / 左」两组 ——「下」「右」不设快捷按钮，改在编辑面板滑杆里调
   const groups = await toolbar.locator('.sel-group').count()
-  log(groups === 4, '工具条有四组间距按钮', `${groups} 组`)
+  log(groups === 2, '工具条有两组间距按钮', `${groups} 组`)
 
   const tips = await toolbar.locator('.sel-group .sel-tip').allInnerTexts()
   log(
-    tips.join('') === '上下左右',
-    '方向标签为 上/下/左/右',
+    tips.join('') === '上左',
+    '悬浮条方向标签为 上/左（无「下」「右」）',
     tips.join(' '),
   )
 
-  // 点「右」的加号，纸面上两个模块的 paddingRight 都应变化
-  const beforeRight = await paperSections.nth(0).evaluate((el) => getComputedStyle(el).paddingRight)
-  const rightGroup = toolbar.locator('.sel-group').filter({ hasText: '右' })
-  await rightGroup.locator('button[title="增大右缩进"]').click()
+  // 点「左」的加号，纸面上两个模块的 paddingLeft 都应变化
+  const beforeLeft = await paperSections.nth(0).evaluate((el) => getComputedStyle(el).paddingLeft)
+  const leftGroup = toolbar.locator('.sel-group').filter({ hasText: '左' })
+  await leftGroup.locator('button[title="增大左缩进"]').click()
   await page.waitForTimeout(500)
-  const afterRight = await paperSections.nth(0).evaluate((el) => getComputedStyle(el).paddingRight)
-  log(afterRight !== beforeRight, '「右」加号改变纸面右侧间距', `${beforeRight} → ${afterRight}`)
+  const afterLeft = await paperSections.nth(0).evaluate((el) => getComputedStyle(el).paddingLeft)
+  log(afterLeft !== beforeLeft, '「左」加号改变纸面左侧间距', `${beforeLeft} → ${afterLeft}`)
 
-  // 点「下」的减号
-  const beforeBottom = await paperSections
-    .nth(0)
-    .evaluate((el) => getComputedStyle(el).marginBottom)
-  const bottomGroup = toolbar.locator('.sel-group').filter({ hasText: '下' })
-  await bottomGroup.locator('button[title="减小下方间距"]').click()
+  // 点「上」的减号
+  const beforeTop = await paperSections.nth(0).evaluate((el) => getComputedStyle(el).marginTop)
+  const topGroup = toolbar.locator('.sel-group').filter({ hasText: '上' })
+  await topGroup.locator('button[title="减小上方间距"]').click()
   await page.waitForTimeout(500)
-  const afterBottom = await paperSections
-    .nth(0)
-    .evaluate((el) => getComputedStyle(el).marginBottom)
-  log(afterBottom !== beforeBottom, '「下」减号改变纸面下方间距', `${beforeBottom} → ${afterBottom}`)
+  const afterTop = await paperSections.nth(0).evaluate((el) => getComputedStyle(el).marginTop)
+  log(afterTop !== beforeTop, '「上」减号改变纸面上方间距', `${beforeTop} → ${afterTop}`)
 
   await page.screenshot({ path: 'gui-test-screenshots/toolbar-four-way.png' })
 }
@@ -159,9 +160,9 @@ for (const width of [720, 390, 360, 320]) {
         box ? `x=${Math.round(box.x)} w=${Math.round(box.width)}` : 'no box',
       )
 
-      // 四个方向的按钮都还在（不能因为窄屏就把某个方向藏掉）
+      // 两个方向的按钮都还在（不能因为窄屏就把某个方向藏掉）
       const groups = await tb.locator('.sel-group').count()
-      log(groups === 4, `${width}px 视口四个方向仍齐全`, `${groups} 组`)
+      log(groups === 2, `${width}px 视口上/左两方向仍齐全`, `${groups} 组`)
 
       const btnBox = await tb.locator('.sel-btn').first().boundingBox()
       if (btnBox) {

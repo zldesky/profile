@@ -11,24 +11,29 @@
 `tsconfig.json` 里 `checkJs: false`，且 `include` 只收了 `src/**/*.ts`、`src/**/*.vue`、
 `server/**/*.ts`、`vite.config.js`。
 
-**结论：`src/` 下 26 个 `.js` 文件完全不受类型检查。** 它们能通过 `npm run typecheck`
+**结论：`src/` 下 22 个 `.js` 文件完全不受类型检查。** 它们能通过 `npm run typecheck`
 不代表它们是对的 —— 只是根本没被看。分布：
 
 ```
-src/composables/  9 个   useAvatarDrag useCloudSync useMediaQuery usePageMetrics
-                         usePaperSelection usePaperZoom usePdfExport usePdfPassword useResumeFile
-src/utils/        13 个  aiClient aiKeyStore avatarStore backup cloudResume completeness
-                         exporters history imageCrop imageTemplate selection serverPdf validators
-src/router/        2 个  index routes
-src/templates/     1 个  index
-src/main.js        1 个
-                   ────
-                   26 个
+src/composables/  8 个   useAvatarDrag useMediaQuery usePageMetrics usePaperSelection
+                         usePaperZoom usePdfExport usePdfPassword useResumeFile
+src/utils/       10 个   aiKeyStore avatarStore backup completeness exporters
+                         history imageCrop imageTemplate selection validators
+src/router/       2 个   index routes
+src/templates/    1 个   index
+src/main.js       1 个
+                  ────
+                  22 个
 ```
 
-注意 `src/utils/` 里还有 8 个**已经迁完的 `.ts`**（`aiFill` `helpers` `markdownSource`
-`pdfImport` `resumeStyle` `sectionStyle` `shareApi` `collectionApi`）—— 它们受类型检查，
-不要算进上面那 26 个。同一个目录里 `.ts` 与 `.js` 混住，是这个项目迁移到一半的现状。
+注意 `src/utils/` 里还有 11 个**已经迁完的 `.ts`**（`aiClient` `aiFill` `api` `cloudResume`
+`collectionApi` `helpers` `markdownSource` `pdfImport` `resumeStyle` `sectionStyle` `serverPdf`
+`shareApi` `styleMatrix`）—— 它们受类型检查，不要算进上面那 22 个。同一个目录里 `.ts` 与 `.js`
+混住，是这个项目迁移到一半的现状。
+
+**这一轮从 26 降到 22**：`aiClient` `cloudResume` `serverPdf`（`src/utils/`）与
+`useCloudSync`（`src/composables/`）四个文件已转 `.ts`。选它们的理由是它们都是**网络边界**：
+类型在这里最值钱（响应体形状、错误码），而且它们的手写 `fetch` 正好一并收进了 `utils/api.ts`。
 
 **这对 AI 的直接影响**：你要用的函数如果来自上面那些 `.js`，它的参数与返回值
 **没有任何类型保证**。读实现确认形状，不要照着直觉写。
@@ -46,6 +51,42 @@ src/main.js        1 个
   跨文件引用服务端已有类型（如 `QuotaStatus`）是推荐做法。
 - **不要为了让类型通过而把类型放宽**。`TemplatePicker` 里 `store.theme[key]` 的正确修法是
   断言成 `keyof Theme`，而不是把 `store.theme` 退化成 `Record` —— 后者会让整个主题失去类型。
+
+---
+
+## 调接口一律走 `src/utils/api.ts`
+
+**不要在组件或 util 里直接写 `fetch('/api/...')`。**
+
+这一层是后加的，起因是审计时发现 **20 处手写 `fetch`** 散在 10 个文件里，每处各写一套
+「怎么读错误、401 怎么办、非 JSON 怎么兜底」：有的抛带 `.code` 的 `Error`、有的返回
+`null`、有的静默返回空数组。同一个语义四五种实现，**新增一个端点就要再选一次错误语义**。
+
+现在只有两个出口：`request()`（JSON）与 `requestBlob()`（PDF 下载）。它们负责：
+
+- 统一 `{ ok, message }` 协议：HTTP 非 2xx **或** 响应体 `ok === false` 都算失败；
+- 非 JSON 响应（网关 HTML 错误页、空 body）不抛解析异常，回退成「请求失败（500）」；
+- 网络层失败包成 `NETWORK`，界面不会拿到裸 `TypeError`；
+- 把状态码翻译成固定错误码，**调用方按 `code` 分流，绝不匹配中文文案**。
+
+```ts
+import { API, API_ERROR, ApiError, request } from '@/utils/api'
+
+const data = await request<{ resume: Resume | null }>(API.resume)
+```
+
+约定：
+
+1. **路径写进 `API` 常量**，不要在调用点拼字符串（拼错了只有运行时才知道）。
+2. **分流用 `isAuthExpired(error)` 或 `error.code`**，不要 `error.code === 'AUTH_EXPIRED'`
+   直接比 —— 那个 `code` 以前是各模块手搓挂在 `Error` 上的，类型上没有任何保证。
+3. **降级要显式**。读配置失败回退内置、读健康检查失败返回 `null` 都是对的，
+   但要写注释说明这是刻意降级，不要写成空 `catch`。
+4. **`ApiError.code` 的类型收窄**：`/api/pdf` 会挂 PDF 专用细分码（`AUTH_FAILED` 等），
+   它们不在 `ApiErrorCode` 联合里，比较时用 `String(code)` 收口（见 `serverPdf.ts` 的注释）。
+
+改这一层时注意：`tests/apiClient.test.js` 覆盖了非 JSON、`ok:false`、401/404/429、
+网络失败几条分支，**新增端点不需要改测试，改动语义一定要改**。
 
 ---
 

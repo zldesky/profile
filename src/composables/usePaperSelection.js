@@ -6,6 +6,8 @@ import {
   applyMemberOrder,
   insertGroupAtVisibleIndex,
   pickIdsInRect,
+  resolveShiftDirections,
+  resolveVisibleInsertIndex,
   sectionContainerKey,
 } from '@/utils/selection'
 
@@ -293,44 +295,67 @@ export function usePaperSelection(paperRef, scrollRef, zoom) {
     const visibleSet = new Set(memberIds.filter((id) => byId.get(id)?.visible))
     const groupTop = top + press.dyScreen
     const groupBottom = bottom + press.dyScreen
-    const draggingDown = press.dyScreen > 0
 
-    let targetIndex = 0
-    for (const id of memberIds) {
-      if (groupIds.includes(id) || !visibleSet.has(id)) continue
-      const rect = press.rects.get(id)
-      if (!rect) continue
-      const mid = (rect.top + rect.bottom) / 2
-      const passed = draggingDown ? groupBottom > mid : groupTop < mid
-      if (passed) targetIndex += 1
-    }
-
+    /*
+     * 落点用统一的「中点比较」算出（见 resolveVisibleInsertIndex 的说明）：
+     * 原先按方向分两套判据，向上的那套写反了，会把下方模块全算成已越过。
+     */
     const others = memberIds.filter((id) => !groupIds.includes(id) && visibleSet.has(id))
-    return { memberIds, groupIds, others, targetIndex, visibleSet, groupHeight: bottom - top }
+    const rectsOfOthers = others
+      .map((id) => ({ id, rect: press.rects.get(id) }))
+      .filter((item) => item.rect)
+      .map((item) => ({ id: item.id, top: item.rect.top, bottom: item.rect.bottom }))
+    const targetIndex = resolveVisibleInsertIndex(rectsOfOthers, groupTop, groupBottom)
+
+    /*
+     * originIndex = 被拖块**原本**排在第几个 other 之前，也就是「第一个被拖成员之前
+     * 有几个可见的其它成员」。这是「补空洞」的基准：有了它才能分出哪些模块该上移、
+     * 哪些该下移。必须按原顺序（memberIds）数，不能按当前视觉顺序 ——
+     * 后者会随拖动过程变化，导致位移来回抖动。
+     */
+    const firstGroupPos = memberIds.findIndex((id) => groupIds.includes(id))
+    const originIndex = memberIds
+      .slice(0, Math.max(0, firstGroupPos))
+      .filter((id) => !groupIds.includes(id) && visibleSet.has(id)).length
+
+    return {
+      memberIds,
+      groupIds,
+      others,
+      originIndex,
+      targetIndex,
+      visibleSet,
+      groupHeight: bottom - top,
+    }
   }
 
   /**
-   * 实时让位：让插入点之后的模块整体下移被拖块的高度，腾出空位。
+   * 实时让位：模拟「把整块摘走、再插到落点」之后每个模块的真实位置。
    *
-   * 不做这件事的话，被拖块只是浮在原位之上、**盖住**下面的模块（实测重叠 55px），
-   * 两层文字叠在一起看起来像乱码，用户也判断不出"松手会插到哪"。
-   * 让位之后，视觉上就是"插进去了"。
+   * 与右侧面板（SortableJS）的动效保持一致 —— 拖走一个模块后，
+   * **它原来的位置要被下面的模块补上**，插入点之后才腾出空位。
    *
-   * 位移量取被拖块的高度 + 与相邻块之间的间距，用视口 px 再除以缩放比。
+   * 原先只做了后半句（插入点之后整体下移），前半句没做，于是被拖块的
+   * 原位置留着一个空洞、下面的模块不补上来。用户看到的是「拖走一个、底下不动」，
+   * 与右侧那种整列跟着流动的手感完全不同。
+   *
+   * 位移方向由 resolveShiftDirections 统一算出（纯函数，有单测），
+   * 这里只负责把方向 × 一个块高换算成像素并写到 transform。
+   * 距离用**被拖块自己的高度 + 与相邻块的间距**，因此不同高度的模块也能对上。
    */
   function applyDropShift(press, resolved) {
     if (!resolved) return
-    const { others, targetIndex, groupHeight } = resolved
+    const { others, originIndex, targetIndex, groupHeight } = resolved
+
     const gap = 8
-    const shift = (groupHeight + gap) / scale()
+    const step = (groupHeight + gap) / scale()
+    const dirs = resolveShiftDirections(others, originIndex, targetIndex)
 
     for (const id of others) {
       const el = findSectionEl(id)
       if (!el) continue
-      const index = others.indexOf(id)
-      // 插入点之后的模块让位；之前的保持不动
-      const shouldMove = index >= targetIndex
-      el.style.transform = shouldMove ? `translateY(${shift}px)` : ''
+      const dir = dirs[id] ?? 0
+      el.style.transform = dir ? `translateY(${dir * step}px)` : ''
     }
   }
 
@@ -435,31 +460,27 @@ export function usePaperSelection(paperRef, scrollRef, zoom) {
     if (top === Infinity) return null
 
     /*
-     * 落点判据：用**被拖动块的边缘**与相邻块的**中线**比较，而不是两个中心。
+     * 落点判据：**统一比较中点**，不再按拖动方向分两套。
      *
-     * 原先用的是「整块中心越过相邻模块的中心」，那对相邻的等高模块意味着
-     * **要拖满一整个模块高才会换位**。实测：模块高 204px 时门槛是 220px ——
-     * 拖 180px 都不换位，松手又弹回原位。用户看到模块明明跟着手走到了
-     * 另一个模块的位置，却什么都没发生，体感就是「拖不动」。
+     * 原先往下用 `groupBottom > mid`、往上用 `groupTop < mid`。
+     * 向下那套是对的；向上那套把方向写反了 —— 它把「中线在被拖块上边缘之下」
+     * 也算作「已越过」，而拖动块下方的所有模块都满足这个条件，
+     * 于是往上拖会算出过大的索引：实测把「项目经历」拖到最顶，索引算出 2
+     * （应为 0），松手后它掉到了最后一名。用户说的「无法拖到原位置上方」就是它。
      *
-     * 现在改成「边缘越过中线」：往下拖时看被拖块的**下边缘**是否越过
-     * 相邻块的中线，往上拖时看上边缘。门槛因此降到约半个模块高，
-     * 与 SortableJS / dnd-kit 等成熟实现的直觉一致。
+     * 现在两处（指示线 + 实际落点）都走 resolveVisibleInsertIndex，
+     * 同一个函数、同一个判据，不可能再出现「线在一处、落在另一处」。
      */
     const groupTop = top + press.dyScreen
     const groupBottom = bottom + press.dyScreen
-    const draggingDown = press.dyScreen > 0
 
-    const targetIndex = memberIds.reduce((count, id) => {
-      if (groupIds.includes(id) || !visibleSet.has(id)) return count
-      const rect = press.rects.get(id)
-      if (!rect) return count
-      const mid = (rect.top + rect.bottom) / 2
-      // 往下拖：被拖块的下边缘越过该块中线 → 它排到该块之后
-      // 往上拖：被拖块的上边缘越过该块中线 → 它排到该块之前
-      const passed = draggingDown ? groupBottom > mid : groupTop < mid
-      return count + (passed ? 1 : 0)
-    }, 0)
+    const others = memberIds.filter((id) => !groupIds.includes(id) && visibleSet.has(id))
+    const rectsOfOthers = others
+      .map((id) => ({ id, rect: press.rects.get(id) }))
+      .filter((item) => item.rect)
+      .map((item) => ({ id: item.id, top: item.rect.top, bottom: item.rect.bottom }))
+
+    const targetIndex = resolveVisibleInsertIndex(rectsOfOthers, groupTop, groupBottom)
 
     const newMemberOrder = insertGroupAtVisibleIndex(memberIds, groupIds, targetIndex, visibleSet)
     if (newMemberOrder.every((id, index) => id === memberIds[index])) return null

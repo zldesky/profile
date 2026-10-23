@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { installBrowserGlobals, uninstallBrowserGlobals } from './setup/browser-globals.js'
 import { makeResume } from './helpers/resume-fixtures.js'
@@ -221,6 +221,51 @@ describe('自动保存调度', () => {
     } finally {
       window.addEventListener = origWindowAdd
       document.addEventListener = origDocAdd
+    }
+  })
+
+  /*
+   * 头像回收的调度。
+   *
+   * 这组用例是为了防止「定义了但没人调」的复发：`schedulePrune` 曾经存在、
+   * 也被 `Autosave` 返回，但全仓库没有任何调用点 —— 于是 onPrune 与
+   * pruneAvatars 整条链路不可达，换头像后旧 blob 永远留着，容量只增不减。
+   * 断言写在「调用后 onPrune 真的被触发且拿到了引用」，功能坏了这条会红。
+   *
+   * 用假定时器而不是真等 6 秒：`debounce` 走的是 window.setTimeout，
+   * 而测试环境里 window.setTimeout 是转发到 globalThis.setTimeout 的箭头函数
+   * （见 tests/setup/browser-globals.js），所以 vi.useFakeTimers 一样能接管。
+   */
+  it('schedulePrune 防抖后调用 onPrune，并带上收集到的引用', () => {
+    const pruned = []
+    const { autosave } = makeAutosave({
+      collectAvatarRefs: () => ['idb-avatar:keepme'],
+      onPrune: (refs) => pruned.push(refs),
+    })
+
+    vi.useFakeTimers()
+    try {
+      autosave.schedulePrune()
+      // 防抖窗口内不应触发
+      expect(pruned).toHaveLength(0)
+
+      vi.advanceTimersByTime(P.PRUNE_DEBOUNCE_MS + 50)
+      expect(pruned).toHaveLength(1)
+      expect(pruned[0]).toEqual(['idb-avatar:keepme'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('未提供 collectAvatarRefs / onPrune 时 schedulePrune 不抛错', () => {
+    const { autosave } = makeAutosave()
+
+    vi.useFakeTimers()
+    try {
+      expect(() => autosave.schedulePrune()).not.toThrow()
+      expect(() => vi.advanceTimersByTime(P.PRUNE_DEBOUNCE_MS + 50)).not.toThrow()
+    } finally {
+      vi.useRealTimers()
     }
   })
 })

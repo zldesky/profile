@@ -10,6 +10,8 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 
+import { API, request } from '@/utils/api'
+
 const props = defineProps({
   modelValue: { type: String, default: '' },
   disabled: { type: Boolean, default: false },
@@ -82,10 +84,8 @@ async function refresh() {
   emit('update:modelValue', '')
 
   try {
-    const response = await fetch('/api/captcha')
-    const data = await response.json()
+    const data = await request<CaptchaChallenge>(API.captcha)
     if (seq !== requestSeq) return
-    if (!response.ok || !data?.id) throw new Error('挑战响应不完整')
     challenge.value = data
     state.value = 'idle'
   } catch {
@@ -177,16 +177,14 @@ async function onPointerUp(event: PointerEvent) {
 
   state.value = 'verifying'
   try {
-    const response = await fetch('/api/captcha/verify', {
+    const data = await request<{ token?: string }>(API.captchaVerify, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      body: {
         id: current.id,
         x: Math.round(dragX.value * 10) / 10,
-      }),
+      },
     })
-    const data = await response.json()
-    if (data?.ok && data.token) {
+    if (data.token) {
       state.value = 'done'
       emit('update:modelValue', data.token)
       return

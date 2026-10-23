@@ -519,6 +519,21 @@ textarea {
   white-space: nowrap;
 }
 
+/*
+ * 标签里带图标时（图标从 .r-info-item 的兄弟节点移进了 .r-lab），
+ * 用 inline-flex 把「图标 + 文字」排成一行并保留原来的间距，
+ * 这样拖标签时图标与文字作为一个整体一起移动，视觉也不散。
+ */
+.r-lab:has(.r-lab-icon) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+}
+
+.r-lab-icon {
+  flex: 0 0 auto;
+}
+
 .r-val {
   min-width: 0;
   white-space: pre-wrap;
@@ -800,6 +815,89 @@ textarea {
 
 /* ---------------- 纸面模块选中（编辑态视觉，打印时移除） ---------------- */
 
+/*
+ * 纸面模块的拖拽手柄（悬停才出现）。
+ *
+ * 为什么用 `::before` 伪元素而不是在 12 个模板里各插一个元素：
+ *  1. 12 个模板都会渲染 `.r-sec`，逐个手写手柄必然走样，且新增模板会漏；
+ *  2. 伪元素不产生 DOM 节点，不参与布局，**不会被打印**（打印走另一套样式，
+ *     这里也显式在 @media print 里关掉），不会污染用户导出的简历。
+ *
+ * `position: relative` 是给伪元素定位用的。已实测：对全部模板的所有模块
+ * 加它，top/left/width/height 一个像素都不变（模块本身是块级、占满整行）。
+ *
+ * 手柄放在模块左侧外面（`left: -22px`）。纸张左右留白约 16mm，
+ * 22px 落在留白内，不会盖住文字。窄屏时纸面被缩放，手柄跟着一起缩，
+ * 仍可用（`--zoom` 由 .paper 上的内联样式下发，见 computePageStyle）。
+ */
+.paper .r-sec[data-sec-id] {
+  position: relative;
+  cursor: grab;
+}
+
+/*
+ * 手柄本体：六个点排两列，用背景径向渐变画，不需要图标、不需要字体。
+ * 默认 opacity: 0 —— 悬停模块或手柄本身才浮现，平时完全不干扰阅读。
+ */
+.paper .r-sec[data-sec-id]::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: -22px;
+  width: 16px;
+  height: 22px;
+  border-radius: 3px;
+  opacity: 0;
+  cursor: grab;
+  transition:
+    opacity 0.15s,
+    background-color 0.15s;
+  /*
+   * 六个圆点 = 2 列 × 3 行。用 radial-gradient 平铺，
+   * 圆点颜色取 --accent 的 55%，与「可编辑虚框」同一色系。
+   */
+  background-image: radial-gradient(
+    circle 1.4px,
+    color-mix(in srgb, var(--accent) 55%, transparent) 100%,
+    transparent 0
+  );
+  background-size: 8px 7px;
+  background-position: 1px 2px;
+  background-repeat: repeat;
+}
+
+/*
+ * 手柄浮现：悬停模块即出现。
+ *
+ * **选择器必须写成 `:hover::before`，不能混进 `::before:hover`。**
+ * 曾把两者写在同一个逗号列表里，而 `::before:hover` 不是合法选择器
+ * （伪元素后不能再接伪类），于是**整条规则被浏览器静默丢弃** ——
+ * 表现是「悬停后手柄 opacity 仍是 0」，控制台无报错，
+ * `getComputedStyle` 也查不出谁覆盖（规则压根没进 cssRules）。
+ * 这正是 CSS 的经典静默失败：一个非法项让整组选择器一起失效。
+ */
+.paper .r-sec[data-sec-id]:hover::before {
+  opacity: 1;
+  background-color: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+/* 拖动中不显示手柄：此时光标语义是「抓着走」，不是「再抓一次」 */
+.paper.is-sec-dragging .r-sec[data-sec-id]::before {
+  opacity: 0;
+}
+
+/* 选中态的手柄常驻一点点提示，便于发现「这里能拖」 */
+.paper .r-sec[data-sec-id].is-sec-selected::before {
+  opacity: 0.55;
+}
+
+/* 打印 / 导出时务必移除手柄，绝不进用户简历 */
+@media print {
+  .paper .r-sec[data-sec-id]::before {
+    display: none;
+  }
+}
+
 .r-sec[data-sec-id] {
   cursor: grab;
 }
@@ -840,6 +938,22 @@ textarea {
 
 .paper.is-sec-dragging {
   user-select: none;
+}
+
+/*
+ * 让位动画：与右侧面板的 160ms 保持一致。
+ *
+ * 只给**没被拖动**的模块加过渡（见下一条规则），被拖的那块必须实时跟手，
+ * 加过渡会让它拖起来发飘、慢半拍。
+ * 用 transform 而不是 top/margin：transform 不触发重排，滚动时也不掉帧。
+ */
+.paper.is-sec-dragging .r-sec[data-sec-id]:not(.is-sec-selected) {
+  transition: transform 160ms ease;
+}
+
+/* 拖动中的模块实时跟手，不加过渡 */
+.paper.is-sec-dragging .r-sec.is-sec-selected {
+  transition: none;
 }
 
 .paper.is-sec-dragging .r-sec[data-sec-id] {

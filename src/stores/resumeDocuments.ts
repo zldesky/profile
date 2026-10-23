@@ -15,7 +15,7 @@
  * 中途崩溃最多留下一个重复槽位，绝不会丢文档。
  */
 
-import { clone, uid } from '@/utils/helpers'
+import { uid } from '@/utils/helpers'
 import { normalizeResume } from '@/data/normalizeResume'
 import { inlineAvatarRefs } from '@/utils/backup'
 import { loadAvatar } from '@/utils/avatarStore'
@@ -109,15 +109,6 @@ export function writeDocSlot(id: string, data: Resume): { ok: boolean; warning: 
   }
 }
 
-/** 槽位的紧凑字符串形态：整包导入时统一走这条，保证与主键同一种存储形态 */
-export function compactDocSlot(data: Resume): { ok: boolean; payload: string } {
-  try {
-    return { ok: true, payload: compactForStorage(data) }
-  } catch {
-    return { ok: false, payload: '' }
-  }
-}
-
 export function removeDocSlot(id: string): void {
   removeKey(docKey(id))
 }
@@ -138,12 +129,6 @@ export function parkDoc(list: DocEntry[], activeId: string, data: Resume): { war
   const outcome = writeDocSlot(entry.id, data)
   writeRegistry(list)
   return { warning: outcome.warning }
-}
-
-/** 复制槽位内容（非活跃文档）；损坏返回 null */
-export function cloneDocSlot(id: string): Resume | null {
-  const data = readDocSlot(id)
-  return data ? (clone(data) as Resume) : null
 }
 
 /** 槽位内容做一次归一化后写入（复制文档时保证新槽位是完整形态） */

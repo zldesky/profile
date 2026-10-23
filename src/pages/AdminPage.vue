@@ -18,6 +18,9 @@ import SvgIcon from '@/components/SvgIcon.vue'
 import { useAuth } from '@/composables/useAuth'
 import { useAuthDialog } from '@/composables/useAuthDialog'
 import { useStyleConfig } from '@/composables/useStyleConfig'
+import type { ServerStyleConfig } from '@/composables/useStyleConfig'
+import { API, API_ERROR, ApiError, errorMessage as describeError, request } from '@/utils/api'
+import { buildMatrixPayload } from '@/utils/styleMatrix'
 import BaseSelect from '@/components/BaseSelect.vue'
 import type { StylePreset } from '@/types/resume'
 import { useToast } from '@/composables/useToast'
@@ -109,44 +112,46 @@ interface AdminPresetPayload {
 async function loadAdmin() {
   state.value = 'loading'
   try {
-    const response = await fetch('/api/styles-admin')
-    if (response.status === 401) {
-      // 会话过期：回到匿名态触发重新登录
-      auth.markExpired()
-      state.value = 'anon'
-      errorMessage.value = '登录已过期，请重新登录'
-      return
-    }
-    if (response.status === 403) {
-      // 会话有效但角色不足（401 前置已挡掉未登录）
-      state.value = 'forbidden'
-      return
-    }
-    const data = await response.json().catch(() => ({}))
-    if (data?.adminRequired) {
-      state.value = 'forbidden'
-      return
-    }
-    if (!response.ok || !data?.ok) throw new Error(data?.message || '配置读取失败')
+    const data = await request<{
+      config: { presets?: AdminPresetPayload[]; matrix?: Record<string, string[]> } | null
+    }>(API.stylesAdmin)
 
     if (data.config) {
-      draftPresets.value = (data.config.presets as AdminPresetPayload[]).map((preset) => ({
+      draftPresets.value = (data.config.presets ?? []).map((preset) => ({
         key: preset.key,
         name: preset.name,
         patch: { ...preset.patch },
       }))
       draftMatrix.value = Object.fromEntries(
-        Object.entries(data.config.matrix || {}).map(([id, keys]) => [id, [...(keys as string[])]]),
+        Object.entries(data.config.matrix || {}).map(([id, keys]) => [id, [...keys]]),
       )
     } else {
+      // 服务端从未保存过：以内置默认作为编辑起点
       const base = draftFromBuiltin()
       draftPresets.value = base.presets
       draftMatrix.value = base.matrix
     }
     state.value = 'ready'
   } catch (error) {
+    /*
+     * 三种失败要分开表达，不能都落到一个「加载失败」：
+     *  - 401 会话过期 → 回到匿名门卫，让用户重新登录；
+     *  - 403 会话有效但角色不足（非管理员）→ 门卫页，重试也没用；
+     *  - 其余 → 错误态，可重试。
+     * 判据用 ApiError.code / status，不再手搓 response.status 分支。
+     */
+    if (error instanceof ApiError && error.code === API_ERROR.AUTH_EXPIRED) {
+      auth.markExpired()
+      state.value = 'anon'
+      errorMessage.value = '登录已过期，请重新登录'
+      return
+    }
+    if (error instanceof ApiError && error.status === 403) {
+      state.value = 'forbidden'
+      return
+    }
     state.value = 'error'
-    errorMessage.value = error instanceof Error ? error.message : '配置读取失败'
+    errorMessage.value = describeError(error) || '配置读取失败'
   }
 }
 
@@ -230,10 +235,16 @@ function setRowAll(templateId: string, allowed: boolean) {
   draftMatrix.value[templateId] = allowed ? draftPresets.value.map((preset) => preset.key) : []
 }
 
-/** 保存后矩阵里没有登记的模板视为不限制；这里把全部模板行都写全，语义更直观 */
-const matrixPayload = computed(() =>
-  Object.fromEntries(TEMPLATES.map((tpl) => [tpl.id, draftMatrix.value[tpl.id] || []])),
-)
+/**
+ * 提交给服务端的兼容矩阵。
+ *
+ * **只写有内容的行。** 原先这里对每个模板都写一行、缺省填空数组，
+ * 注释还说「语义更直观」——实际效果相反：classic / custom 没有 styles 白名单，
+ * 于是它们的行被写成 `[]`，而读取侧把 `[]` 当成了「一个风格都不允许」，
+ * 导致默认模板上所有风格胶囊被置灰。空行 = 不限制，别把它写进存储。
+ * 语义的单一出处是 utils/styleMatrix.ts（有单测锁定）。
+ */
+const matrixPayload = computed(() => buildMatrixPayload(TEMPLATES, draftMatrix.value))
 
 /* ---------------- 保存 ---------------- */
 
@@ -247,38 +258,35 @@ async function saveAll() {
       name: preset.name,
       patch: preset.patch,
     }))
-    const response = await fetch('/api/styles-admin', {
+    await request(API.stylesAdmin, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ presets, matrix: matrixPayload.value }),
+      body: { presets, matrix: matrixPayload.value },
     })
-    const data = await response.json().catch(() => ({}))
-    if (response.status === 401) {
-      auth.markExpired()
-      toast('登录已过期，请重新登录')
-      return
-    }
-    if (!response.ok || !data?.ok) throw new Error(data?.message || '保存失败')
 
     // 服务端可能生成了新 key：回读一次，编辑器同会话立即生效
-    const fresh = await fetch('/api/styles')
-    const freshData = await fresh.json().catch(() => ({}))
-    if (freshData?.ok && freshData.config) {
+    const fresh = await request<{ config: ServerStyleConfig | null }>(API.styles)
+    if (fresh.config) {
       styleConfig.applyLocal(
-        (freshData.config.presets as AdminPresetPayload[]).map((preset) => ({
+        (fresh.config.presets ?? []).map((preset) => ({
           key: preset.key,
           name: preset.name,
           swatch: preset.patch?.accent,
           patch: { ...preset.patch },
         })),
-        freshData.config.matrix || {},
+        fresh.config.matrix || {},
       )
     }
     // 本地草稿对齐服务端（补回生成的 key、去掉 isNew 标记）
     await loadAdmin()
     toast('已保存，编辑器风格与矩阵已更新')
   } catch (error) {
-    toast(error instanceof Error ? error.message : '保存失败')
+    // 保存失败时不再照常提示「已保存」：文档提到的假成功最难查
+    if (error instanceof ApiError && error.code === API_ERROR.AUTH_EXPIRED) {
+      auth.markExpired()
+      toast('登录已过期，请重新登录')
+      return
+    }
+    toast(describeError(error) || '保存失败')
   } finally {
     saving.value = false
   }

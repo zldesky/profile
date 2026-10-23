@@ -12,6 +12,7 @@ import { ref } from 'vue'
 
 import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
+import { API, request } from '@/utils/api'
 import { analyzeResumeImage } from '@/utils/imageTemplate'
 
 /**
@@ -122,15 +123,10 @@ function importFromUrl() {
     return
   }
   runAnalysisTask(async () => {
-    const response = await fetch('/api/image-proxy', {
+    const payload = await request<{ dataUrl: string }>(API.imageProxy, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
+      body: { url },
     })
-    const payload = await response.json().catch(() => null)
-    if (!response.ok || !payload?.ok) {
-      throw new Error(payload?.message || '抓取失败，也可以把图片保存到本地上传')
-    }
     return analyzeFromSrc(payload.dataUrl)
   })
 }

@@ -1,8 +1,9 @@
-import { shallowRef, watch } from 'vue'
+import { onScopeDispose, shallowRef, watch } from 'vue'
 
 import { useAuth } from '@/composables/useAuth'
 import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
+import { isAuthExpired } from '@/utils/api'
 import { debounce } from '@/utils/helpers'
 import { fetchCloudResume, saveCloudResume } from '@/utils/cloudResume'
 
@@ -18,7 +19,7 @@ import { fetchCloudResume, saveCloudResume } from '@/utils/cloudResume'
  * 最后写入者胜出：同一账号多开编辑时后保存的赢。简历场景下
  * 「两份都想要」应走导出 JSON 备份，而不是做字段级合并。
  */
-export function useCloudSync() {
+export function useCloudSync(): { syncing: ReturnType<typeof shallowRef<boolean>> } {
   const store = useResumeStore()
   const auth = useAuth()
   const { toast } = useToast()
@@ -29,13 +30,15 @@ export function useCloudSync() {
   /** 推送失败时降级为纯本地，下次改动再尝试；不打断输入 */
   const pushLater = debounce(() => {
     if (!auth.user.value) return
-    saveCloudResume(store.resume).catch((error) => {
-      if (error.code === 'AUTH_EXPIRED') {
+    saveCloudResume(store.resume).catch((error: unknown) => {
+      // 分流判据用 isAuthExpired，不再各模块自己比对 error.code ——
+      // 那个 code 是各处手搓挂上去的，类型上根本没有保证
+      if (isAuthExpired(error)) {
         auth.markExpired()
         toast('登录已过期，已切换为本地编辑')
         return
       }
-      toast(`云端保存失败：${error.message}`, 3200)
+      toast(`云端保存失败：${(error as Error).message}`, 3200)
     })
   }, 1200)
 
@@ -56,11 +59,11 @@ export function useCloudSync() {
           toast('本地简历已同步到云端')
         }
       } catch (error) {
-        if (error.code === 'AUTH_EXPIRED') {
+        if (isAuthExpired(error)) {
           auth.markExpired()
           toast('登录已过期，已切换为本地编辑')
         } else {
-          toast(`云端同步失败：${error.message}`, 3600)
+          toast(`云端同步失败：${(error as Error).message}`, 3600)
         }
       } finally {
         syncing.value = false
@@ -78,16 +81,33 @@ export function useCloudSync() {
   )
 
   /** 关页/切后台前把未满防抖窗口的改动用 keepalive 请求发出 */
-  function flushOnHide() {
+  function flushOnHide(): void {
     if (!auth.user.value) return
     pushLater.cancel()
     saveCloudResume(store.resume, { keepalive: true }).catch(() => {
       // 页面正在卸载，已无 UI 可提示；下次打开时会以服务端/本地较新者为准
     })
   }
-  window.addEventListener('pagehide', flushOnHide)
-  document.addEventListener('visibilitychange', () => {
+
+  /*
+   * 切到后台也补一次 flush：移动端关页不一定触发 pagehide。
+   *
+   * 两个监听都必须在作用域销毁时摘掉，而且 visibilitychange 的处理器**必须具名**：
+   * 原先这里传的是匿名箭头函数，等于给自己留下了无法移除的监听 ——
+   * 离开 /editor 后它仍持有 store 与 auth 的引用，还会继续往云端推简历，
+   * 每次重进编辑器再叠一对，是实打实的泄漏。
+   */
+  function onVisibilityChange(): void {
     if (document.visibilityState === 'hidden') flushOnHide()
+  }
+
+  window.addEventListener('pagehide', flushOnHide)
+  document.addEventListener('visibilitychange', onVisibilityChange)
+
+  onScopeDispose(() => {
+    pushLater.cancel()
+    window.removeEventListener('pagehide', flushOnHide)
+    document.removeEventListener('visibilitychange', onVisibilityChange)
   })
 
   return { syncing }

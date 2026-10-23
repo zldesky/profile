@@ -296,13 +296,15 @@ AI 助手默认未配置，不影响其它功能：在编辑器的「AI 设置�
 
 **TypeScript 迁移（进行中）**：领域类型在 `src/types/resume.ts`；`src/data`、`src/stores`、核心 `src/utils`、关键 composables 与**整个 `server/`** 已是严格模式 TS，用 `npm run typecheck`（vue-tsc）把关，并由 CI 强制执行（Vite 构建只转译不做类型校验，类型错误不会让 Build 失败，因此 typecheck 必须单独跑）。`server/` 由 Node 内置的类型剥离直接执行 `.ts`，不带构建步骤，细节见 [server/README.md](./server/README.md)。
 
-**一个曾被写错的进度数字**：这里原写「Vue 组件（进行中，18/48）」。「48」这个分母从来没核实过，实际是 **64 个 `.vue`**，而那句真正想说的是**从 JS 迁到 TS 的进度**——不是 `<script setup>` 的进度。两者的现状差别很大：
+**一个曾被写错的进度数字**：这里原写「Vue 组件（进行中，18/48）」。「48」这个分母从来没核实过，而那句真正想说的是**从 JS 迁到 TS 的进度**——不是 `<script setup>` 的进度。两者的现状差别很大：
 
-| 维度                     | 现状                                                                                     |
-| ------------------------ | ---------------------------------------------------------------------------------------- |
-| `<script setup>` 写法    | **64 / 64 全部完成**（`export default`、`defineComponent`、`setup()` 返回对象均为 0 处） |
-| `lang="ts"`              | **64 / 64 全部完成**（约 15,000 行），已无 JS 组件                                       |
-| 这些 JS 组件受类型检查吗 | **不受**。`tsconfig.json` 里 `checkJs: false`，且 `include` 未纳入 `src/**/*.js`         |
+| 维度                  | 现状                                                                                                                                |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `<script setup>` 写法 | **67 / 67 全部完成**（`export default`、`defineComponent`、`setup()` 返回对象均为 0 处）                                            |
+| `lang="ts"`           | **67 / 67 全部完成**（约 15,000 行），已无 JS 组件                                                                                  |
+| 这些组件受类型检查吗  | **受**。`include` 收了 `src/**/*.vue`，由 `npm run typecheck` 把关。**但 `src/` 下 22 个 `.js` 不受**（见 `.agent/conventions.md`） |
+
+> 这里原先写的是「64 / 64」，而实际已经是 67 个 `.vue` —— **数字写下的那天是对的，之后新增组件就悄悄过期了**，且没有任何检查发现它。现已把「`.vue` 数量与 README 分数一致」加进 `npm run check:agent-docs`，以后漂移会直接失败。
 
 实测过「打开 `checkJs` 直接检查现有 JS 组件」这条路：会报 **644 处**错误，其中 289 处只是缺参数注解（`TS7006`）—— 说明这条路的前期噪音很大，**逐组件迁 TS 比全局开 `checkJs` 更可控**。所以策略是分批迁，而不是一次性打开开关。
 
@@ -393,6 +395,8 @@ src/                 前端（Vue 3 + Pinia + Vue Router）
     resumeDocuments.ts    多文档登记表与各文档槽位
     resumeMutations.ts    模块树操作（纯函数，不碰存储、不认识 store）
   utils/             纯逻辑（历史栈、数据清洗、AI 客户端、多格式导出、备份）
+    api.ts           **所有 /api 调用的唯一出口**：端点常量 + 统一错误码 + request/requestBlob
+    styleMatrix.ts   模板 × 风格兼容矩阵的语义（空行 = 不限制），读写两端共用
 server/              应用服务（Express，全部为 .ts，由 node 类型剥离直接执行）
   index.ts           路由与启动：账号、云端简历、PDF 导出、分享、AI 转发
   requestGuards.ts   认证、来源校验与配额（依赖注入，可直测）

@@ -16,7 +16,11 @@
  */
 import { chromium } from '../server/node_modules/playwright-core/index.mjs'
 
-const BASE = 'http://localhost:5173'
+/*
+ * 站点地址。与其余 20+ 个 verify 脚本同一约定：第一个 http:// 参数可覆盖默认值。
+ * 原先这里是写死的常量 —— 唯一两个不能改目标的脚本之一，想在 3001 上跑就只能改源码。
+ */
+const BASE = process.argv.find((a) => a.startsWith('http')) || 'http://localhost:5173'
 
 function log(ok, label, extra = '') {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${extra ? `  — ${extra}` : ''}`)
