@@ -86,6 +86,23 @@ describe('健康检查与公开元数据', () => {
     expect(res.status).toBe(200)
     expect((await res.json()).ok).toBe(true)
   })
+
+  it('每个 /api 响应都带 X-Request-Id，且每次不同（报障时靠它对齐日志）', async () => {
+    /*
+     * 这条钉的是「日志能被对上下」：用户从网络面板复制一个请求 ID，
+     * 运维能在几百行 JSON 日志里精确找到那一条。没有它，
+     * 「我导出失败了」只能靠时间猜测。
+     *
+     * 断言必须能失败：去掉 response 头或改成固定值都会红。
+     */
+    const a = await fetch(`${base}/api/styles`)
+    const b = await fetch(`${base}/api/styles`)
+    const idA = a.headers.get('x-request-id')
+    const idB = b.headers.get('x-request-id')
+    expect(idA).toMatch(/^[0-9a-f-]{36}$/)
+    expect(idB).toMatch(/^[0-9a-f-]{36}$/)
+    expect(idA).not.toBe(idB)
+  })
 })
 
 describe('注册与凭据校验', () => {

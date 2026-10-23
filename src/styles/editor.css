@@ -1004,3 +1004,35 @@ label:has(> .ed-check) {
     transform: translateY(0);
   }
 }
+
+/*
+ * ---------------- 减少动效 ----------------
+ *
+ * 这里刻意**不**用「把时长改成 .01ms」那种常见写法。
+ * 那种做法会让 @keyframes 在极短时间内跑完，某些浏览器上元素会停在动画的
+ * 中间帧（透明度 0.4、位移半个身位），看起来像渲染坏了。
+ * 正确的做法是直接关掉动画本身，并保留静态的最终状态。
+ *
+ * 只兜 `*` 而不挨个改组件：本项目的动效散在十几个组件里，
+ * 逐个加 `@media` 一定会漏；漏掉的那一处恰好就是某位用户的不适来源。
+ *
+ * 唯一例外是「闪一下」的跳转提示（.is-flash / .is-nav-flash）：
+ * 它承载的是「我现在在哪」的信息，不是装饰。关了它就等于丢了这条信息，
+ * 所以给它一个更短、不移动的静态高亮。
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-name: none !important;
+    animation-duration: 0s !important;
+    transition-duration: 0s !important;
+    scroll-behavior: auto !important;
+  }
+
+  .ed-card.is-flash,
+  [data-section-id].is-nav-flash {
+    outline: 2px solid var(--ed-brand);
+    outline-offset: 2px;
+  }
+}

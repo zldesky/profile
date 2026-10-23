@@ -1026,7 +1026,18 @@ app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
 })
 
 const server = app.listen(PORT, HOST, async () => {
-  console.log(`简历服务：\u3000\u3000 http://${HOST}:${PORT}`)
+  /*
+   * 启动横幅的第一行永远是「这是哪个版本的哪一次进程」。
+   * 起因是一次排查：两个终端、同一个端口、一个跑旧 dist 一个跑新源码，
+   * 日志混在一起分不清谁是谁。这一行让人一眼对上「我改的东西到底起没起作用」。
+   * DB 路径只打路径不打内容 —— 备份与迁移靠的就是这个路径。
+   */
+  console.log(
+    `简历服务：\u3000\u3000 http://${HOST}:${PORT}（node ${process.version}，pid ${process.pid}）`,
+  )
+  console.log(
+    `数据文件：\u3000\u3000${process.env.DB_PATH || path.join(__dirname, '.data', 'app.db')}`,
+  )
   console.log(
     isLoopbackHost(HOST)
       ? '监听范围：\u3000\u3000仅本机'

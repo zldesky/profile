@@ -9,6 +9,8 @@
  * 拒绝时直接写响应，不再调用 next()。
  */
 
+import { randomUUID } from 'node:crypto'
+
 import { readPassword } from './auth.ts'
 
 /** 会话 Cookie 名。只放随机令牌，真正的内容在服务端会话表里 */
@@ -244,9 +246,22 @@ export function createRequestGuards(options: RequestGuardOptions): RequestGuards
     res.status(403).json({ ok: false, adminRequired: true, message: '该操作仅限管理员账号' })
   }
 
-  /** 请求日志：一行 JSON，只记 /api（静态资源没有排查价值还刷屏） */
+  /**
+   * 请求日志：一行 JSON，只记 /api（静态资源没有排查价值还刷屏）。
+   *
+   * 每条响应都带一个 `X-Request-Id`，并原样记进日志。
+   * 起因是「用户说某次导出失败了」这种报障：日志里只有一条条匿名记录，
+   * 无法和用户遇到的那一次对应上。有了请求 ID，让用户从浏览器网络面板里复制一个值，
+   * 就能在几百行日志里精确找到那一条 —— 也就能看到耗时、状态码、是不是配额用尽。
+   *
+   * 用 `crypto.randomUUID()` 而不用计数器：多实例部署时计数器会撞车，
+   * 而撞车的 ID 比没有 ID 更糟（会指向错误的请求）。
+   */
   function requestLogger(req: MinimalRequest, res: MinimalResponse, next: NextFn): void {
     if (!String(req.path || '').startsWith('/api')) return next()
+
+    const requestId = randomUUID()
+    res.setHeader?.('X-Request-Id', requestId)
 
     const startedAt = Date.now()
     res.on?.('finish', () => {
@@ -254,6 +269,7 @@ export function createRequestGuards(options: RequestGuardOptions): RequestGuards
       log(
         JSON.stringify({
           t: new Date().toISOString(),
+          rid: requestId,
           method: req.method,
           path: req.path,
           status: res.statusCode,
