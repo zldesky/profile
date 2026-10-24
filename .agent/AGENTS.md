@@ -86,11 +86,17 @@ npm run format:check
 **验证脚本**（`verify:*` / `audit:*`，共 30+ 个）需要先有一个跑着的站点，
 但**默认地址不是统一的** —— 实测分成两半，别猜：
 
-| 默认连哪         | 要求                                              | 脚本                                                                                                                                                                                                   |
-| ---------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `localhost:5173` | 先 `npm run dev`                                  | `verify:drag` `verify:paper` `verify:drag-ux` `verify:panel` `verify:selects` `verify:markdown` `verify:pdf` `verify:pages` `verify:spacing` `verify:toolbar` `build:host-template` `shoot-drag-state` |
-| `127.0.0.1:3001` | 先 `npm run build` + `npm run pdf`（托管 `dist`） | `audit:ui` `audit:interaction` `audit:el` `audit:admin` `verify:templates` `verify:dialogs` `verify:captcha` `probe:perf` `probe:mobile` `probe:session` `audit:trace` `shoot-pages` `shoot:dialog`    |
-| 两者皆可         | 有站点即可                                        | `audit:scroll`（右侧面板滚动流畅度，**两个页签都会量**）                                                                                                                                               |
+| 默认连哪         | 要求                                              | 脚本                                                                                                                                                                                                                                                                                                                              |
+| ---------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `localhost:5173` | 先 `npm run dev`                                  | `verify:drag` `verify:paper` `verify:drag-ux` `verify:panel` `verify:selects` `verify:markdown` `verify:pdf` `verify:pages` `verify:spacing` `verify:toolbar` `verify:expression` `verify:time-field` `verify:text-normalize` `verify:page-fill` `verify:mobile-bar` `verify:touch-drag` `build:host-template` `shoot-drag-state` |
+| `127.0.0.1:3001` | 先 `npm run build` + `npm run pdf`（托管 `dist`） | `audit:ui` `audit:interaction` `audit:el` `audit:admin` `verify:templates` `verify:dialogs` `verify:captcha` `probe:perf` `probe:mobile` `probe:session` `audit:trace` `shoot-pages` `shoot:dialog`                                                                                                                               |
+| 两者皆可         | 有站点即可                                        | `audit:scroll`（右侧面板滚动流畅度，**两个页签都会量**）                                                                                                                                                                                                                                                                          |
+| **自己起服务**   | 不需要先起任何东西                                | `verify:package`（投递包）—— 它自起 harness + 一个 `PDF_PORT` 指向 harness 的 Vite，真下载再真解压；`backup:db` 不需要站点                                                                                                                                                                                                        |
+
+**`verify:package` 值得单列**：它验证的是「点菜单 → 服务端导出 → 组装 zip → 浏览器下载 → 系统解压」
+这条完整链路。中途踩过一个坑：Vite 的 `/api` 是反代到 `PDF_PORT` 的，
+如果复用它连 3001，请求根本到不了 harness —— 表现为「口令正确却一直弹口令框」。
+所以它自己起一个 5199 的 Vite 并把 `PDF_PORT` 指过去。
 
 两者都支持用第一个 `http://...` 参数覆盖默认地址。连错了会得到 `ERR_CONNECTION_REFUSED`——
 那不是代码坏了。

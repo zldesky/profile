@@ -47,6 +47,13 @@
     "verify:toolbar": "node tools/verify-toolbar-four-way.mjs",
     "verify:field-nudge": "node tools/verify-field-nudge.mjs",
     "verify:field-icon-drag": "node tools/verify-field-icon-drag.mjs",
+    "verify:expression": "node tools/verify-expression.mjs",
+    "verify:time-field": "node tools/verify-time-field.mjs",
+    "verify:text-normalize": "node tools/verify-text-normalize.mjs",
+    "verify:page-fill": "node tools/verify-page-fill.mjs",
+    "verify:mobile-bar": "node tools/verify-mobile-bar.mjs",
+    "verify:touch-drag": "node tools/verify-touch-drag.mjs",
+    "verify:package": "node tools/verify-delivery-package.mjs",
     "build:host-template": "node tools/build-host-template.mjs",
     "preview:host-theme": "node tools/preview-host-theme.mjs"
   },
