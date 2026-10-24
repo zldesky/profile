@@ -10,7 +10,7 @@
 import { computed } from 'vue'
 
 import SvgIcon from '@/components/SvgIcon.vue'
-import { TEMPLATES } from '@/data/presets'
+import { DISCOURAGED_STYLE_KEYS, TEMPLATES } from '@/data/presets'
 import { useResumeStore } from '@/stores/resume'
 import { useStyleConfig } from '@/composables/useStyleConfig'
 import type { StylePreset, Theme } from '@/types/resume'
@@ -64,6 +64,15 @@ function isStyleActive(preset: StylePreset) {
 function lockedTitle(kind: 'tpl' | 'style', name: string) {
   return `「${name}」与当前${kind === 'tpl' ? '风格' : '模板'}不搭，已禁用；可在「色彩 / 标题」里手动细调出类似效果`
 }
+
+/** 网上简历建议慎用的鲜艳/创意色（标注不删除，见 DISCOURAGED_STYLE_KEYS） */
+function isDiscouraged(preset: StylePreset) {
+  return DISCOURAGED_STYLE_KEYS.has(preset.key)
+}
+
+function discouragedTitle(name: string) {
+  return `套用「${name}」风格。网上简历普遍建议慎用鲜艳/创意色，多数求职场景不推荐；创意/设计类岗位仍可选用`
+}
 </script>
 
 <template>
@@ -81,12 +90,17 @@ function lockedTitle(kind: 'tpl' | 'style', name: string) {
         :class="{ 'is-active': isStyleActive(preset), 'is-locked': isStyleLocked(preset) }"
         :disabled="isStyleLocked(preset)"
         :title="
-          isStyleLocked(preset) ? lockedTitle('style', preset.name) : `套用「${preset.name}」风格`
+          isStyleLocked(preset)
+            ? lockedTitle('style', preset.name)
+            : isDiscouraged(preset)
+              ? discouragedTitle(preset.name)
+              : `套用「${preset.name}」风格`
         "
         @click="applyStyle(preset)"
       >
         <i class="style-swatch" :style="{ background: preset.swatch }"></i>
         <span>{{ preset.name }}</span>
+        <i v-if="isDiscouraged(preset)" class="style-flag">不推荐</i>
       </button>
     </div>
 
@@ -139,7 +153,7 @@ function lockedTitle(kind: 'tpl' | 'style', name: string) {
     </div>
 
     <p class="ed-hint">
-      风格管配色与标题装饰，模板管排版结构；不搭的组合已置灰，想微调可在「色彩」「标题」里手动改。
+      风格管配色与标题装饰，模板管排版结构；不搭的组合已置灰，想微调可在「色彩」「标题」里手动改。标「不推荐」的是网上简历建议慎用的鲜艳/创意色，仍可自由选用。
     </p>
   </div>
 </template>
@@ -154,6 +168,7 @@ function lockedTitle(kind: 'tpl' | 'style', name: string) {
 }
 
 .style-chip {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -166,6 +181,31 @@ function lockedTitle(kind: 'tpl' | 'style', name: string) {
   color: #475467;
   cursor: pointer;
   transition: 0.15s;
+}
+
+/*
+ * 「不推荐」角标：网上简历建议慎用的鲜艳/创意色（DISCOURAGED_STYLE_KEYS）。
+ * 叠在胶囊右上角而不是占一行 —— 胶囊本身已经很小，行内插字会把整排撑乱；
+ * 用告警色的浅底深字（与 .tb-badge 同一语言），禁用置灰时跟着胶囊一起变淡。
+ */
+.style-flag {
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--ed-warn-tint);
+  color: var(--ed-warn);
+  font-size: 10px;
+  font-style: normal;
+  line-height: 15px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.style-chip:disabled .style-flag {
+  filter: grayscale(0.85);
+  opacity: 0.55;
 }
 
 .style-chip:hover {

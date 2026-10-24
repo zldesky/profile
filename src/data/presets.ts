@@ -521,3 +521,18 @@ export const STYLE_PRESETS: StylePreset[] = [
     },
   },
 ]
+
+/**
+ * 网上简历建议慎用的风格（鲜艳 / 创意色）：暖橙活力、葡紫创意、琥珀暖金、樱粉活力。
+ *
+ * 按**键名**标注而不是删除：这些风格在创意 / 设计类岗位仍有用武之地，
+ * 用户的选择权不收走，只在选择器上挂「不推荐」角标提示（见 TemplatePicker）。
+ * 按键匹配意味着管理后台若删除后用新键重建同名风格，角标不会跟随 ——
+ * 键是风格的稳定身份，名字不是。
+ */
+export const DISCOURAGED_STYLE_KEYS: ReadonlySet<string> = new Set([
+  'ember',
+  'violet',
+  'amber',
+  'sakura',
+])
