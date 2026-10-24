@@ -30,6 +30,8 @@ import { computed } from 'vue'
 import { VueDraggable } from 'vue-draggable-plus'
 import type { SortableEvent } from 'vue-draggable-plus'
 
+import { useMediaQuery } from '@/composables/useMediaQuery'
+
 /** 至少要有 id —— 顺序是按 id 传递的 */
 interface Identified {
   id: string
@@ -45,6 +47,30 @@ const props = withDefaults(
     animation?: number
   }>(),
   { handle: '.ed-drag', animation: 160 },
+)
+
+/**
+ * 触屏上必须「按住一会儿」才开始拖。
+ *
+ * 起因是一个真实的移动端体验问题：手指按在手柄上想上下滑页面，
+ * SortableJS 立刻把它当成拖拽，页面不滚、卡片跟着手指跑。
+ * 桌面端没有这个问题（鼠标本来就要「按住再拖」），所以只对触屏生效。
+ *
+ * 250ms 是取舍：太短（<150ms）与轻扫滚动难以区分；太长（>400ms）会让人觉得卡。
+ * `touchStartThreshold: 3` 允许手指轻微抖动而不会取消长按。
+ * `delayOnTouchOnly` 保证鼠标拖拽立刻响应 —— 桌面上多等 250ms 就是迟钝。
+ */
+const isTouch = useMediaQuery('(hover: none), (pointer: coarse)')
+const dragOptions = computed(() =>
+  isTouch.value
+    ? {
+        delay: 250,
+        delayOnTouchOnly: true,
+        touchStartThreshold: 3,
+        // 长按期间不允许页面滚动，否则会把拖拽手势抢走
+        preventOnFilter: false,
+      }
+    : {},
 )
 
 const emit = defineEmits<{
@@ -139,6 +165,7 @@ function move(from: number, to: number): void {
     :model-value="source"
     :animation="animation"
     :handle="handle"
+    v-bind="dragOptions"
     ghost-class="ed-ghost"
     chosen-class="ed-chosen"
     @update:model-value="onUpdate"
