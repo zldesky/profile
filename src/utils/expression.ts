@@ -271,112 +271,31 @@ export function analyzeEntry(
   )
 }
 
-/* ---------------- 时间区间（completeness 与界面排序共用） ---------------- */
-
-/** 年份-月份；`null` 表示未识别 */
-export interface MonthPoint {
-  year: number
-  month: number
-}
-
-export interface TimeRange {
-  start: MonthPoint
-  /** null 表示「至今」 */
-  end: MonthPoint | null
-  /** 是否识别出了「至今」 */
-  ongoing: boolean
-}
 
 /*
- * 年份必须**不紧邻其它数字** —— 两条正则都要这个边界。
+ * ---------------- 时间区间 ----------------
  *
- * 踩坑现场：`2022 - 2024` 被解析成「2022 年 20 月」。
- * 原正则 `(\d{4})\s*[年\-\/.]\s*(\d{1,2})` 的 `\d{4}` 从第一个 `2022` 起步没问题，
- * 但分隔符类里含 `-`，于是 ` - 2` 被当成「年-月」的分隔，月份抓到 `2024` 的前两位 `20`。
- * 只要年份前面不允许再跟数字，`2024` 就不会被当成月份。
- * 这条是测试先红、才发现的 —— 不是推理出来的。
+ * 实现搬到了 utils/entryTime.ts，这里只做重导出。
+ * 搬走的原因：界面上的时间选择器也要用同一套解析与格式化。
+ * 两处各留一份的话，迟早出现「检查说没重叠、界面显示的是另一个区间」——
+ * 而那种矛盾一旦被用户发现，整个检查功能就不可信了。
  */
-const DATE_RE = /(?<!\d)(\d{4})\s*[年\-/.]\s*(\d{1,2})(?!\d)/
-/*
- * 年份必须**不紧邻其它数字**。
- *
- * 原先的正则 `(19|20)\d{2}` 会从 `2022 - 2024` 里抠出 `2022`（对）和 `2022`（错）、
- * `024` 之类，因为 `\d{2}` 可以从任意位置起步。`-` 前面的 `20` 与后面的 `22` 拼成
- * 一个新的四位串，于是「只有年份」的区间被解析成 2022-20 这种月份 20 的鬼东西。
- * 用数字边界把「独立出现的年份」钉死 — u 模式下 `\d` 是 ASCII 数字，不会跨全角。
- */
-const YEAR_ONLY_RE = /(?<!\d)(?:19|20)\d{2}(?!\d)/g
-
-/**
- * 解析一段经历的时间文本。
- *
- * 支持的写法（文档里示例、用户手打、PDF 导入实际会产出的）：
- *   `2022-06 - 至今`、`2022.6 ~ 2023.11`、`2022年6月—2023年11月`、`2022 - 2024`、`2019`
- * 解析不出来就返回 null —— **宁可判「不知道」，也不要猜一个区间**：
- * 猜错会导致「时间重叠」误报，而误报比漏报更伤信任。
- */
-export function parseTimeRange(text: string): TimeRange | null {
-  const raw = String(text ?? '').trim()
-  if (!raw) return null
-
-  const dates = [...raw.matchAll(new RegExp(DATE_RE.source, 'g'))].map((m) => ({
-    year: Number(m[1]),
-    month: Number(m[2]),
-  }))
-  const ongoing = /至今|现在|目前|present|now/i.test(raw)
-
-  if (dates.length >= 2) {
-    return { start: dates[0], end: dates[1], ongoing: false }
-  }
-  if (dates.length === 1) {
-    if (ongoing) return { start: dates[0], end: null, ongoing: true }
-    return { start: dates[0], end: dates[0], ongoing: false }
-  }
-
-  // 只有年份：`2022 - 2024` / `2019`。年份之间用中位数近似，不做月份推测。
-  const years = [...raw.matchAll(YEAR_ONLY_RE)].map((m) => Number(m[0])).filter((y) => y > 1950)
-  if (years.length >= 2) {
-    return {
-      start: { year: years[0], month: 1 },
-      end: { year: years[1], month: 12 },
-      ongoing: false,
-    }
-  }
-  if (years.length === 1) {
-    if (ongoing) return { start: { year: years[0], month: 1 }, end: null, ongoing: true }
-    return {
-      start: { year: years[0], month: 1 },
-      end: { year: years[0], month: 12 },
-      ongoing: false,
-    }
-  }
-  return null
-}
-
-/** 月份序号，便于比较 */
-export function monthIndex(point: MonthPoint): number {
-  return point.year * 12 + (point.month - 1)
-}
-
-/**
- * 两个时间区间是否重叠。
- * 「至今」视为无限远；两者都可以是过去的区间。
- * 相邻不重叠（A 结束于 2022-06、B 开始于 2022-06）**不算重叠** —— 同月交接是常态。
- */
-export function rangesOverlap(a: TimeRange, b: TimeRange): boolean {
-  const aStart = monthIndex(a.start)
-  const aEnd = a.end ? monthIndex(a.end) : Number.POSITIVE_INFINITY
-  const bStart = monthIndex(b.start)
-  const bEnd = b.end ? monthIndex(b.end) : Number.POSITIVE_INFINITY
-  return aStart < bEnd && bStart < aEnd
-}
-
-/**
- * 把时间区间归一成统一的展示写法 `YYYY-MM - YYYY-MM` / `YYYY-MM - 至今`。
- * 供界面上的时间选择器使用；解析不出来时原样返回，绝不改写用户的自由输入。
- */
-export function formatTimeRange(range: TimeRange | null, fallback: string): string {
-  if (!range) return fallback
-  const at = (p: MonthPoint) => `${p.year}-${String(p.month).padStart(2, '0')}`
-  return `${at(range.start)} - ${range.ongoing ? '至今' : at(range.end ?? range.start)}`
-}
+export {
+  EMPTY_PICKER_VALUE,
+  MONTH_OPTIONS,
+  formatTimeRange,
+  formatYearMonth,
+  fromPickerValue,
+  monthIndex,
+  parseTimeRange,
+  rangesOverlap,
+  readTimeInput,
+  toPickerValue,
+  yearOptions,
+} from '@/utils/entryTime'
+export type {
+  MonthPoint,
+  TimeInput,
+  TimePickerValue,
+  TimeRange,
+} from '@/utils/entryTime'

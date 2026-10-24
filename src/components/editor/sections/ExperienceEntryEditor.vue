@@ -10,6 +10,7 @@ import ExpressionAssistantDialog from '@/components/ExpressionAssistantDialog.vu
 import SvgIcon from '@/components/SvgIcon.vue'
 import DragHandle from '@/components/editor/DragHandle.vue'
 import DraggableList from '@/components/editor/DraggableList.vue'
+import EntryTimeField from '@/components/editor/basics/EntryTimeField.vue'
 import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
 import { readImageAsDataUrl } from '@/utils/helpers'
@@ -146,15 +147,13 @@ function reorderBullets(ids: string[]): void {
       </button>
     </div>
 
-    <label class="ed-row">
+    <div class="ed-row">
       <span class="ed-label">时间</span>
-      <input
-        class="ed-input"
-        :value="entry.time"
-        placeholder="2022-06 - 至今"
-        @input="updateEntry({ time: ($event.target as HTMLInputElement).value })"
+      <EntryTimeField
+        :model-value="entry.time"
+        @update:model-value="updateEntry({ time: $event })"
       />
-    </label>
+    </div>
 
     <label class="ed-row">
       <span class="ed-label">单位</span>
