@@ -18,6 +18,7 @@
     "typecheck": "vue-tsc --noEmit",
     "check": "npm run typecheck && npm run lint && npm test",
     "check:agent-docs": "node tools/check-agent-docs.mjs",
+    "backup:db": "node tools/backup-db.mjs",
     "audit:login": "node tools/audit-login.mjs",
     "audit:ui": "node tools/audit-ui.mjs",
     "audit:el": "node tools/probe-el.mjs",

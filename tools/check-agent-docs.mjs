@@ -244,6 +244,25 @@ if (claimedCount > 0) {
 
 const checks4 = [
   {
+    /*
+     * 两份 package.json 的 engines 必须一致。
+     *
+     * 起因：服务端依赖 node:sqlite，对 Node 版本有硬要求，而 `server/package.json`
+     * 一直没写 engines —— 只有根目录有。于是「根目录能装、server 目录随便装」，
+     * 版本不对时表现为「服务起不来」而不是「装错版本」。
+     * 这是「同一件事写两处、只写了一处」的典型，属于 E6 那一类。
+     */
+    label: '根目录与 server/ 的 engines.node 一致',
+    run() {
+      const rootPkg = JSON.parse(read('package.json'))
+      const serverPkg = JSON.parse(read('server/package.json'))
+      const a = rootPkg.engines?.node
+      const b = serverPkg.engines?.node
+      return Boolean(a) && a === b
+    },
+    hint: '两处都写 node: "^22.18.0 || >=24.12.0"（服务端用 node:sqlite，版本必须对）',
+  },
+  {
     label: 'server 相对导入必须写 .ts（tsconfig 开了 allowImportingTsExtensions）',
     run() {
       const tsconfig = read('tsconfig.json')
@@ -333,7 +352,9 @@ const checks4 = [
        * 两处一起改才算完成，所以分开断言、分别给提示。
        */
       const actual = (read('PITFALLS.md').match(/^### A\d/gm) || []).length
-      const claimed = Number((read('.agent/AGENTS.md').match(/A 类有 \*\*(\d+) 条\*\*/) || [])[1] || 0)
+      const claimed = Number(
+        (read('.agent/AGENTS.md').match(/A 类有 \*\*(\d+) 条\*\*/) || [])[1] || 0,
+      )
       if (!claimed) return false
       return claimed === actual
     },
