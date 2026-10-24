@@ -26,7 +26,8 @@ import {
   watch,
 } from 'vue'
 
-import type { EditTarget } from '@/composables/useInlineEdit'
+import { BOLDABLE_FIELDS, type EditTarget } from '@/composables/useInlineEdit'
+import { isRangeInsideBold, toggleBoldRange } from '@/utils/richText'
 
 const props = defineProps<{
   /** 被编辑的字段；为 null 时不显示 */
@@ -54,6 +55,50 @@ const pos = shallowRef<{ top: number; left: number; width: number; height: numbe
 const fontSize = shallowRef<number | null>(null)
 
 /**
+ * 输入框内当前的文字选区（原始字符串坐标，与数据的下标一一对应）。
+ * 非空时浮层上方浮出「加粗」按钮；null 表示没有选中。
+ */
+const selRange = shallowRef<{ start: number; end: number } | null>(null)
+
+/** 当前字段是否支持行内加粗 —— 只收经 RichText 渲染的值类字段 */
+const boldable = computed(() => BOLDABLE_FIELDS.has(props.target?.field ?? ''))
+
+/** 选区是否已完全在粗体里：决定按钮是「加粗」还是「取消加粗」 */
+const boldActive = computed(() => {
+  const range = selRange.value
+  if (!range) return false
+  return isRangeInsideBold(draft.value, range.start, range.end)
+})
+
+function syncSelection(): void {
+  const el = inputRef.value
+  if (!el) return
+  const { selectionStart, selectionEnd } = el
+  selRange.value =
+    selectionStart !== null && selectionEnd !== null && selectionEnd > selectionStart
+      ? { start: selectionStart, end: selectionEnd }
+      : null
+}
+
+/**
+ * 对选区执行加粗/取消加粗，写回草稿并恢复选区。
+ *
+ * 按钮上用 `@mousedown.prevent` 保住输入框焦点（blur 会提交并关闭浮层），
+ * 这里只需要改草稿、把 DOM 选区拨回切换后的位置即可。
+ */
+async function applyBold(): Promise<void> {
+  const range = selRange.value
+  const el = inputRef.value
+  if (!range || !el) return
+  const next = toggleBoldRange(draft.value, range.start, range.end)
+  draft.value = next.text
+  await nextTick()
+  el.focus({ preventScroll: true })
+  el.setSelectionRange(next.selectionStart, next.selectionEnd)
+  syncSelection()
+}
+
+/**
  * 本次打开是否已经收尾（提交或取消）。
  *
  * 回车保存、失焦保存、Esc 取消可能在同一瞬间先后触发（回车会让输入框失焦，
@@ -62,6 +107,17 @@ const fontSize = shallowRef<number | null>(null)
 let settled = false
 
 const target = computed(() => props.target)
+
+/** 输入框的提示语：按字段能力拼装，改能力清单时只动 BOLDABLE_FIELDS */
+const inputTitle = computed(() => {
+  const t = target.value
+  if (!t) return ''
+  const base =
+    t.kind === 'multiline'
+      ? `${t.label} · Ctrl+Enter 保存，Esc 取消`
+      : `${t.label} · 回车保存，Esc 取消`
+  return boldable.value ? `${base}；选中文字后 Ctrl+B 加粗` : base
+})
 
 const boxStyle = computed(() => {
   const at = pos.value
@@ -148,6 +204,7 @@ async function sync(): Promise<void> {
   // 新目标 / 重新打开：允许本轮的提交或取消
   settled = false
   draft.value = props.target.value
+  selRange.value = null
   pos.value = null
   await nextTick()
   place()
@@ -217,6 +274,17 @@ function onKeydown(event: KeyboardEvent): void {
     cancel()
     return
   }
+  // Ctrl/Cmd+B：切换选区的加粗（与浮出的 B 按钮同一份逻辑）
+  if (
+    boldable.value &&
+    (event.ctrlKey || event.metaKey) &&
+    !event.altKey &&
+    event.key.toLowerCase() === 'b'
+  ) {
+    event.preventDefault()
+    void applyBold()
+    return
+  }
   // 多行框里回车换行，Ctrl/Cmd+Enter 才保存；单行框直接回车保存
   if (event.key !== 'Enter') return
   if (target.value?.kind === 'multiline' && !event.ctrlKey && !event.metaKey) return
@@ -255,9 +323,12 @@ function onBlur(): void {
         v-model="draft"
         class="ie-input ie-textarea"
         :aria-label="target.label"
-        :title="`${target.label} · Ctrl+Enter 保存，Esc 取消`"
+        :title="inputTitle"
         @keydown="onKeydown"
         @blur="onBlur"
+        @select="syncSelection"
+        @keyup="syncSelection"
+        @mouseup="syncSelection"
       ></textarea>
       <input
         v-else
@@ -266,10 +337,29 @@ function onBlur(): void {
         class="ie-input"
         type="text"
         :aria-label="target.label"
-        :title="`${target.label} · 回车保存，Esc 取消`"
+        :title="inputTitle"
         @keydown="onKeydown"
         @blur="onBlur"
+        @select="syncSelection"
+        @keyup="syncSelection"
+        @mouseup="syncSelection"
       />
+      <!--
+        选区加粗按钮：只在「有选中且字段支持」时出现。
+        mousedown.prevent 是关键 —— 否则点按钮会让输入框失焦，
+        blur 先一步提交并关闭浮层，加粗就没机会执行了。
+      -->
+      <button
+        v-if="boldable && selRange"
+        type="button"
+        class="ie-bold no-print"
+        :aria-label="boldActive ? '取消加粗' : '加粗'"
+        :title="boldActive ? '取消加粗（Ctrl+B）' : '加粗（Ctrl+B）'"
+        @mousedown.prevent
+        @click="applyBold"
+      >
+        B
+      </button>
     </div>
   </Teleport>
 </template>
@@ -320,5 +410,33 @@ function onBlur(): void {
 .ie-textarea:focus,
 .ie-input:focus {
   border-color: var(--accent, #2563eb);
+}
+
+/*
+ * 选区加粗按钮：浮在编辑框**下方右侧**。上方是字段微调提示条（FieldNudgeHint），
+ * 放上面会与它叠在一行；下方只在就地编辑期间出现，压住下一行文字是可接受的瞬时态。
+ * 24px 高与全站最小点击目标一致（audit-ui 的达标线），描边与阴影取界面令牌。
+ */
+.ie-bold {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border: 1px solid var(--ed-line-2, #d0d5dd);
+  border-radius: var(--ed-radius-sm, 6px);
+  background: var(--ed-surface, #fff);
+  color: var(--ed-ink, #101828);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--ed-shadow-sm, 0 1px 3px rgba(16, 24, 40, 0.1));
+}
+
+.ie-bold:hover {
+  background: var(--ed-fill-2, #f9fafb);
 }
 </style>

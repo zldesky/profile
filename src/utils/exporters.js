@@ -6,7 +6,16 @@
  * 两者都跳过隐藏模块与空内容，保证导出即可用。
  */
 
+import { stripBoldMarkers } from './richText'
+
 const str = (value) => String(value ?? '').trim()
+
+/**
+ * 值类文字经纸面行内加粗后可能带有 `**…**` 标记（见 utils/richText.ts）。
+ * Markdown 版原样保留（那是合法的加粗语法）；纯文本版必须剥掉，
+ * 否则「不含任何标记符号」的承诺被打破 —— 用同一个函数保证两处一致。
+ */
+const plain = (value) => stripBoldMarkers(str(value))
 
 /** 依序拼接非空片段，作为条目标题行：机构 · 职位 */
 function joinParts(parts, separator = ' · ') {
@@ -100,24 +109,24 @@ export function resumeToPlainText(resume) {
         if (str(entry?.time)) lines.push(`时间：${str(entry.time)}`)
         ;(Array.isArray(entry?.meta) ? entry.meta : [])
           .filter((m) => str(m?.value))
-          .forEach((m) => lines.push(`${str(m.label) || '补充'}：${str(m.value)}`))
+          .forEach((m) => lines.push(`${str(m.label) || '补充'}：${plain(m.value)}`))
         ;(Array.isArray(entry?.bullets) ? entry.bullets : [])
           .filter((b) => str(b?.text))
-          .forEach((b) => lines.push(`- ${str(b.text)}`))
+          .forEach((b) => lines.push(`- ${plain(b.text)}`))
       })
     } else if (section.type === 'grid') {
       ;(Array.isArray(section.items) ? section.items : [])
         .filter((item) => str(item?.value))
-        .forEach((item) => lines.push(`${str(item.label) || '信息'}：${str(item.value)}`))
+        .forEach((item) => lines.push(`${str(item.label) || '信息'}：${plain(item.value)}`))
     } else if (section.type === 'skills') {
       ;(Array.isArray(section.fields) ? section.fields : [])
         .filter((f) => str(f?.value))
-        .forEach((f) => lines.push(`${str(f.label) || '技能'}：${str(f.value)}`))
+        .forEach((f) => lines.push(`${str(f.label) || '技能'}：${plain(f.value)}`))
       ;(Array.isArray(section.items) ? section.items : [])
         .filter((s) => str(s?.name))
-        .forEach((s) => lines.push(str(s.name)))
+        .forEach((s) => lines.push(plain(s.name)))
     } else if (section.type === 'text') {
-      const content = str(section.content)
+      const content = plain(section.content)
       if (content) lines.push(content)
     }
   })

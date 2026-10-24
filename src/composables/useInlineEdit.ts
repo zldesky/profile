@@ -32,6 +32,8 @@ export interface EditTarget {
   /** 当前值（字符串形式，便于放进输入框） */
   value: string
   kind: FieldKind
+  /** 字段种类（data-field 的值），就地编辑据此决定能力开关（如行内加粗） */
+  field: string
   /** 写回 */
   commit: (next: string) => void
 }
@@ -62,6 +64,22 @@ export const FIELD_LABELS: Record<string, string> = {
 /** 多行输入：正文与要点是成段的，单行框里改很难受 */
 const MULTILINE_FIELDS = new Set(['content', 'bulletText'])
 
+/**
+ * 值类文字支持行内加粗（`**…**`，就地编辑里选中后 Ctrl/B 按钮切换）。
+ *
+ * 只收经 RichText 渲染的字段（见 SectionBody.vue）：页头的姓名 / 职位 / 联系方式
+ * 与模块标题、条目机构等由各模板直接插值渲染，加粗标记不会被解析，
+ * 写进数据只会让纸面出现字面星号 —— 所以就地编辑对这些字段不提供加粗。
+ */
+export const BOLDABLE_FIELDS = new Set([
+  'content',
+  'gridValue',
+  'metaValue',
+  'bulletText',
+  'skillValue',
+  'skillName',
+])
+
 function findSection(resume: Resume, id: string): Section | undefined {
   return resume.sections.find((section) => section.id === id)
 }
@@ -78,7 +96,7 @@ export function resolveEditTarget(resume: Resume, target: FieldTarget): EditTarg
   if (!label) return null
 
   const kind: FieldKind = MULTILINE_FIELDS.has(target.field) ? 'multiline' : 'text'
-  const base = { label, kind }
+  const base = { label, kind, field: target.field }
 
   /* ---------- 页头字段（不属于任何模块） ---------- */
   if (target.field === 'name') {

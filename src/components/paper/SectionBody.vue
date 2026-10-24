@@ -10,10 +10,14 @@
  *
  * `data-field-key` 是「字段级间距微调」的锚点（见 utils/fieldLayout.ts）：
  * 点某个字段后按 WASD 调整的是它自己，键值由 field + itemId 组成，逐条独立。
+ *
+ * 值类文字（网格值 / meta 值 / 要点 / 技能值 / 技能名 / 段落正文）经 RichText 渲染，
+ * 支持 `**加粗**` 行内标记；标签与时间等短字段保持纯文本插值。
  */
 import { computed } from 'vue'
 
 import SvgIcon from '@/components/SvgIcon.vue'
+import RichText from '@/components/paper/RichText.vue'
 import { fieldLayoutKey, fieldLayoutStyle } from '@/utils/fieldLayout'
 import type { Section } from '@/types/resume'
 import type { StyleValue } from 'vue'
@@ -70,8 +74,8 @@ function fieldStyle(field: string, itemId = ''): { key: string; style: StyleValu
           :data-item-id="item.id"
           :data-field-key="fieldStyle('gridValue', item.id).key"
           :style="fieldStyle('gridValue', item.id).style"
-          >{{ item.value }}</span
-        >
+          ><RichText :text="item.value"
+        /></span>
       </div>
     </div>
 
@@ -131,8 +135,8 @@ function fieldStyle(field: string, itemId = ''): { key: string; style: StyleValu
             :data-item-id="meta.id"
             :data-field-key="fieldStyle('metaValue', meta.id).key"
             :style="fieldStyle('metaValue', meta.id).style"
-            >{{ meta.value }}</span
-          >
+            ><RichText :text="meta.value"
+          /></span>
         </div>
         <ul v-if="entry.bullets.length" class="r-bullets">
           <li
@@ -143,7 +147,7 @@ function fieldStyle(field: string, itemId = ''): { key: string; style: StyleValu
             :data-field-key="fieldStyle('bulletText', bullet.id).key"
             :style="fieldStyle('bulletText', bullet.id).style"
           >
-            {{ bullet.text }}
+            <RichText :text="bullet.text" />
           </li>
         </ul>
       </article>
@@ -166,8 +170,8 @@ function fieldStyle(field: string, itemId = ''): { key: string; style: StyleValu
           :data-item-id="field.id"
           :data-field-key="fieldStyle('skillValue', field.id).key"
           :style="fieldStyle('skillValue', field.id).style"
-          >{{ field.value }}</span
-        >
+          ><RichText :text="field.value"
+        /></span>
       </div>
       <!--
         技能名列表。
@@ -189,7 +193,7 @@ function fieldStyle(field: string, itemId = ''): { key: string; style: StyleValu
           :data-field-key="fieldStyle('skillName', skill.id).key"
           :style="fieldStyle('skillName', skill.id).style"
         >
-          {{ skill.name }}
+          <RichText :text="skill.name" />
         </li>
       </ul>
     </template>
@@ -202,7 +206,7 @@ function fieldStyle(field: string, itemId = ''): { key: string; style: StyleValu
       :data-field-key="fieldStyle('content').key"
       :style="fieldStyle('content').style"
     >
-      {{ section.content }}
+      <RichText :text="section.content" />
     </p>
   </div>
 </template>

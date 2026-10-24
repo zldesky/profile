@@ -92,3 +92,28 @@ describe('resumeToPlainText', () => {
     expect(text.endsWith('\n')).toBe(true)
   })
 })
+
+describe('纸面加粗标记在两种导出里的去向', () => {
+  /** 给要点与段落写回带 ** 的内容（就地编辑加粗的产物） */
+  const boldedResume = () => {
+    const resume = createResume()
+    const work = resume.sections.find((s) => s.type === 'entries')
+    work.items[0].bullets[0].text = '负责**核心业务**模块的设计与迭代'
+    const summary = resume.sections.find((s) => s.type === 'text')
+    summary.content = '五年行业经验，**擅长从零搭建**项目工程体系'
+    return resume
+  }
+
+  it('Markdown 版原样保留 **（那是合法的加粗语法）', () => {
+    const md = resumeToMarkdown(boldedResume())
+    expect(md).toContain('负责**核心业务**模块的设计与迭代')
+    expect(md).toContain('**擅长从零搭建**')
+  })
+
+  it('纯文本版剥掉 **，只留内容（ATS 不应看到星号）', () => {
+    const text = resumeToPlainText(boldedResume())
+    expect(text).toContain('负责核心业务模块的设计与迭代')
+    expect(text).toContain('五年行业经验，擅长从零搭建项目工程体系')
+    expect(text).not.toContain('**')
+  })
+})
