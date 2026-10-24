@@ -30,7 +30,9 @@ page.on('console', (m) => {
 await page.goto(url, { waitUntil: 'networkidle', timeout: 40000 })
 await page.waitForTimeout(1500)
 await page.evaluate(() => {
-  const s = [...document.querySelectorAll('button')].find((x) => (x.textContent || '').trim() === '跳过引导')
+  const s = [...document.querySelectorAll('button')].find(
+    (x) => (x.textContent || '').trim() === '跳过引导',
+  )
   if (s) s.click()
 })
 await page.waitForTimeout(400)
@@ -59,7 +61,12 @@ async function openEditorAt(field) {
     return { x: r.x + Math.max(4, r.width / 2), y: r.y + r.height / 2 }
   }, field)
   if (!box) return { ok: false, why: '纸面上没有这个锚点' }
-  await page.mouse.click(box.x, box.y)
+  /*
+   * 就地编辑的手势是**双击**：单击已被「选中字段微调」占用
+   * （PreviewPane.onPaperDblClick / onPaperClick）。这里曾经用单击，
+   * 手势改版后 5 个用例全数「没有弹出编辑框」，脚本却没人跑所以一直没发现。
+   */
+  await page.mouse.dblclick(box.x, box.y)
   await page.waitForTimeout(450)
   const editor = await findEditor()
   return editor ? { ok: true, ...editor } : { ok: false, why: '没有弹出编辑框' }
@@ -93,7 +100,8 @@ for (const [field, label] of CASES) {
       (el) => /^ie-input/.test(String(el.className || '')) && el.offsetParent !== null,
     )
     if (!inp) return false
-    const proto = inp.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+    const proto =
+      inp.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
     const setter = Object.getOwnPropertyDescriptor(proto, 'value').set
     setter.call(inp, val)
     inp.dispatchEvent(new Event('input', { bubbles: true }))
@@ -252,9 +260,7 @@ let groupOk = false
     await page.waitForTimeout(700)
     const after = await titlesOf()
     dragOk = JSON.stringify(before) !== JSON.stringify(after)
-    console.log(
-      `  ${dragOk ? '✓' : '***'} 从文字起手拖动 → ${dragOk ? '顺序已变' : '顺序未变'}`,
-    )
+    console.log(`  ${dragOk ? '✓' : '***'} 从文字起手拖动 → ${dragOk ? '顺序已变' : '顺序未变'}`)
     if (dragOk) console.log(`      ${before.join(' / ')}  →  ${after.join(' / ')}`)
   }
 
@@ -276,7 +282,10 @@ let groupOk = false
   await page.mouse.move(band.from.x, band.from.y)
   await page.mouse.down()
   for (let i = 1; i <= 24; i += 1) {
-    await page.mouse.move(band.from.x + ((band.to.x - band.from.x) * i) / 24, band.from.y + ((band.to.y - band.from.y) * i) / 24)
+    await page.mouse.move(
+      band.from.x + ((band.to.x - band.from.x) * i) / 24,
+      band.from.y + ((band.to.y - band.from.y) * i) / 24,
+    )
     await page.waitForTimeout(25)
   }
   await page.mouse.up()
@@ -410,10 +419,14 @@ let pagesOk
     )
     if (!pagesOk) {
       console.log('      *** 默认简历不是一页：内容体积增加了。')
-      console.log('          要么收排版，要么这属于「默认简历本来就该更长」的有意决定（那就调整本断言）。')
+      console.log(
+        '          要么收排版，要么这属于「默认简历本来就该更长」的有意决定（那就调整本断言）。',
+      )
     } else if (slack < 10) {
       // 余量太小时提示：不同机器的字体度量略有差异，卡得太紧会在别处溢出成两页
-      console.log(`      （余量偏小，仅 ${slack}px。字体度量在不同机器上会有差异，太紧容易在别处溢出）`)
+      console.log(
+        `      （余量偏小，仅 ${slack}px。字体度量在不同机器上会有差异，太紧容易在别处溢出）`,
+      )
     }
   }
 }

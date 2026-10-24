@@ -20,20 +20,43 @@ const base = process.argv.find((a) => a.startsWith('http')) || 'http://localhost
 const downloadDir = mkdtempSync(join(tmpdir(), 'rs-md-roundtrip-'))
 
 const browser = await chromium.launch({ channel: 'msedge' })
-const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 900 } })
+const context = await browser.newContext({
+  acceptDownloads: true,
+  viewport: { width: 1440, height: 900 },
+})
 const page = await context.newPage()
 const errors = []
 page.on('pageerror', (e) => errors.push(`pageerror: ${String(e.message).slice(0, 120)}`))
 page.on('console', (m) => {
   if (m.type() === 'error') errors.push(m.text().slice(0, 120))
 })
-// 导入会弹确认框，一律接受
-page.on('dialog', (d) => d.accept())
 
 const results = []
 function record(label, ok, detail) {
   results.push({ label, ok })
   console.log(`  ${ok ? '✓' : '***'} ${label}${detail ? ` — ${detail}` : ''}`)
+}
+
+/*
+ * 导入会弹**自定义** ConfirmDialog（useResumeFile.importMarkdownFile → askConfirm），
+ * 必须真的点掉「覆盖并导入」，导入才会生效。
+ *
+ * 这里曾经写的是 `page.on('dialog', d => d.accept())` —— 那监听的是**原生**
+ * window.confirm，对自定义组件毫无作用；脚本自己没有发现，因为当时 ③ 号用例
+ * 写入的是未修改的 md，「纸面 == 导入前」在没有导入时也恒成立（假通过）。
+ * 后来 ④ 号手写 md 用例加进来才暴露：纸面纹丝不动。
+ */
+const confirmImport = async () => {
+  const clicked = await page.evaluate(() => {
+    const btn = [...document.querySelectorAll('button')].find(
+      (b) => (b.textContent || '').trim() === '覆盖并导入',
+    )
+    if (!btn) return false
+    btn.click()
+    return true
+  })
+  await page.waitForTimeout(1300)
+  return clicked
 }
 
 /** 纸面上的文字指纹（去掉空白差异，只比内容） */
@@ -51,7 +74,9 @@ async function openEditor() {
   await page.goto(`${base}/editor`, { waitUntil: 'networkidle', timeout: 40000 })
   await page.waitForTimeout(1300)
   await page.evaluate(() => {
-    const s = [...document.querySelectorAll('button')].find((x) => (x.textContent || '').trim() === '跳过引导')
+    const s = [...document.querySelectorAll('button')].find(
+      (x) => (x.textContent || '').trim() === '跳过引导',
+    )
     if (s) s.click()
   })
   await page.waitForTimeout(400)
@@ -61,7 +86,6 @@ try {
   await openEditor()
 
   /* ---------- 1. 导出「内容源 Markdown」 ---------- */
-  const before = await paperText()
   console.log('① 导出 Markdown 内容源：')
 
   const openedMenu = await page.evaluate(() => {
@@ -94,7 +118,11 @@ try {
   await download.saveAs(savedPath)
   const md = readFileSync(savedPath, 'utf8')
 
-  record('下载到 .md 文件', md.length > 0, `${md.length} 字符，文件名 ${download.suggestedFilename()}`)
+  record(
+    '下载到 .md 文件',
+    md.length > 0,
+    `${md.length} 字符，文件名 ${download.suggestedFilename()}`,
+  )
   record('文件里带模块类型提示', md.includes('<!-- resume:type='))
   record('文件里键值行标签加粗（无歧义标记）', /- \*\*.+?\*\*：/.test(md))
 
@@ -103,11 +131,12 @@ try {
   const tampered = md.replace('# ', '# 临时姓名X\n\n# ')
   record('构造了一份改过的 Markdown', tampered !== md)
 
-  /* ---------- 3. 导入 ---------- */
+  /* ---------- 3. 导入（真的点掉确认框，并断言改过的内容出现） ---------- */
   console.log('\n③ 导入 Markdown：')
   const importPath = join(downloadDir, 'edited.md')
   const { writeFileSync } = await import('node:fs')
-  writeFileSync(importPath, md, 'utf8')
+  // 写入的是**改过的**那份 —— 写原始 md 的话，「纸面 == 导入前」在没有导入时也恒成立
+  writeFileSync(importPath, tampered, 'utf8')
 
   await page.evaluate(() => {
     const btn = [...document.querySelectorAll('button')].find((b) =>
@@ -125,21 +154,14 @@ try {
   record('导入菜单里有「Markdown 简历导入」', hasImportItem)
 
   await page.setInputFiles('input[accept*="markdown"]', importPath)
-  await page.waitForTimeout(1500)
+  await page.waitForTimeout(600)
+  record('导入弹出了「覆盖并导入」确认框', await confirmImport())
 
   const after = await paperText()
   record(
-    '导入后纸面文字与原简历逐字一致',
-    after === before,
-    after === before ? `${after.length} 字符` : `导入前 ${before.length} / 导入后 ${after.length}`,
+    '导入后纸面出现改过的姓名「临时姓名X」（导入真的生效）',
+    after.includes('临时姓名X') && after.includes('张伟') === false,
   )
-  if (after !== before) {
-    // 打印第一处差异，便于定位（不打印全文，太长）
-    const at = [...before].findIndex((c, i) => c !== after[i])
-    console.log(`      首处差异在第 ${at} 个字符：`)
-    console.log(`        期望 …${before.slice(Math.max(0, at - 30), at + 30)}…`)
-    console.log(`        实际 …${after.slice(Math.max(0, at - 30), at + 30)}…`)
-  }
 
   /* ---------- 4. 模块数量与顺序 ---------- */
   const titles = () =>
@@ -186,7 +208,8 @@ try {
   writeFileSync(handwrittenPath, handwritten, 'utf8')
 
   await page.setInputFiles('input[accept*="markdown"]', handwrittenPath)
-  await page.waitForTimeout(1500)
+  await page.waitForTimeout(600)
+  record('手写导入也弹出确认框', await confirmImport())
 
   const afterHandwritten = await paperText()
   const okHand =
