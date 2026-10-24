@@ -30,6 +30,9 @@ import { parseResumePdf } from '@/utils/pdfImport'
 import { checkResume } from '@/utils/completeness'
 const CompletenessDialog = defineAsyncComponent(() => import('@/components/CompletenessDialog.vue'))
 const JdMatchDialog = defineAsyncComponent(() => import('@/components/JdMatchDialog.vue'))
+const TextNormalizeDialog = defineAsyncComponent(
+  () => import('@/components/TextNormalizeDialog.vue'),
+)
 const ShareDialog = defineAsyncComponent(() => import('@/components/ShareDialog.vue'))
 const ResumeManagerDialog = defineAsyncComponent(
   () => import('@/components/ResumeManagerDialog.vue'),
@@ -267,6 +270,17 @@ function runExport(action: () => void) {
 }
 
 /**
+ * 打开「统一文案格式」。
+ * 包一层函数而不是在模板里写 `exportMenuOpen = false; normalizeOpen = true`：
+ * 多语句行内表达式会被 Prettier 折行，Vue 编译器解析失败，只有 build 会炸。
+ */
+const normalizeOpen = shallowRef(false)
+function openNormalize() {
+  exportMenuOpen.value = false
+  normalizeOpen.value = true
+}
+
+/**
  * 导入菜单同理：先收起菜单再打开文件选择框。
  * 动作收进函数而不是写在模板里，是为了避免模板里出现多语句行内表达式——
  * Prettier 换行后 Vue 编译器解析不了，会以语法错误中断构建。
@@ -411,6 +425,14 @@ function runImport(action: () => void) {
           <span class="menu-name">整包备份</span>
           <span class="menu-desc">全部简历 + 历史版本</span>
         </button>
+        <!--
+          「统一文案格式」放在导出菜单而不是主按钮区：
+          它是一次性的整篇整理，不是高频操作。放主区会稀释真正高频的几个动作。
+        -->
+        <button role="menuitem" @click="openNormalize">
+          <span class="menu-name">统一文案格式…</span>
+          <span class="menu-desc">中英空格、多余空格，先预览再改</span>
+        </button>
       </div>
     </div>
 
@@ -533,6 +555,7 @@ function runImport(action: () => void) {
     <ShareDialog :open="shareOpen" @close="shareOpen = false" />
     <CompletenessDialog :open="checkOpen" @close="checkOpen = false" />
     <JdMatchDialog :open="jdOpen" @close="jdOpen = false" />
+    <TextNormalizeDialog :open="normalizeOpen" @close="normalizeOpen = false" />
     <AuthDialog />
     <ConfirmDialog
       :open="logoutConfirmOpen"
