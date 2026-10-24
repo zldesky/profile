@@ -48,6 +48,22 @@ const props = defineProps({
 
 const emit = defineEmits(['toggle-panel'])
 
+/**
+ * 把「触发导出」暴露给父级，供窄屏底部操作条调用。
+ *
+ * 为什么用 expose 而不是 emit：底部条要的是「执行顶栏那个导出」，
+ * 而不是「通知父级有人点了导出」。让父级再回调一次，等于把一次点击
+ * 绕两层再回到原地，中间还多了一份「谁该负责」的歧义。
+ *
+ * 更关键的是**状态只有一份**：usePdfExport 不是 Pinia store，
+ * 在父级再调一次会新建一份 exporting / quota / 口令弹窗状态，
+ * 严重时两处各发一次请求、把额度扣两次。
+ *
+ * 注意这里是**箭头函数里延迟取** exportViaServer，而不是直接 expose 它：
+ * 那两处在 setup 里是 const 声明，写在它们之前会踩 TDZ（Cannot access before initialization）。
+ */
+defineExpose({ triggerExport: () => exportViaServer() })
+
 /** 「我的简历」管理弹窗 */
 const managerOpen = shallowRef(false)
 /** 分享弹窗（要求登录，未登录先走登录流程） */

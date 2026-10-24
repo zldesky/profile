@@ -8,10 +8,11 @@
  *
  * 登录后由 useCloudSync 接管云端恢复与推送；未登录时它保持静默。
  */
-import { computed, onBeforeUnmount, onMounted, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef } from 'vue'
 
 import OnboardingDialog from '@/components/OnboardingDialog.vue'
 import ShortcutsDialog from '@/components/ShortcutsDialog.vue'
+import SvgIcon from '@/components/SvgIcon.vue'
 import EditorPanel from '@/components/editor/EditorPanel.vue'
 import PreviewPane from '@/components/PreviewPane.vue'
 import TopBar from '@/components/TopBar.vue'
@@ -20,6 +21,7 @@ import { useCloudSync } from '@/composables/useCloudSync'
 import { useToast } from '@/composables/useToast'
 import { useResumeFile } from '@/composables/useResumeFile'
 import { usePanelResize } from '@/composables/usePanelResize'
+
 import { useResumeStore } from '@/stores/resume'
 import { useSelectionStore } from '@/stores/selection'
 
@@ -69,6 +71,24 @@ function togglePanel() {
 
 const selection = useSelectionStore()
 const { exportJSON } = useResumeFile()
+
+/**
+ * 窄屏底部条的「导出」按钮。
+ *
+ * **不能**在这里再调一次 usePdfExport()：它不是 Pinia store，
+ * 每次调用都会新建一份状态（exporting / quota / 口令弹窗）。
+ * 那样会出现「顶栏显示还剩 3 次、底栏按的是另一份状态」这类自相矛盾，
+ * 严重时两处会各发一次导出请求、把额度扣两次。
+ *
+ * 正确做法是让顶栏把它那份导出的触发函数**暴露出来**，底栏只负责调用。
+ * 用模板 ref 而不是事件：底栏与顶栏是兄弟节点，事件要经过共同的父级，
+ * 而父级并不需要知道「导出」这件事 —— 那属于顶栏的职责。
+ */
+const topBarRef = useTemplateRef<{ triggerExport: () => void }>('topBarRef')
+function exportFromBar() {
+  topBarRef.value?.triggerExport()
+}
+
 const shortcutsOpen = shallowRef(false)
 
 /** 首次访问弹新手引导，完成或跳过后不再出现 */
@@ -159,7 +179,12 @@ function onKeydown(event: KeyboardEvent) {
 
 <template>
   <div class="editor-app">
-    <TopBar :is-mobile="isMobile" :panel-visible="showEditor" @toggle-panel="togglePanel" />
+    <TopBar
+      ref="topBarRef"
+      :is-mobile="isMobile"
+      :panel-visible="showEditor"
+      @toggle-panel="togglePanel"
+    />
 
     <main
       class="editor-main"
@@ -194,6 +219,38 @@ function onKeydown(event: KeyboardEvent) {
 
       <EditorPanel v-show="showEditor" />
     </main>
+
+    <!--
+      窄屏底部操作条。
+      为什么需要：窄屏下「编辑 / 纸面」是二选一，切换按钮在顶栏里，
+      而顶栏在窄屏已经收成一排图标 —— 手指要点中那个「预览」图标本身就不容易，
+      切过去之后想切回来还得再找一次。
+      底部条把最高频的两个动作放在拇指自然落点，并显示当前在哪一栏。
+    -->
+    <nav v-if="isMobile" class="mobile-bar" aria-label="窄屏操作条">
+      <button
+        class="mb-item"
+        :class="{ 'is-active': mobileView === 'edit' }"
+        :aria-current="mobileView === 'edit' ? 'true' : undefined"
+        @click="mobileView = 'edit'"
+      >
+        <SvgIcon name="text" :size="16" />
+        <span>内容</span>
+      </button>
+      <button
+        class="mb-item"
+        :class="{ 'is-active': mobileView === 'preview' }"
+        :aria-current="mobileView === 'preview' ? 'true' : undefined"
+        @click="mobileView = 'preview'"
+      >
+        <SvgIcon name="layout" :size="16" />
+        <span>纸面</span>
+      </button>
+      <button class="mb-item mb-export" title="导出 PDF" @click="exportFromBar">
+        <SvgIcon name="download" :size="16" />
+        <span>导出</span>
+      </button>
+    </nav>
 
     <ShortcutsDialog :open="shortcutsOpen" @close="shortcutsOpen = false" />
     <OnboardingDialog v-if="onboardingOpen" @done="finishOnboarding" />
@@ -286,5 +343,78 @@ function onKeydown(event: KeyboardEvent) {
 .editor-main.is-resizing * {
   cursor: col-resize;
   user-select: none;
+}
+
+/*
+ * ---------------- 窄屏底部操作条 ----------------
+ *
+ * 三个按钮，拇指自然落点。要点：
+ *  1. 命中区高度 52px：iOS 与 Android 的可点最小尺寸约 44px，再小就容易点空；
+ *  2. 底部留 safe-area：iPhone 的 Home 指示条会盖住最下面 34px；
+ *  3. 只有窄屏渲染（v-if="isMobile"），宽屏不占任何位置。
+ *
+ * 刻意**不加阴影**：它贴在窗口底部，加了阴影会在纸面上投出一条灰边，
+ * 看起来像纸张被裁掉了一块。
+ */
+.mobile-bar {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--ed-line);
+  background: var(--ed-surface);
+}
+
+.mb-item {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 52px;
+  border: 1px solid transparent;
+  border-radius: var(--ed-radius-sm);
+  background: transparent;
+  color: var(--ed-text-3);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    background-color 0.15s;
+}
+
+.mb-item:hover {
+  background: var(--ed-fill);
+  color: var(--ed-ink);
+}
+
+/* 选中态用底色 + 文字加深，不用阴影：底部条空间小，阴影会显得脏 */
+.mb-item.is-active {
+  background: var(--ed-brand-tint);
+  color: var(--ed-brand-deep);
+  font-weight: 600;
+}
+
+/* 选中态不能被 :hover 盖掉 —— 本项目查出过多次的模式 */
+.mb-item.is-active:hover {
+  background: color-mix(in srgb, var(--ed-brand-tint) 85%, var(--ed-ink));
+}
+
+.mb-item:focus-visible {
+  outline: 2px solid var(--ed-brand);
+  outline-offset: 1px;
+}
+
+/* 导出是这一条里唯一的主操作，用实心块区分出来 */
+.mb-export {
+  background: var(--ed-brand-strong);
+  color: #fff;
+}
+
+.mb-export:hover {
+  background: var(--ed-brand-deep);
+  color: #fff;
 }
 </style>
