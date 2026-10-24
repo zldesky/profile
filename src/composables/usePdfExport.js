@@ -7,6 +7,7 @@ import { usePdfPassword } from '@/composables/usePdfPassword'
 import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
 import { checkResume } from '@/utils/completeness'
+import { decideExportAction } from '@/utils/exportFlow'
 import { resumeToPlainText } from '@/utils/exporters'
 import { monthStamp, resumeFileName } from '@/utils/filename'
 import { downloadBlob, formatBytes, formatTime } from '@/utils/helpers'
@@ -204,6 +205,38 @@ export function usePdfExport() {
   }
 
   /**
+   * 判定这次点击该做什么，并执行「该做的准备」。
+   *
+   * 判定逻辑在 utils/exportFlow.ts（纯函数，17 例单测覆盖了每种组合）。
+   * 这里只负责把判定结果映射成动作 —— 两个导出入口（单份 PDF / 投递包）共用它，
+   * 于是「未登录会怎样、要口令会怎样」在两条路径上不会分叉。
+   *
+   * @param retry 认证成功后要重跑的动作
+   * @returns true 表示可以继续执行真正的导出
+   */
+  async function prepare(retry) {
+    const action = decideExportAction({
+      auth: auth.status.value,
+      authRequired: authRequired.value,
+      hasPassword: Boolean(password.value),
+      quotaExhausted: quotaExhausted.value,
+      exporting: exporting.value,
+    })
+
+    if (action === 'noop') return false
+    if (action === 'ask-password') {
+      passwordError.value = ''
+      passwordOpen.value = true
+      return false
+    }
+    if (action === 'ask-login') {
+      await requireAuthThen(retry)
+      return false
+    }
+    return true
+  }
+
+  /**
    * 投递包：把「投递用的 PDF」与「给 ATS 的纯文本」打成一个 zip。
    *
    * 为什么值得做成一个动作：投递时通常要两份 —— 招聘系统要能解析的纯文本，
@@ -213,16 +246,8 @@ export function usePdfExport() {
    * 不做「打包失败就静默降级成单文件下载」：那会让用户以为拿到了完整投递包。
    */
   async function exportPackage() {
-    if (exporting.value || quotaExhausted.value) return
+    if (!(await prepare(() => exportPackage()))) return
     if (!passesPreflight()) return
-    if (auth.status.value === 'anon' && !password.value && !authRequired.value) {
-      return requireAuthThen(() => exportPackage())
-    }
-    if (needPassword.value) {
-      passwordError.value = ''
-      passwordOpen.value = true
-      return
-    }
 
     exporting.value = true
     try {
@@ -296,27 +321,13 @@ export function usePdfExport() {
   }
 
   async function exportViaServer() {
-    if (exporting.value || quotaExhausted.value) return
-
     /*
      * 导出前检查排在认证之前：
      * 若简历有明显硬伤，先让用户看到问题，而不是先让他登录、再告诉他内容不合格 ——
      * 那个顺序会让人觉得「白登录了一次」。
      */
+    if (!(await prepare(() => runExport()))) return
     if (!passesPreflight()) return
-
-    // 未登录且无脚本口令通道时，请求注定 401：直接弹登录/注册弹窗，
-    // 登录成功后自动续跑导出，省一次失败的往返
-    if (auth.status.value === 'anon' && !password.value && !authRequired.value) {
-      return requireAuthThen(() => runExport())
-    }
-
-    // 已知需要口令而本地没有，直接弹窗，省掉一次注定失败的请求
-    if (needPassword.value) {
-      passwordError.value = ''
-      passwordOpen.value = true
-      return
-    }
 
     await runExport()
   }

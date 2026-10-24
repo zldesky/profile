@@ -499,7 +499,7 @@ function runImport(action: () => void) {
 
     <button
       class="ed-btn is-compact"
-      title="在打印窗口另存为 PDF：文本可选、体积最小，需手动勾选「背景图形」"
+      title="打印导出：不消耗导出额度，但要在打印窗口手动勾选「背景图形」，否则配色会丢失"
       aria-label="打印导出"
       @click="printPdf"
     >
