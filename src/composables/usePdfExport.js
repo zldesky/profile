@@ -6,7 +6,9 @@ import { useAuthDialog } from '@/composables/useAuthDialog'
 import { usePdfPassword } from '@/composables/usePdfPassword'
 import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
-import { downloadBlob } from '@/utils/helpers'
+import { checkResume } from '@/utils/completeness'
+import { resumeFileName } from '@/utils/filename'
+import { downloadBlob, formatBytes } from '@/utils/helpers'
 import { fetchServerHealth, requestServerPdf } from '@/utils/serverPdf'
 
 const PRINT_HINT = '打印窗口请将「边距」设为默认、勾选「背景图形」，另存为 PDF 即可保留配色与分页'
@@ -29,6 +31,22 @@ export function usePdfExport() {
   const { password, set: setPassword, clear: clearPassword } = usePdfPassword()
 
   const exporting = shallowRef(false)
+
+  /**
+   * 导出前检查的结果。
+   *
+   * 只在**有 error 级问题**时才拦一次（缺姓名、空模块这类会直接让招聘方扣分的）。
+   * 不拦 warn / tip：那会把「先导出看看效果」变成一件很烦的事。
+   * 也**不做硬阻断** —— 弹一次确认，用户可以点「仍然导出」。
+   *
+   * 显式标注类型：`shallowRef([])` 会被推成 `Ref<never[]>`，
+   * 调用方读 `issue.title` 就报「never 上不存在」——
+   * 与 completeness 的 report 是同一类问题（本仓库已出现多次）。
+   * @type {import('vue').ShallowRef<Array<{ level: string, title: string, detail: string }>>}
+   */
+  const preflightIssues = shallowRef([])
+  const preflightOpen = shallowRef(false)
+
   /** 服务端返回的今日额度；null 表示服务未启动，或尚未通过口令校验 */
 
   /**
@@ -51,12 +69,14 @@ export function usePdfExport() {
   /** 服务要口令、而本地还没有可用口令 */
   const needPassword = computed(() => authRequired.value && !password.value)
 
-  /** 统一的导出文件名，沿用投递习惯：姓名_应聘岗位 */
-  const filename = computed(() => {
-    const name = (store.basics.name || '简历').trim()
-    const role = (store.basics.jobTitle || '').trim()
-    return role ? `${name}_${role}` : `${name}_简历`
-  })
+  /**
+   * 统一的导出文件名，沿用投递习惯：姓名_应聘岗位。
+   * 规则抽在 utils/filename —— 投递包、打印、下载三处共用同一套清洗，
+   * 否则「下载的是 张伟_前端.pdf、打印出来却是 张/伟_前端.pdf」这种不一致迟早出现。
+   */
+  const filename = computed(() =>
+    resumeFileName({ name: store.basics.name, jobTitle: store.basics.jobTitle }),
+  )
 
   /**
    * 同步服务状态。
@@ -150,6 +170,37 @@ export function usePdfExport() {
     }
   }
 
+  /**
+   * 导出前检查：只挑出 error 级问题。
+   *
+   * 为什么值得做这一步：缺姓名、模块空白这类问题在纸面上看着不明显
+   * （尤其模板里留白很多时），但招聘方一眼就能看到。
+   * 在导出**之前**提醒一次，成本是一次点击；导出之后发现，成本是一次投递机会。
+   *
+   * 为什么只拦 error：warn 与 tip 动辄十几条，每次都弹就变成噪音，
+   * 用户会养成「闭眼点继续」的习惯 —— 那时连真正该看的那条也会被跳过。
+   *
+   * @returns true 表示可以继续导出
+   */
+  function passesPreflight() {
+    const report = checkResume(store.resume)
+    const blocking = report.issues.filter((issue) => issue.level === 'error')
+    if (!blocking.length) return true
+    preflightIssues.value = blocking
+    preflightOpen.value = true
+    return false
+  }
+
+  /** 用户在导出前检查里选「仍然导出」 */
+  function confirmPreflight() {
+    preflightOpen.value = false
+    runExport()
+  }
+
+  function cancelPreflight() {
+    preflightOpen.value = false
+  }
+
   /** 提交给本地渲染服务，取回矢量 PDF 并直接下载 */
   async function runExport() {
     exporting.value = true
@@ -160,7 +211,13 @@ export function usePdfExport() {
 
       passwordOpen.value = false
       passwordError.value = ''
-      toast('已导出矢量 PDF，文本可选中')
+      /*
+       * 如实回执：说清「导出了什么、多大」。
+       * 原先只说「已导出矢量 PDF，文本可选中」—— 用户无法确认
+       * 是不是导出成了空白页，也没法判断文件大小是否正常。
+       * 数字都来自真实测量（Blob 的字节数）。
+       */
+      toast(`已导出 ${filename.value}.pdf（${formatBytes(blob.size)}，文字可选中）`, 3200)
     } catch (error) {
       handleError(error)
     } finally {
@@ -172,6 +229,13 @@ export function usePdfExport() {
 
   async function exportViaServer() {
     if (exporting.value || quotaExhausted.value) return
+
+    /*
+     * 导出前检查排在认证之前：
+     * 若简历有明显硬伤，先让用户看到问题，而不是先让他登录、再告诉他内容不合格 ——
+     * 那个顺序会让人觉得「白登录了一次」。
+     */
+    if (!passesPreflight()) return
 
     // 未登录且无脚本口令通道时，请求注定 401：直接弹登录/注册弹窗，
     // 登录成功后自动续跑导出，省一次失败的往返
@@ -220,5 +284,10 @@ export function usePdfExport() {
     exportViaServer,
     submitPassword,
     cancelPassword,
+    /* 导出前检查 */
+    preflightOpen,
+    preflightIssues,
+    confirmPreflight,
+    cancelPreflight,
   }
 }

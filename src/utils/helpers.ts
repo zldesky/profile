@@ -142,6 +142,25 @@ export function formatTime(timestamp: number): string {
 }
 
 /**
+ * 把字节数变成人话：`380 KB`、`1.2 MB`。
+ *
+ * 用在导出回执里。给一个数字（甚至不给）都不如给一句「380 KB」有用 ——
+ * 用户能据此判断「这是不是一份正常大小的简历」。
+ * 用 1024 进制（与文件管理器一致），不是 1000。
+ *
+ * 小于 1 KB 时显示字节数：一份 300 字节的 PDF 显然是空白的，这个信息很有用。
+ */
+export function formatBytes(bytes: number): string {
+  const size = Number(bytes)
+  if (!Number.isFinite(size) || size < 0) return '大小未知'
+  if (size < 1024) return `${Math.round(size)} B`
+  const kb = size / 1024
+  if (kb < 1024) return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`
+  const mb = kb / 1024
+  return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`
+}
+
+/**
  * 读取图片文件并等比压缩为 DataURL，用于控制简历数据体积。
  * @param maxSize 最长边像素上限
  * @param format 输出格式；logo 类图形用 png 以保留透明背景

@@ -24,6 +24,7 @@ import { reorderSectionsByPreview, useDragPreview } from '@/composables/useDragP
 import { FIELD_LABELS, resolveEditTarget } from '@/composables/useInlineEdit'
 import type { EditTarget } from '@/composables/useInlineEdit'
 import { usePageMetrics } from '@/composables/usePageMetrics'
+import { analyzePageFill, sparsePageDetail, sparsePageHint } from '@/utils/pageFill'
 import { usePaperSelection } from '@/composables/usePaperSelection'
 import { usePaperJump } from '@/composables/usePaperJump'
 import { usePaperZoom } from '@/composables/usePaperZoom'
@@ -51,6 +52,31 @@ const compressing = shallowRef(false)
 
 const { zoom, autoFit, resizeTick, fit, zoomBy, resetFit } = usePaperZoom(scrollRef)
 const { pageCount, measure, refresh, debugBlocks } = usePageMetrics(paperRef, zoom)
+
+/**
+ * 末页太空提示。
+ *
+ * 为什么不用 computed：`debugBlocks()` 读的是真实 DOM 几何，**不是响应式数据** ——
+ * computed 只会在它读到的 ref 变化时重算，而它一个 ref 都没读。
+ * 实测后果：内容加到第 7 条、页数从 1 变成 2、末页只剩 9%，提示**依然不出现**。
+ * 这是 tools/verify-page-fill.mjs 抓到的真实 bug，不是猜的。
+ *
+ * 正确做法是跟着「测量完成」这个事件走：usePageMetrics 每次 refresh 之后
+ * 都会更新 pageCount，这里 watch 它，再主动算一次。
+ */
+const sparseHint = shallowRef('')
+const sparseDetail = shallowRef('')
+watch(pageCount, () => {
+  const geom = debugBlocks()
+  if (!geom) {
+    sparseHint.value = ''
+    sparseDetail.value = ''
+    return
+  }
+  const report = analyzePageFill(geom.blocks, geom.usableHeight)
+  sparseHint.value = sparsePageHint(report)
+  sparseDetail.value = sparsePageDetail(report)
+})
 
 /*
  * 开发态把页数估算的中间过程挂到 window，供验证脚本核对。
@@ -601,6 +627,8 @@ async function compressToOnePage() {
       :zoom="zoom"
       :auto-fit="autoFit"
       :page-count="pageCount"
+      :sparse-hint="sparseHint"
+      :sparse-detail="sparseDetail"
       :compressing="compressing"
       :dragging="dragging"
       :offset="offset"

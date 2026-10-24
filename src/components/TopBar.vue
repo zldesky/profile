@@ -133,6 +133,10 @@ const {
   submitPassword,
   cancelPassword,
   refreshQuota,
+  preflightOpen,
+  preflightIssues,
+  confirmPreflight,
+  cancelPreflight,
 } = usePdfExport()
 
 /** 退出后同步一次额度（未登录时服务端不再返回），让导出按钮立刻反映状态 */
@@ -556,6 +560,20 @@ function runImport(action: () => void) {
     <CompletenessDialog :open="checkOpen" @close="checkOpen = false" />
     <JdMatchDialog :open="jdOpen" @close="jdOpen = false" />
     <TextNormalizeDialog :open="normalizeOpen" @close="normalizeOpen = false" />
+
+    <!--
+      导出前检查：只列出 error 级问题，且不硬阻断 —— 用户可以「仍然导出」。
+      硬阻断会把「先导出一份看看效果」变成一件烦人的事。
+    -->
+    <ConfirmDialog
+      :open="preflightOpen"
+      title="导出前先看一眼"
+      :description="`这份简历还有 ${preflightIssues.length} 处硬伤：${preflightIssues.map((i) => i.title).join('、')}。这些会在纸上直接露出来，建议先补上。`"
+      confirm-text="仍然导出"
+      cancel-text="先修改"
+      @confirm="confirmPreflight"
+      @cancel="cancelPreflight"
+    />
     <AuthDialog />
     <ConfirmDialog
       :open="logoutConfirmOpen"

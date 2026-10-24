@@ -22,6 +22,15 @@ defineProps<{
    * 标可选会报「可能为 undefined」。用必填如实描述调用方，比在模板里到处加兜底更准。
    */
   offset: { x: number; y: number }
+  /**
+   * 末页太空的一句话建议。
+   * 由预览区用 utils/pageFill 算好后传入，空串表示无需提示。
+   * 让计算留在上游而不是这里，是因为「怎么算分页」与「怎么显示工具条」是两件事，
+   * 后者不该知道块几何。
+   */
+  sparseHint?: string
+  /** 悬停时显示的完整解释（工具条上那句为了不挤断，写得较短） */
+  sparseDetail?: string
 }>()
 
 const emit = defineEmits<{
@@ -58,6 +67,15 @@ const emit = defineEmits<{
     <span class="divider"></span>
 
     <span class="page-badge" :class="{ 'is-over': pageCount > 1 }">{{ pageCount }} 页 A4</span>
+    <!--
+      末页太空提示：长简历常见的「最后一页只有两三行」。
+      只在真的稀疏时出现（阈值见 utils/pageFill 的 SPARSE_LAST_PAGE_RATIO），
+      并且说清「为什么」与「可以怎么办」，不是一个孤零零的感叹号。
+    -->
+    <span v-if="sparseHint" class="page-hint" :title="sparseDetail || sparseHint">
+      <SvgIcon name="clock" :size="12" />
+      <span class="page-hint-text">{{ sparseHint }}</span>
+    </span>
     <button
       class="ed-btn"
       :disabled="pageCount <= 1 || compressing"
@@ -158,6 +176,42 @@ const emit = defineEmits<{
 .page-badge.is-over {
   background: var(--ed-warn-tint);
   color: var(--ed-warn);
+}
+
+/*
+ * 末页太空提示：刻意比页数徽标更弱（无底色、只加图标）。
+ * 它是建议不是警告 —— 用告警色会让人误以为简历有问题。
+ * 长文案在窄屏要能被截断，否则会把「压缩到一页」挤出工具条。
+ */
+.page-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 260px;
+  color: var(--ed-text-3);
+  font-size: 11.5px;
+}
+
+.page-hint .svg-icon {
+  flex: 0 0 auto;
+}
+
+.page-hint-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  /* 窄屏只留一个可悬停看全文的图标位，把横向空间让给真正的操作按钮 */
+  .page-hint-text {
+    display: none;
+  }
+
+  .page-hint {
+    max-width: none;
+  }
 }
 
 .drag-readout {
