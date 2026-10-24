@@ -699,7 +699,7 @@
 
 ---
 
-## F. 环境与工具链的坑（7 条）
+## F. 环境与工具链的坑（9 条）
 
 ### F1. PowerShell here-string 里嵌 Node/JS 的引号转义（**栽了 4 次**）
 
@@ -756,30 +756,117 @@
 - **规矩**：脚本启动时先探一次依赖（服务可达性、口令通道、构建产物新鲜度），
   不满足就打印**可操作的下一步**再退出。
 
+### F8. `Write-Output` 里写 `\n` 被当成字面量（**本轮栽了 3 次**）
+
+- **症状**：模板里出现 `<TopBar`n ref="topBarRef"`这种把`\n`当文字印进文件的产物；
+或者`:sparse-hint="sparseHint"`n      :sparse-detail=...` 把两个属性粘成一行。
+- **真因**：在 PowerShell 里用 `$c.Replace('a', 'b`n c')` 或双引号字符串写换行，
+**反引号 `` ` `` 才是 PowerShell 的转义符，`\n` 不是**。写成 `\n` 就原样进了文件。
+- **为什么危险**：这类产物往往**语法仍然合法**（属性名里带反引号也能被解析成奇怪的名字），
+  于是 build 通过、typecheck 通过，只有真正渲染时那个属性不生效 —— 又是一次静默失效。
+- **规矩**：
+  1. **多行替换不要用 PowerShell 字符串拼**，用 `edit` 工具按字面量改；
+  2. 非要用脚本时，换行写 `` `n ``（反引号 n）或改用 `-join [Environment]::NewLine`；
+  3. 改完 `grep` 一下文件里有没有字面的 `` `n `` / `\n`，这是最便宜的自检。
+
+### F9. `Get-ChildItem -Include` 不加 `-Recurse` 会返回 0 个
+
+- **症状**：`Get-ChildItem src/utils -File -Include *.js` 返回 **0**，
+  而实际有 8 个 `.js` —— 差点据此得出「utils 已经全部迁完」的错误结论。
+- **真因**：`-Include` 在 PowerShell 里**必须配合 `-Recurse`**（或路径本身含通配符）才生效；
+  不加时它静默过滤掉一切，**不报错**。
+- **规矩**：数文件用 `-Filter`（不需要 `-Recurse`），或用
+  `Get-ChildItem dir -File | Where-Object { $_.Extension -eq '.js' }`。
+  这条与 A12「静默上限」同族：**返回 0 时要先怀疑查询本身**。
+
+---
+
+## G. 本轮新增：前端交互层的坑（5 条）
+
+### G1. `computed` 读非响应式数据 → 永远不重算
+
+- **症状**：内容加到第 7 条、页数从 1 变成 2、末页只剩 9%，「末页太空」提示**始终不出现**。
+- **真因**：提示写成 `computed(() => analyze(debugBlocks()))`，而 `debugBlocks()`
+  读的是**真实 DOM 几何**，不是响应式数据。computed 只追踪它读到的 ref，
+  这里一个 ref 都没读 → 首次求值后再也不更新。
+- **为什么难发现**：单测（纯函数）全绿，类型检查也过，界面只是"少了条提示"。
+- **规矩**：**computed 只能依赖响应式来源**。需要「DOM 变了就重算」时，
+  watch 那个**会变的响应式信号**（这里是 `pageCount`）再主动赋值给 `shallowRef`。
+  判据很简单：问一句「它读的东西变了，Vue 知道吗」。
+
+### G2. 拖拽/拖放类验证：手势太快，SortableJS 还没开始就结束了
+
+- **症状**：桌面端「按住即拖」验证失败，顺序完全没变。
+- **真因**：`mouse.down()` → `mouse.move(x, y, { steps: 8 })` → `mouse.up()` 一气呵成，
+  SortableJS 的 `dragstart` 还没稳定就已抬起。改成 **20 步、每步 35ms** 才成功。
+- **另一层同源**：手柄在默认滚动位置下位于 `y≈1900`（远超 1000 的视口），
+  `mouse.move` 点的是屏幕外 —— 与 A1 完全一样，只是这次是「没滚到可见」。
+- **规矩**：拖拽类验证统一用 `tools/verify-drag.mjs` 的渐进手势；
+  **取坐标前先 `scrollIntoView` 并确认 `top > 0 && bottom < innerHeight`**。
+
+### G3. 受保护片段的占位符吃掉了空格规则
+
+- **症状**：`升级到Vue2.7` 规范化后是 `升级到Vue2.7`（该加的空格没加），
+  而同样结构的 `用Vue3搭建` 却能正确变成 `用 Vue3 搭建`。
+- **真因**：`Vue2.7` 命中「版本号」规则，被换成占位符 `\uE000N\uE000`。
+  中英空格判定看到的是「汉字 + 私用区字符」，**判不出需要空格**。
+- **规矩**：做「整体跳过某段文本」的替换时，**占位符本身要参与相邻判定**：
+  还原时检查占位符两侧是不是汉字/字母，按原文内容补空格。
+  另外占位符**不要用控制字符**（`\u0000`）—— 它会触发 `no-control-regex`，
+  而那条 lint 规则本身是对的（控制字符出现在简历文本里几乎总是脏数据）。用私用区 `\uE000`。
+
+### G4. 同一个组件里「按内容推断模式」不足以表达用户意图
+
+- **症状**：点「自由填写」按钮**毫无反应**。
+- **真因**：组件按 `readTimeInput(modelValue)` 推断该显示选择器还是文本框。
+  点「自由填写」时写出的值仍是 `2022-06 - 至今` —— **仍然可解析**，
+  于是推断立刻把它判回 structured，界面原地不动。
+- **规矩**：**用户的显式选择要单独记状态**（这里加了 `mode: 'auto' | 'picker' | 'free'`），
+  不能只靠内容反推。同时要处理「外部改动」：用「值不是我刚写出的那个」来判断是撤销/导入，
+  那时才回落到 auto。
+
+### G5. 复制一份 `useXxx()` 当状态容器 → 两份状态各说各话
+
+- **症状**：窄屏底部条要触发导出，最直接的写法是在页面里再调一次 `usePdfExport()`。
+- **真因**：它不是 Pinia store，**每次调用都新建一份** `exporting / quota / 口令弹窗` 状态。
+  两份并存时，顶栏显示「还剩 3 次」、底栏按的是另一份 —— 严重时各发一次请求、额度扣两次。
+- **规矩**：非 store 的组合式函数**不能当共享状态用**。
+  让持有者通过 `defineExpose` 暴露一个动作（这里是 `triggerExport`），
+  调用方只负责触发，不复制状态。
+  （顺带一条：`defineExpose({ triggerExport: () => exportViaServer() })` 里的箭头函数是必要的 ——
+  直接 expose 变量会踩 TDZ，因为那两处 const 声明在它之后。）
+
 ---
 
 ## 已经用机制拦住的（不用再靠记性）
 
-| 坑                    | 拦它的机制                                                                                            |
-| --------------------- | ----------------------------------------------------------------------------------------------------- |
-| A1 落点在视口外       | `verify-drag.mjs` 的 `planDrag()` 只返回两点都可见的相邻对                                            |
-| A3 两次滚动作废坐标   | `centersOf()` 一次取两点                                                                              |
-| A4 层级判定被后代污染 | `DraggableList` 的 `dl-list` 类 + `closest()`                                                         |
-| A5 不适用被判失败     | `tooFew` 单独打印「跳过」                                                                             |
-| A6 断言太宽松         | `verify-panel-resize.mjs` 的精确值 + `--panel-w` 不变量                                               |
-| A10 对着旧 dist 验证  | `verify-selects.mjs` 的 `assertDistFresh()`                                                           |
-| A12 静默上限          | `audit-interaction.mjs` 打印分母并在触顶时告警                                                        |
-| C2 忘 import 渲染成空 | `verify-selects.mjs` 的 `assertComponentsImported()`                                                  |
-| D1 变量与实测不一致   | `verify-panel-resize.mjs` 的一致性断言                                                                |
-| D2 `@page` 缺 size    | `preview-host-theme.mjs` 出真 PDF、数页数、核 `MediaBox`                                              |
-| A14 量错参照系        | 该工具从 CSS 解析页边距、算出真实内容区宽度后再量                                                     |
-| A15 缓存导致验证变旧  | `verify-pdf-export.mjs` 每次用唯一文件名打散 pdfCache 的键                                            |
-| A16 验证吃掉产品额度  | `pdf-harness.mjs` 起独立实例（额度放宽 + 随机口令），并区分「量不到」与「不一致」                     |
-| D4 样式写了不生效     | 验证脚本支持 `SHOT_DIR` 截图，改完界面看一眼                                                          |
-| D5 拖拽体感           | `verify-paper-drag-ux.mjs`（门槛 ≤0.7 模块高、指示线与落点一致、拖动时不重叠）+ 截图                  |
-| E5 页数估算与真实分页 | `verify-page-count-agreement.mjs`（7 组长度递增，逐个对照真实导出页数）                               |
-| C5 渲染目标错页面     | `tests/renderTarget.test.js` 断言 EDITOR_PATH 命中 editor 路由；等待选择器收紧为 `.editor-app .paper` |
-| D3 非应用节点占分页   | 打印样式 `body > *:not(#app) { display: none }`                                                       |
+| 坑                     | 拦它的机制                                                                                            |
+| ---------------------- | ----------------------------------------------------------------------------------------------------- |
+| A1 落点在视口外        | `verify-drag.mjs` 的 `planDrag()` 只返回两点都可见的相邻对                                            |
+| A3 两次滚动作废坐标    | `centersOf()` 一次取两点                                                                              |
+| A4 层级判定被后代污染  | `DraggableList` 的 `dl-list` 类 + `closest()`                                                         |
+| A5 不适用被判失败      | `tooFew` 单独打印「跳过」                                                                             |
+| A6 断言太宽松          | `verify-panel-resize.mjs` 的精确值 + `--panel-w` 不变量                                               |
+| A10 对着旧 dist 验证   | `verify-selects.mjs` 的 `assertDistFresh()`                                                           |
+| A12 静默上限           | `audit-interaction.mjs` 打印分母并在触顶时告警                                                        |
+| C2 忘 import 渲染成空  | `verify-selects.mjs` 的 `assertComponentsImported()`                                                  |
+| D1 变量与实测不一致    | `verify-panel-resize.mjs` 的一致性断言                                                                |
+| D2 `@page` 缺 size     | `preview-host-theme.mjs` 出真 PDF、数页数、核 `MediaBox`                                              |
+| A14 量错参照系         | 该工具从 CSS 解析页边距、算出真实内容区宽度后再量                                                     |
+| A15 缓存导致验证变旧   | `verify-pdf-export.mjs` 每次用唯一文件名打散 pdfCache 的键                                            |
+| A16 验证吃掉产品额度   | `pdf-harness.mjs` 起独立实例（额度放宽 + 随机口令），并区分「量不到」与「不一致」                     |
+| D4 样式写了不生效      | 验证脚本支持 `SHOT_DIR` 截图，改完界面看一眼                                                          |
+| D5 拖拽体感            | `verify-paper-drag-ux.mjs`（门槛 ≤0.7 模块高、指示线与落点一致、拖动时不重叠）+ 截图                  |
+| E5 页数估算与真实分页  | `verify-page-count-agreement.mjs`（7 组长度递增，逐个对照真实导出页数）                               |
+| C5 渲染目标错页面      | `tests/renderTarget.test.js` 断言 EDITOR_PATH 命中 editor 路由；等待选择器收紧为 `.editor-app .paper` |
+| D3 非应用节点占分页    | 打印样式 `body > *:not(#app) { display: none }`                                                       |
+| G1 computed 读非响应式 | `verify-page-fill.mjs` 断言「末页稀疏时提示必须出现」（改回 computed 会红）                           |
+| G2 拖拽手势太快        | `verify-touch-drag.mjs` 用 20 步渐进手势 + 取坐标前先滚到可见                                         |
+| G3 占位符吃掉空格      | `tests/textNormalize.test.js` 的「版本号原样保留」+ 幂等性断言                                        |
+| G4 只靠内容推断模式    | `tools/verify-time-field.mjs` 断言「点自由填写后必须出现文本框」                                      |
+| G5 复制组合式函数      | `TopBar` 用 `defineExpose` 暴露 `triggerExport`，底栏只触发不复制状态                                 |
+| F8 换行转义            | 多行改动一律用 `edit` 工具按字面量改；改完 grep 一次字面的 `` `n ``                                   |
+| F9 `-Include` 空结果   | 数文件改用 `-Filter` 或 `Where-Object`；返回 0 时先怀疑查询                                           |
 
 **仍然只靠注释、还会重犯的**：
 A2（判据选错）、A7（断言包装）、A8（精确匹配）、A9（隐藏元素）、A11（残留污染）、
@@ -791,3 +878,22 @@ F1（内联 JS）、F6（只靠一种自制解析）。
 
 1. **工具报错时，先怀疑工具** —— 至少花三十秒想想"我的探针是不是根本没点到"。
 2. **改代码前先读文件，改完用 diff 核对** —— 不要凭对结构的想象动手。
+
+### 这一轮（去 AI 化改造）新增的一条元规矩
+
+本轮 12 个提交里，**每一个真正的产品缺陷都是被验证抓出来的，没有一个是"读代码看出来的"**：
+
+| 缺陷                                           | 谁抓到的           |
+| ---------------------------------------------- | ------------------ |
+| 日期正则把 `2022 - 2024` 读成「2022 年 20 月」 | 单测               |
+| 两条**逐字相同**的要点反而不报重复             | 单测               |
+| 「命中：负责负责负责」（同一片段被扫三遍）     | 浏览器验证         |
+| 体检角标少报一半（标题写「2 处」、count 是 1） | 单测               |
+| 点「自由填写」毫无反应                         | 浏览器验证         |
+| `computed` 读非响应式数据导致末页提示永不出现  | 浏览器验证         |
+| 单块超页时浪费整页（1200/1000 算成 3 页）      | 单测               |
+| `flex: 1 1 100%` 把 textarea 压到 90px         | 截图 + 量盒子      |
+| 未受检 `.js` 数量文档写错两次                  | `check-agent-docs` |
+
+**结论**：写完代码后的第一件事不是「再看一遍代码」，而是**写一个能失败的断言**。
+上面每一条读代码都看不出来 —— 它们都是「语法合法、类型通过、lint 通过、跑起来只是不对」。
