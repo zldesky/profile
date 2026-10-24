@@ -407,7 +407,16 @@ function onKeydown(event: KeyboardEvent) {
   outline-offset: 1px;
 }
 
-/* 导出是这一条里唯一的主操作，用实心块区分出来 */
+/*
+ * 导出是这一条里唯一的主操作，用实心块区分出来。
+ *
+ * 悬停反馈必须用 `filter: brightness`，不能只换背景色：
+ * 默认主题下 `--ed-brand-strong` 与 `--ed-brand-deep` **都是纯黑 #000000**
+ * （见 paper.css 的令牌定义），换色完全看不出来。
+ * 这不是猜测 —— 交互态审计把这个按钮报成「悬停无任何变化」，
+ * 而同一份样式在主按钮上因为额外加了 brightness 才没被报。
+ * 换成自定义主色后两者会不同，brightness 仍然是有效的叠加反馈。
+ */
 .mb-export {
   background: var(--ed-brand-strong);
   color: #fff;
@@ -416,5 +425,6 @@ function onKeydown(event: KeyboardEvent) {
 .mb-export:hover {
   background: var(--ed-brand-deep);
   color: #fff;
+  filter: brightness(0.88);
 }
 </style>

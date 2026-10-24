@@ -107,21 +107,26 @@ const COLLECT = () => {
 
 for (const vp of VIEWPORTS) {
   const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height } })
-  if (token) await context.addCookies([{ name: 'rs_session', value: token, url: new URL(url).origin }])
+  if (token)
+    await context.addCookies([{ name: 'rs_session', value: token, url: new URL(url).origin }])
   const page = await context.newPage()
   await page.goto(url, { waitUntil: 'networkidle', timeout: 40000 })
   await page.waitForTimeout(900)
 
   // 关掉新手引导，否则会挡住焦点顺序
   await page.evaluate(() => {
-    const skip = [...document.querySelectorAll('button')].find((b) => (b.textContent || '').trim() === '跳过引导')
+    const skip = [...document.querySelectorAll('button')].find(
+      (b) => (b.textContent || '').trim() === '跳过引导',
+    )
     if (skip) skip.click()
   })
   await page.waitForTimeout(400)
 
   const { items } = await page.evaluate(COLLECT)
   const active = items.filter((x) => !x.disabled)
-  console.log(`\n▌${vp.name} ${vp.width}×${vp.height}  可交互元素 ${items.length} 个（其中禁用 ${items.length - active.length} 个）`)
+  console.log(
+    `\n▌${vp.name} ${vp.width}×${vp.height}  可交互元素 ${items.length} 个（其中禁用 ${items.length - active.length} 个）`,
+  )
 
   /* ---------- 1. 键盘焦点可见性：真的按 Tab 走 ---------- */
   const focusProblems = []
@@ -146,7 +151,7 @@ for (const vp of VIEWPORTS) {
    * 上限仍保留，但只为防跑飞，且触发时会明确报出来。
    */
   const MAX_TABS = 800
-    const seen = new Set()
+  const seen = new Set()
   let step = 0
   for (; step < MAX_TABS; step += 1) {
     await page.keyboard.press('Tab')
@@ -169,7 +174,16 @@ for (const vp of VIEWPORTS) {
             : '',
         }
       },
-      ['background-color', 'background-image', 'color', 'border-color', 'box-shadow', 'outline-color', 'outline-width', 'filter'],
+      [
+        'background-color',
+        'background-image',
+        'color',
+        'border-color',
+        'box-shadow',
+        'outline-color',
+        'outline-width',
+        'filter',
+      ],
     )
     if (!state) continue
     focusHits += 1
@@ -218,10 +232,14 @@ for (const vp of VIEWPORTS) {
 
   /* ---------- 2. 悬停反馈 ---------- */
   const noHover = []
+  /** 基线过期（收集阶段与悬停时不是同一状态）而被排除的数量 */
+  let staleBaseline = 0
   const HOVER_CAP = 300
   const sample = active.slice(0, HOVER_CAP)
   if (active.length > HOVER_CAP) {
-    console.log(`  ⚠ 可交互元素 ${active.length} 个，超出悬停上限 ${HOVER_CAP}，本次只试了前 ${HOVER_CAP} 个`)
+    console.log(
+      `  ⚠ 可交互元素 ${active.length} 个，超出悬停上限 ${HOVER_CAP}，本次只试了前 ${HOVER_CAP} 个`,
+    )
   }
   let skipped = 0
   for (const item of sample) {
@@ -247,7 +265,16 @@ for (const vp of VIEWPORTS) {
       const s = getComputedStyle(el)
       return {
         hovered: true,
-        fp: ['background-color', 'background-image', 'color', 'border-color', 'box-shadow', 'outline-color', 'outline-width', 'filter']
+        fp: [
+          'background-color',
+          'background-image',
+          'color',
+          'border-color',
+          'box-shadow',
+          'outline-color',
+          'outline-width',
+          'filter',
+        ]
           .map((k) => s.getPropertyValue(k))
           .join('|'),
       }
@@ -256,14 +283,49 @@ for (const vp of VIEWPORTS) {
     if (!after.hovered) {
       skipped += 1
     } else if (after.fp === item.bg) {
-      noHover.push(item.label)
+      /*
+       * 这里对比的是「收集阶段的基线」与「悬停后的取值」。
+       *
+       * 实测踩过：主按钮在手机视口被判「无变化」，而手动复现时
+       * 渐变与 filter 都变了。原因是基线取自**收集阶段**（那时元素可能还没滚动到位、
+       * 或正处于另一种状态），与悬停时的基线不是同一时刻的。
+       *
+       * 处理方式不是放宽判据，而是**复核一次**：把鼠标移开、等一帧，
+       * 重新取一次「未悬停」的值。若那时与悬停时也不同，说明元素本来就有变化，
+       * 之前的判定是基线过期 —— 记入 stale，不算失败。
+       * 只有「移开后重新取基线，仍与悬停时完全相同」才真正判定无反馈。
+       */
+      await page.mouse.move(2, 2)
+      await page.waitForTimeout(60)
+      const idle = await page.evaluate((sel) => {
+        const el = document.querySelector(sel)
+        if (!el) return null
+        const s = getComputedStyle(el)
+        return [
+          'background-color',
+          'background-image',
+          'color',
+          'border-color',
+          'box-shadow',
+          'outline-color',
+          'outline-width',
+          'filter',
+        ]
+          .map((k) => s.getPropertyValue(k))
+          .join('|')
+      }, sel)
+      if (idle !== null && idle !== after.fp) {
+        staleBaseline += 1
+      } else {
+        noHover.push(item.label)
+      }
     }
     // 移开，避免影响下一个元素
     await page.mouse.move(2, 2)
     await page.waitForTimeout(30)
   }
   console.log(
-    `  悬停反馈    : 试过 ${sample.length} 个元素，完全无变化 ${noHover.length} 个（另有 ${skipped} 个未能悬停到，已排除）`,
+    `  悬停反馈    : 试过 ${sample.length} 个元素，完全无变化 ${noHover.length} 个（另有 ${skipped} 个未能悬停到、${staleBaseline} 个基线过期已复核，均排除）`,
   )
   for (const l of noHover.slice(0, 10)) console.log(`      · ${l}`)
 
