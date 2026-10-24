@@ -49,6 +49,43 @@ describe('AI 预设', () => {
     }
   })
 
+  /*
+   * Key 申请链接：除「自定义」外，每条预设都必须给出直达地址。
+   *
+   * 为什么值得断言：这个字段的价值全在「能点过去」。
+   * 写成 http、写成相对路径、或者留空，界面上的链接就形同虚设 ——
+   * 而那种失效不会报错，用户只会觉得「点了没反应」。
+   * 所以形状（https 绝对地址、无查询参数）比内容更需要钉住。
+   */
+  it('除自定义外，每条预设都有可点击的 https Key 申请地址', () => {
+    for (const preset of AI_PRESETS) {
+      if (preset.id === 'custom') {
+        // 自定义没有统一入口，由用户自己的服务商决定
+        expect(preset.keyUrl).toBeUndefined()
+        continue
+      }
+      expect(preset.keyUrl, `${preset.id} 缺少 keyUrl`).toBeTruthy()
+      const url = new URL(preset.keyUrl)
+      expect(url.protocol).toBe('https:')
+      expect(url.hostname).toBeTruthy()
+      // 不带推广/跟踪参数：这些链接是给用户用的，不是拿去统计的
+      expect(url.search).toBe('')
+    }
+  })
+
+  it('免费额度说明必须说清是「有免费」还是「要付费」（不能含糊）', () => {
+    for (const preset of AI_PRESETS) {
+      if (!preset.freeNote) continue
+      /*
+       * 两种都合法，但必须选一边：
+       *  - 有免费额度的，要提到「免费 / 额度 / 试用」；
+       *  - 明确要付费的（如 OpenAI），要提到「付费 / 收费」。
+       * 含糊的说明（「需要 Key」）没有信息量，不如不写。
+       */
+      expect(preset.freeNote).toMatch(/免费|额度|试用|付费|收费/)
+    }
+  })
+
   it('非自定义预设的默认模型都在候选列表里（否则界面会退化成手填）', () => {
     for (const preset of AI_PRESETS) {
       if (preset.id === 'custom') continue

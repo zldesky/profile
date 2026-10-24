@@ -54,6 +54,7 @@
     "verify:mobile-bar": "node tools/verify-mobile-bar.mjs",
     "verify:touch-drag": "node tools/verify-touch-drag.mjs",
     "verify:package": "node tools/verify-delivery-package.mjs",
+    "verify:key-link": "node tools/verify-key-link.mjs",
     "build:host-template": "node tools/build-host-template.mjs",
     "preview:host-theme": "node tools/preview-host-theme.mjs"
   },

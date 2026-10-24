@@ -227,7 +227,7 @@ watch(isOpen, async (open) => {
         tabindex="-1"
       >
         <div class="ai-head">
-          <h3 class="ai-title">AI 服务设置</h3>
+          <h3 class="ai-title">模型服务设置</h3>
           <button class="ai-close" title="关闭" aria-label="关闭" @click="close">
             <SvgIcon name="close" :size="14" />
           </button>
@@ -237,6 +237,29 @@ watch(isOpen, async (open) => {
           <span>服务商</span>
           <BaseSelect v-model="presetId" :options="presetOptions" @change="applyPreset" />
         </label>
+
+        <!--
+          去申请 Key 的直达入口。
+          放在「服务商」正下方而不是 Key 输入框旁边，是因为用户的操作顺序是
+          「先选服务商 → 再去拿 Key → 再粘贴」；把入口放在输入框旁边，
+          会让人在粘贴之后才看到它，那时已经不需要了。
+          用 <a target="_blank" rel="noopener noreferrer">：
+          noreferrer 是必需的 —— 否则新页面能拿到本页地址，
+          而本应用是本地/内网部署，没有理由把它暴露给外部站点。
+        -->
+        <p v-if="preset.keyUrl" class="ai-keylink">
+          <span>{{ preset.freeNote || '需要该服务商的 API Key' }}</span>
+          <a
+            class="ai-keylink-a"
+            :href="preset.keyUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            :title="`在新标签页打开 ${preset.label} 的 Key 页面`"
+          >
+            去拿 Key
+            <SvgIcon name="link" :size="12" />
+          </a>
+        </p>
 
         <label class="ai-field">
           <span>服务地址（OpenAI 兼容）</span>
@@ -414,6 +437,50 @@ watch(isOpen, async (open) => {
 .ai-model-row .bsel {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+/*
+ * 「去拿 Key」提示条。
+ *
+ * 刻意做得**低对比、不抢注意力**：它是一个便利入口，不是必填项。
+ * 做成醒目按钮会让人以为「必须先点这里」，而实际上很多用户早就存着 Key。
+ * 左侧说明「有没有免费额度」是更值钱的信息 —— 很多人以为必须付费。
+ */
+.ai-keylink {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -4px 0 10px;
+  padding: 6px 9px;
+  border-radius: var(--ed-radius-sm);
+  background: var(--ed-fill-2);
+  color: var(--ed-text-3);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.ai-keylink-a {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+  min-height: 24px;
+  padding: 0 4px;
+  color: var(--ed-brand-strong);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ai-keylink-a:hover {
+  text-decoration: underline;
+}
+
+.ai-keylink-a:focus-visible {
+  outline: 2px solid var(--ed-brand);
+  outline-offset: 1px;
+  border-radius: var(--ed-radius-xs);
 }
 
 /* 草稿提示：琥珀色，与「软校验警告」同一语气 */

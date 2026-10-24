@@ -25,6 +25,36 @@ const DRAFT_KEY = 'resume-studio-ai-draft-v1'
  *
  * models 是「常用模型」的候选，供下拉直接选，省去手打模型名；
  * 用户仍可切到自定义手填，因为各家的模型上新很快，写死会过期。
+ *
+ * keyUrl 是「去申请 / 查看 Key」的直达地址。
+ * 这一项的存在理由很具体：用户点开设置弹窗时，绝大多数人**手上还没有 Key**，
+ * 而「先去某处注册、找到控制台、再翻到 API Key 页面」这条路上每一步都可能放弃。
+ * 给一个能直接点过去的地址，是这条链路上最省事的一环。
+ *
+ * 这些地址都是各服务商公开文档/控制台里的固定入口，不含任何推广参数。
+ * 但**页面路径会变**（有的会 301 到新域名），所以界面上的链接只是便利，
+ * 真正的兜底是下面的 baseUrl —— 地址变了用户仍能自己找到控制台。
+ */
+/**
+ * 一条服务商预设。
+ *
+ * 用 JSDoc 而不是把这个文件整体迁 TS：它只有两百多行、且已经稳定，
+ * 而调用方（AISettingsDialog）是 TS —— 有了标注，那边就能拿到
+ * `keyUrl?: string` 的类型，模板里的 `v-if="preset.keyUrl"` 才不会报
+ * 「属性不存在于 never」。
+ *
+ * @typedef {object} AiPreset
+ * @property {string} id
+ * @property {string} label
+ * @property {string} baseUrl
+ * @property {string} model
+ * @property {string[]} models
+ * @property {string} [keyUrl] 去申请 / 查看 Key 的直达地址
+ * @property {string} [freeNote] 免费额度说明（没有就显示一句通用提示）
+ */
+
+/**
+ * @type {AiPreset[]}
  */
 export const AI_PRESETS = [
   {
@@ -33,6 +63,8 @@ export const AI_PRESETS = [
     baseUrl: 'https://api.deepseek.com',
     model: 'deepseek-chat',
     models: ['deepseek-chat', 'deepseek-reasoner'],
+    keyUrl: 'https://platform.deepseek.com/api_keys',
+    freeNote: '新账号通常有试用额度',
   },
   {
     id: 'siliconflow',
@@ -46,6 +78,8 @@ export const AI_PRESETS = [
       'Qwen/Qwen2.5-7B-Instruct',
       'THUDM/glm-4-9b-chat',
     ],
+    keyUrl: 'https://cloud.siliconflow.cn/account/ak',
+    freeNote: '注册赠送额度，部分小模型长期免费',
   },
   {
     id: 'glm',
@@ -53,6 +87,8 @@ export const AI_PRESETS = [
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
     model: 'glm-4-flash',
     models: ['glm-4-flash', 'glm-4-air', 'glm-4-plus'],
+    keyUrl: 'https://bigmodel.cn/usercenter/apikeys',
+    freeNote: 'glm-4-flash 长期免费（本项目最省钱的选项）',
   },
   {
     id: 'moonshot',
@@ -60,6 +96,8 @@ export const AI_PRESETS = [
     baseUrl: 'https://api.moonshot.cn/v1',
     model: 'moonshot-v1-8k',
     models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'kimi-k2-0711-preview'],
+    keyUrl: 'https://platform.moonshot.cn/console/api-keys',
+    freeNote: '新账号通常有赠送额度',
   },
   {
     id: 'dashscope',
@@ -67,6 +105,8 @@ export const AI_PRESETS = [
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     model: 'qwen-plus',
     models: ['qwen-plus', 'qwen-turbo', 'qwen-max', 'qwen-long'],
+    keyUrl: 'https://bailian.console.aliyun.com/',
+    freeNote: '各模型有免费额度（按模型单独计）',
   },
   {
     id: 'ark',
@@ -74,6 +114,8 @@ export const AI_PRESETS = [
     baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
     model: 'doubao-1-5-lite-32k-250115',
     models: ['doubao-1-5-lite-32k-250115', 'doubao-1-5-pro-32k-250115'],
+    keyUrl: 'https://console.volcengine.com/ark',
+    freeNote: '新用户有免费 token 额度',
   },
   {
     id: 'hunyuan',
@@ -81,6 +123,8 @@ export const AI_PRESETS = [
     baseUrl: 'https://api.hunyuan.cloud.tencent.com/v1',
     model: 'hunyuan-lite',
     models: ['hunyuan-lite', 'hunyuan-turbos-latest'],
+    keyUrl: 'https://console.cloud.tencent.com/hunyuan/api-key',
+    freeNote: 'hunyuan-lite 免费',
   },
   {
     id: 'openai',
@@ -88,6 +132,8 @@ export const AI_PRESETS = [
     baseUrl: 'https://api.openai.com/v1',
     model: 'gpt-4o-mini',
     models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini'],
+    keyUrl: 'https://platform.openai.com/api-keys',
+    freeNote: '需付费；国内访问需要网络条件',
   },
   {
     id: 'groq',
@@ -95,6 +141,8 @@ export const AI_PRESETS = [
     baseUrl: 'https://api.groq.com/openai/v1',
     model: 'llama-3.3-70b-versatile',
     models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
+    keyUrl: 'https://console.groq.com/keys',
+    freeNote: '有免费速率额度，速度快',
   },
   {
     id: 'openrouter',
@@ -102,6 +150,8 @@ export const AI_PRESETS = [
     baseUrl: 'https://openrouter.ai/api/v1',
     model: 'deepseek/deepseek-chat',
     models: ['deepseek/deepseek-chat', 'google/gemini-2.0-flash-001'],
+    keyUrl: 'https://openrouter.ai/settings/keys',
+    freeNote: '部分模型标注 :free 可免费调用',
   },
   {
     id: 'opencode',
@@ -118,11 +168,23 @@ export const AI_PRESETS = [
      */
     model: '',
     models: [],
+    keyUrl: 'https://opencode.ai/auth',
   },
-  { id: 'custom', label: '自定义（任意 OpenAI 兼容）', baseUrl: '', model: '', models: [] },
+  {
+    id: 'custom',
+    label: '自定义（任意 OpenAI 兼容）',
+    baseUrl: '',
+    model: '',
+    models: [],
+    // 自定义没有统一的 Key 页面：由用户自己的服务商决定
+  },
 ]
 
-/** 按 id 取预设，取不到按「自定义」处理 */
+/**
+ * 按 id 取预设，取不到按「自定义」处理
+ * @param {string} id
+ * @returns {AiPreset}
+ */
 export function presetById(id) {
   return AI_PRESETS.find((item) => item.id === id) || AI_PRESETS[AI_PRESETS.length - 1]
 }
