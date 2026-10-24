@@ -11,6 +11,7 @@ import SvgIcon from '@/components/SvgIcon.vue'
 import DragHandle from '@/components/editor/DragHandle.vue'
 import DraggableList from '@/components/editor/DraggableList.vue'
 import EntryTimeField from '@/components/editor/basics/EntryTimeField.vue'
+import CharCountHint from '@/components/editor/sections/CharCountHint.vue'
 import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
 import { readImageAsDataUrl } from '@/utils/helpers'
@@ -279,6 +280,8 @@ function reorderBullets(ids: string[]): void {
           >
             <SvgIcon name="trash" :size="14" />
           </button>
+          <!-- 字数提示与写作检查共用同一份阈值，避免「检查说超了、这里说没超」 -->
+          <CharCountHint class="ed-bullet-count" :text="bullet.text" />
         </div>
       </template>
     </DraggableList>

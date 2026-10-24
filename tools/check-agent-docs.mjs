@@ -178,16 +178,65 @@ if (claimedCount > 0) {
   countVue(path.join(root, 'src'))
 
   const readme = read('README.md')
-  // 只认「N / N 全部完成」这种带分母的写法，这是 README 里真实的表述
+  // 认「N / N 全部完成」这种带分母的写法，这是 README 里真实出现过的表述
   const claims = [...readme.matchAll(/(\d+)\s*\/\s*(\d+)\s*全部完成/g)]
   const wrong = claims.filter((m) => Number(m[1]) !== vueCount || Number(m[2]) !== vueCount)
+
+  /*
+   * 现在 README 改成了「全部组件」这种不带数字的写法。
+   *
+   * 起因：每加一个组件就得改两处数字，改漏了脚本才红 —— 这个数字本身没有信息量，
+   * 却制造了持续的维护成本。去掉数字是对的，但**不能因此失去可验证性**：
+   * 所以改为直接核对那句断言本身 ——「真的没有 export default / defineComponent 了吗」。
+   */
+  const saysAllSetup = /全部组件\*\*已改用它/.test(readme)
+  const saysAllTs = /全部组件\*\*已是 TS/.test(readme)
+  const allVueFiles = []
+  function collectVue(dir) {
+    let entries
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory()) collectVue(path.join(dir, entry.name))
+      else if (entry.name.endsWith('.vue')) allVueFiles.push(path.join(dir, entry.name))
+    }
+  }
+  collectVue(path.join(root, 'src'))
+
+  const legacyComponents = allVueFiles.filter((file) => {
+    const source = readFileSync(file, 'utf8')
+    return /export\s+default\s*\{|defineComponent\(/.test(source)
+  })
+  const jsComponents = allVueFiles.filter((file) => {
+    const source = readFileSync(file, 'utf8')
+    return /<script(?![^>]*\blang="ts")/.test(source)
+  })
+
   if (wrong.length) {
     fail(
       `README 写的是「${wrong[0][1]} / ${wrong[0][2]} 全部完成」，实际有 ${vueCount} 个 .vue`,
-      '把 README 里那个分数改成实际组件数（两处：<script setup> 与 lang="ts"）',
+      '把 README 里那个分数改成实际组件数，或改成「全部组件」这种不带分母的表述',
     )
   } else if (claims.length) {
     ok(`README 的 .vue 组件数与实际一致（${vueCount}）`)
+  } else if (saysAllSetup || saysAllTs) {
+    // 断言换成「核对那句话本身」，而不是核对一个不再存在的数字
+    if (legacyComponents.length) {
+      fail(
+        `README 说「全部组件」用 <script setup>，但有 ${legacyComponents.length} 个仍在用 export default / defineComponent`,
+        legacyComponents.map((f) => path.relative(root, f)).join(', '),
+      )
+    } else if (jsComponents.length) {
+      fail(
+        `README 说「全部组件」是 TS，但有 ${jsComponents.length} 个 .vue 的 script 没有 lang="ts"`,
+        jsComponents.map((f) => path.relative(root, f)).join(', '),
+      )
+    } else {
+      ok(`README 的「全部组件」断言成立（${vueCount} 个 .vue 均为 <script setup lang="ts">）`)
+    }
   }
 }
 

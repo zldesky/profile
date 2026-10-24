@@ -632,15 +632,32 @@ label:has(> .ed-check) {
   font-weight: 600;
 }
 
+/*
+ * 字数提示独占一行。
+ *
+ * 踩过的坑：一开始用 `flex: 1 1 100%` + `order: 9` 想让它「折到下一行」，
+ * 结果 flex 容器把 `flex-basis: 100%` 也当成同一行的分配基准，
+ * textarea 被压到 90px 宽（截图量出来的），文字完全没法读。
+ * 可靠做法是让**容器换行**：`.ed-bullet-row` 用 `flex-wrap: wrap`，
+ * 提示给 `flex: 0 0 100%` 强制整行，其余元素保持原来的自适应宽度。
+ */
 .ed-bullet-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 6px;
   margin-bottom: 7px;
 }
 
 .ed-bullet-row .ed-textarea {
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: 46px;
+}
+
+.ed-bullet-row .ed-bullet-count {
+  flex: 0 0 100%;
+  margin: 0;
 }
 
 .ed-empty {

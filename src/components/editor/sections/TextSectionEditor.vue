@@ -7,6 +7,7 @@ import { shallowRef } from 'vue'
 
 import ExpressionAssistantDialog from '@/components/ExpressionAssistantDialog.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
+import CharCountHint from '@/components/editor/sections/CharCountHint.vue'
 import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
 import type { TextSection } from '@/types/resume'
@@ -45,6 +46,11 @@ function applyPolish(text: string): void {
         store.updateSection(section.id, { content: ($event.target as HTMLInputElement).value })
       "
     ></textarea>
+    <!--
+      段落的建议区间与要点不同：自我评价是「三四句话」，40–160 字比较合适。
+      沿用要点的 8–80 会让正常篇幅的段落一直提示超过上限，久了就没人看这个提示。
+    -->
+    <CharCountHint :text="section.content" :min="40" :max="160" />
     <p class="ed-hint">支持换行，预览与打印会保留换行效果。</p>
 
     <ExpressionAssistantDialog
