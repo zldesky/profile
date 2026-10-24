@@ -7,9 +7,11 @@ import { usePdfPassword } from '@/composables/usePdfPassword'
 import { useToast } from '@/composables/useToast'
 import { useResumeStore } from '@/stores/resume'
 import { checkResume } from '@/utils/completeness'
-import { resumeFileName } from '@/utils/filename'
-import { downloadBlob, formatBytes } from '@/utils/helpers'
+import { resumeToPlainText } from '@/utils/exporters'
+import { monthStamp, resumeFileName } from '@/utils/filename'
+import { downloadBlob, formatBytes, formatTime } from '@/utils/helpers'
 import { fetchServerHealth, requestServerPdf } from '@/utils/serverPdf'
+import { utf8Bytes, zipBlob } from '@/utils/zip'
 
 const PRINT_HINT = '打印窗口请将「边距」设为默认、勾选「背景图形」，另存为 PDF 即可保留配色与分页'
 
@@ -201,6 +203,72 @@ export function usePdfExport() {
     preflightOpen.value = false
   }
 
+  /**
+   * 投递包：把「投递用的 PDF」与「给 ATS 的纯文本」打成一个 zip。
+   *
+   * 为什么值得做成一个动作：投递时通常要两份 —— 招聘系统要能解析的纯文本，
+   * 人看的是 PDF。分开导两次容易只导一份，或者两份不同步（改完只重导了 PDF）。
+   * 装在一个包里，命名一致、时间一致。
+   *
+   * 不做「打包失败就静默降级成单文件下载」：那会让用户以为拿到了完整投递包。
+   */
+  async function exportPackage() {
+    if (exporting.value || quotaExhausted.value) return
+    if (!passesPreflight()) return
+    if (auth.status.value === 'anon' && !password.value && !authRequired.value) {
+      return requireAuthThen(() => exportPackage())
+    }
+    if (needPassword.value) {
+      passwordError.value = ''
+      passwordOpen.value = true
+      return
+    }
+
+    exporting.value = true
+    try {
+      const pdfBlob = await requestServerPdf(store.resume, filename.value, password.value)
+      const stamp = monthStamp()
+      const base = resumeFileName({
+        name: store.basics.name,
+        jobTitle: store.basics.jobTitle,
+        suffix: stamp,
+      })
+
+      const entries = [
+        { name: `${base}.pdf`, data: new Uint8Array(await pdfBlob.arrayBuffer()) },
+        {
+          name: `${base}.txt`,
+          data: utf8Bytes(resumeToPlainText(store.resume)),
+        },
+        {
+          // 说明文件：拿到包的人（包括几个月后的自己）能知道这两份是什么
+          name: '说明.txt',
+          data: utf8Bytes(
+            [
+              `投递包：${store.basics.name || '未命名'}${store.basics.jobTitle ? ` · ${store.basics.jobTitle}` : ''}`,
+              `导出时间：${formatTime(Date.now())}`,
+              '',
+              `${base}.pdf  投递用，文字可选中`,
+              `${base}.txt  给招聘系统解析用，纯文本`,
+              '',
+              '由「简历工坊」导出。',
+            ].join('\n'),
+          ),
+        },
+      ]
+
+      downloadBlob(zipBlob(entries), `${base}.zip`)
+      passwordOpen.value = false
+      passwordError.value = ''
+      toast(`已导出投递包（PDF + 纯文本，${formatBytes(zipBlob(entries).size)}）`, 3600)
+    } catch (error) {
+      handleError(error)
+    } finally {
+      exporting.value = false
+      await refreshQuota()
+    }
+  }
+
   /** 提交给本地渲染服务，取回矢量 PDF 并直接下载 */
   async function runExport() {
     exporting.value = true
@@ -289,5 +357,7 @@ export function usePdfExport() {
     preflightIssues,
     confirmPreflight,
     cancelPreflight,
+    /* 投递包 */
+    exportPackage,
   }
 }

@@ -24,9 +24,15 @@ import { fileURLToPath } from 'node:url'
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 
 /**
+ * @param {{ allowedOrigins?: string[] }} [options]
+ *   `allowedOrigins`：放行哪些浏览器来源。
+ *   默认不设（只允许不带 Origin 的脚本请求）。**浏览器里点按钮验证**时必须传，
+ *   否则服务端 checkOrigin 会返 403「请求来源不被允许」——
+ *   那条错误看起来像产品坏了，实际是 harness 没放行那个来源。
  * @returns {Promise<{ base: string, password: string, dbPath: string, cleanup: () => void }>}
  */
-export async function startPdfServer() {
+export async function startPdfServer(options = {}) {
+  const { allowedOrigins = [] } = options
   const dir = mkdtempSync(join(tmpdir(), 'rs-pdf-'))
   const dbPath = join(dir, 'app.db')
   const port = 40000 + Math.floor(Math.random() * 5000)
@@ -47,6 +53,8 @@ export async function startPdfServer() {
       PDF_DAILY_LIMIT: '1000',
       PDF_USER_DAILY_LIMIT: '1000',
       CAPTCHA_ENABLED: 'off',
+      // 浏览器里点按钮的验证必须放行来源，否则 checkOrigin 会 403（见函数注释）
+      ...(allowedOrigins.length ? { ALLOWED_ORIGINS: allowedOrigins.join(',') } : {}),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   })

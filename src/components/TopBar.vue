@@ -137,6 +137,7 @@ const {
   preflightIssues,
   confirmPreflight,
   cancelPreflight,
+  exportPackage,
 } = usePdfExport()
 
 /** 退出后同步一次额度（未登录时服务端不再返回），让导出按钮立刻反映状态 */
@@ -424,6 +425,14 @@ function runImport(action: () => void) {
         <button role="menuitem" @click="runExport(exportPlainText)">
           <span class="menu-name">纯文本</span>
           <span class="menu-desc">ATS / 表单粘贴</span>
+        </button>
+        <!--
+          投递包放在导出菜单最前面（由 CSS 的 order 控制会更麻烦，这里直接用顺序）：
+          它是最接近「我投出去」这个终点的一个动作，值得紧挨着其它导出项。
+        -->
+        <button role="menuitem" @click="runExport(exportPackage)">
+          <span class="menu-name">投递包（PDF + 纯文本）</span>
+          <span class="menu-desc">打成一个 zip，命名带年月</span>
         </button>
         <button role="menuitem" @click="runExport(exportBackup)">
           <span class="menu-name">整包备份</span>
