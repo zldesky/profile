@@ -11,19 +11,19 @@
 `tsconfig.json` 里 `checkJs: false`，且 `include` 只收了 `src/**/*.ts`、`src/**/*.vue`、
 `server/**/*.ts`、`vite.config.js`。
 
-**结论：`src/` 下 22 个 `.js` 文件完全不受类型检查。** 它们能通过 `npm run typecheck`
+**结论：`src/` 下 19 个 `.js` 文件完全不受类型检查。** 它们能通过 `npm run typecheck`
 不代表它们是对的 —— 只是根本没被看。分布：
 
 ```
 src/composables/  8 个   useAvatarDrag useMediaQuery usePageMetrics usePaperSelection
                          usePaperZoom usePdfExport usePdfPassword useResumeFile
-src/utils/       10 个   aiKeyStore avatarStore backup completeness exporters
-                         history imageCrop imageTemplate selection validators
-src/router/       2 个   index routes
+src/utils/        8 个   aiKeyStore avatarStore backup exporters
+                         history imageCrop imageTemplate selection
+src/router/       1 个   index
 src/templates/    1 个   index
 src/main.js       1 个
                   ────
-                  22 个
+                  19 个
 ```
 
 **每一行都要能自己数对上**：点名文件名个数 = 该行声明的数量，各行之和 = 底部总数。
@@ -31,10 +31,11 @@ src/main.js       1 个
 少写了 `history`），总数对、分布错，读者看到总数正确就会信整张表。
 `npm run check:agent-docs` 只比对**总数**，**名单要人自己数** —— 这是它明确的覆盖边界。
 
-注意 `src/utils/` 里还有 13 个**已经迁完的 `.ts`**（`aiClient` `aiFill` `api` `cloudResume`
-`collectionApi` `fieldLayout` `helpers` `markdownSource` `pdfImport` `resumeStyle`
-`sectionStyle` `serverPdf` `shareApi` `styleMatrix`）—— 它们受类型检查，不要算进上面那 22 个。
-同一个目录里 `.ts` 与 `.js` 混住，是这个项目迁移到一半的现状。
+注意 `src/utils/` 里还有 16 个**已经迁完的 `.ts`**（`aiClient` `aiFill` `api` `cloudResume`
+`collectionApi` `completeness` `entryTime` `exportFlow` `fieldLayout` `filename` `helpers`
+`markdownSource` `pageFill` `pdfImport` `resumeStyle` `sectionStyle` `serverPdf` `shareApi`
+`styleMatrix` `textNormalize` `validators` `zip`）—— 它们受类型检查，
+不要算进上面那 19 个。同一个目录里 `.ts` 与 `.js` 混住，是这个项目迁移到一半的现状。
 
 **迁移进度**：上一轮把 26 降到 22，方法是先动**网络边界** —— `aiClient` `cloudResume`
 `serverPdf`（`src/utils/`）与 `useCloudSync`（`src/composables/`）四个文件转 `.ts`。

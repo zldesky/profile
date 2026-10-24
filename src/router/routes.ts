@@ -1,3 +1,5 @@
+import type { RouteRecordRaw } from 'vue-router'
+
 /**
  * 路由表（纯配置，不依赖浏览器）。
  *
@@ -8,8 +10,12 @@
  *
  * 首页（/）是产品介绍，编辑器在 /editor。「打开即编辑」由首页的 CTA 承担，
  * 因此入口并没有变难找；而把编辑器让出来，首页才能讲清产品是什么。
+ *
+ * 标成 `RouteRecordRaw[]` 之后，`name` 写错、`path` 拼错这类问题会在
+ * 类型层面暴露 —— 而它正是 `tests/renderTarget.test.js` 依赖的那个契约
+ * （`EDITOR_PATH` 必须命中名为 editor 的路由）。
  */
-export const routes = [
+export const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'home',

@@ -1,3 +1,5 @@
+import type { Section } from '@/types/resume'
+
 /**
  * 简历完成度体检（纯逻辑，可直接单测）。
  *
@@ -9,13 +11,39 @@
  */
 
 import { parseTimeRange, rangesOverlap } from '@/utils/expression'
+import type { TimeRange } from '@/utils/expression'
 import { contactFieldIssue } from '@/utils/validators'
 
-const LEVEL_WEIGHT = { error: 18, warn: 9, tip: 4 }
-/** 问题排序：严重的排前面 */
-const LEVEL_ORDER = { error: 0, warn: 1, tip: 2 }
+/** 问题级别：与 utils/expression 的 CheckLevel 语义一致 */
+export type IssueLevel = 'error' | 'warn' | 'tip'
 
-const str = (value) => String(value ?? '').trim()
+/** 一条体检问题 */
+export interface Issue {
+  level: IssueLevel
+  title: string
+  detail: string
+  /** 同一标题合并后的处数；缺省按 1 计 */
+  count?: number
+  /** 该问题属于哪个模块；缺省表示没有单一落点 */
+  sectionId?: string
+  /** 'basics' 表示落到右侧面板顶部的「基本信息」 */
+  target?: 'basics'
+}
+
+/** 体检结果 */
+export interface CompletenessReport {
+  score: number
+  counts: Record<IssueLevel, number>
+  /** 未修复问题的总处数（按 count 求和，不受同名合并影响） */
+  total: number
+  issues: Issue[]
+}
+
+const LEVEL_WEIGHT: Record<IssueLevel, number> = { error: 18, warn: 9, tip: 4 }
+/** 问题排序：严重的排前面 */
+const LEVEL_ORDER: Record<IssueLevel, number> = { error: 0, warn: 1, tip: 2 }
+
+const str = (value: unknown): string => String(value ?? '').trim()
 
 /** 按字段名语义判断是否电话 / 邮箱，与 ContactFieldsEditor 的提示口径一致 */
 const PHONE_LABEL_RE = /电话|手机|号码|传真|tel|phone/i
@@ -32,10 +60,11 @@ const MAIL_LABEL_RE = /邮箱|邮件|mail/i
  * @param {object} resume 简历数据（store.resume 形态）
  * @returns {{ score: number, counts: {error: number, warn: number, tip: number}, total: number, issues: Array<{level: 'error'|'warn'|'tip', title: string, detail: string, count: number, sectionId?: string, target?: 'basics'}> }}
  */
-export function checkResume(resume) {
-  const issues = []
+export function checkResume(resume: unknown): CompletenessReport {
+  const issues: Issue[] = []
 
-  const basics = resume?.basics || {}
+  const record = (resume ?? {}) as Record<string, unknown>
+  const basics = (record.basics ?? {}) as Record<string, unknown>
   if (!str(basics.name)) {
     issues.push({
       level: 'error',
@@ -54,7 +83,7 @@ export function checkResume(resume) {
     })
   }
 
-  const fields = Array.isArray(basics.fields) ? basics.fields : []
+  const fields = Array.isArray(basics.fields) ? (basics.fields as Record<string, unknown>[]) : []
   const filledFields = fields.filter((f) => str(f.value))
   const hasPhone = filledFields.some((f) => PHONE_LABEL_RE.test(str(f.label)))
   const hasMail = filledFields.some((f) => MAIL_LABEL_RE.test(str(f.label)))
@@ -76,7 +105,7 @@ export function checkResume(resume) {
   }
   // 已填的字段顺带做格式检查，复用编辑器里的同一条规则
   filledFields.forEach((f) => {
-    const issue = contactFieldIssue(f.label, f.value)
+    const issue = contactFieldIssue(str(f.label), str(f.value))
     if (issue)
       issues.push({
         level: 'warn',
@@ -86,7 +115,7 @@ export function checkResume(resume) {
       })
   })
 
-  const allSections = Array.isArray(resume?.sections) ? resume.sections : []
+  const allSections = Array.isArray(record.sections) ? (record.sections as Section[]) : []
   const sections = allSections.filter((s) => s && s.visible !== false)
   if (!sections.length) {
     issues.push({
@@ -143,7 +172,7 @@ export function checkResume(resume) {
   issues.push(...checkTimeOverlaps(sections), ...checkIntentMismatch(resume, sections))
 
   // 同名问题合并计数：两条目都没写机构名，是一条「3 处」而不是两条一样的
-  const merged = new Map()
+  const merged = new Map<string, Issue>()
   issues.forEach((issue) => {
     const existing = merged.get(issue.title)
     if (existing) {
@@ -155,7 +184,7 @@ export function checkResume(resume) {
        * 于是「2 处」在结构化字段里退化成 1 —— 标题写着 2，程序数出 1。
        * 顶栏角标读的是 count，于是少报一半。两套数字必须同源。
        */
-      existing.count += issue.count ?? 1
+      existing.count = (existing.count ?? 1) + (issue.count ?? 1)
       /*
        * 合并后仍然保留第一处的位置。
        * 用户点这条问题时应该跳到「其中一处」，而不是因为合并了就没有落点 ——
@@ -172,7 +201,7 @@ export function checkResume(resume) {
   )
 
   const deduction = finalIssues.reduce((sum, issue) => sum + LEVEL_WEIGHT[issue.level], 0)
-  const counts = { error: 0, warn: 0, tip: 0 }
+  const counts: Record<IssueLevel, number> = { error: 0, warn: 0, tip: 0 }
   finalIssues.forEach((issue) => (counts[issue.level] += 1))
 
   return {
@@ -203,7 +232,7 @@ export function checkResume(resume) {
  * 顶栏「还剩几处要改」的角标就少报一半。标题里的数字人看得懂，
  * 但程序只信 count —— 两套数字必须同源。
  */
-function checkSection(section, issues) {
+function checkSection(section: Section, issues: Issue[]): void {
   const title = str(section.title) || '未命名模块'
   const label = `「${title}」`
   /*
@@ -211,8 +240,15 @@ function checkSection(section, issues) {
    * 没有它，弹窗只能给一句描述，用户还得自己在 6 个模块里找 ——
    * 那正是「体检很有用但没人用」的原因。
    */
-  const add = (level, suffix, detail, times = 1) =>
-    issues.push({ level, title: `${label}${suffix}`, detail, sectionId: section.id, count: times })
+  const add = (level: IssueLevel, suffix: string, detail: string, times = 1): void => {
+    issues.push({
+      level,
+      title: `${label}${suffix}`,
+      detail,
+      sectionId: section.id,
+      count: times,
+    })
+  }
 
   if (section.type === 'entries') {
     const items = Array.isArray(section.items) ? section.items : []
@@ -299,15 +335,22 @@ function checkSection(section, issues) {
  *
  * 同月交接不算重叠（换工作是常态），这条判定在 rangesOverlap 里。
  */
-function checkTimeOverlaps(sections) {
-  const out = []
+function checkTimeOverlaps(sections: Section[]): Issue[] {
+  const out: Issue[] = []
   sections.forEach((section) => {
     if (section.type !== 'entries') return
     const items = Array.isArray(section.items) ? section.items : []
     const parsed = items
       .map((entry) => ({ entry, range: parseTimeRange(str(entry?.time)) }))
-      // 解析不出时间的一律不参与比较：宁可漏报，也不猜一个区间去误报
-      .filter((item) => item.range)
+      /*
+       * 用类型谓词而不是 `.filter((item) => item.range)`：
+       * 后者不会把 `range` 从 `TimeRange | null` 收窄成 `TimeRange`，
+       * 于是下面 `rangesOverlap(a.range, b.range)` 报「null 不能赋给 TimeRange」。
+       * 类型谓词既表达意图，又让 TS 认账。
+       */
+      .filter(
+        (item): item is { entry: (typeof items)[number]; range: TimeRange } => item.range !== null,
+      )
 
     for (let i = 0; i < parsed.length; i += 1) {
       for (let j = i + 1; j < parsed.length; j += 1) {
@@ -334,8 +377,10 @@ function checkTimeOverlaps(sections) {
  * 只做提示、不自动改：两处谁对谁错是用户才知道的事，
  * 自动同步会制造「改 A 变 B」的惊吓，也会污染撤销栈。
  */
-function checkIntentMismatch(resume, sections) {
-  const jobTitle = str(resume?.basics?.jobTitle)
+function checkIntentMismatch(resume: unknown, sections: Section[]): Issue[] {
+  const record = (resume ?? {}) as Record<string, unknown>
+  const basics = (record.basics ?? {}) as Record<string, unknown>
+  const jobTitle = str(basics.jobTitle)
   if (!jobTitle) return []
 
   const intent = sections.find((section) => {
@@ -345,7 +390,7 @@ function checkIntentMismatch(resume, sections) {
       /求职岗位|意向岗位|目标岗位/.test(str(item?.label)),
     )
   })
-  if (!intent) return []
+  if (!intent || intent.type !== 'grid') return []
 
   const item = intent.items.find((it) => /求职岗位|意向岗位|目标岗位/.test(str(it?.label)))
   const wanted = str(item?.value)
@@ -360,7 +405,7 @@ function checkIntentMismatch(resume, sections) {
    *   前端开发工程师 / 前端工程师     → 去通用词后都是「前端」，同向，不报
    *   前端开发工程师 / 产品经理       → 「前端」vs「产品」不同，报
    */
-  const core = (text) =>
+  const core = (text: string): string =>
     text.replace(/高级|资深|初级|中级|实习|工程师|开发|岗位|职位|专员|经理/g, '')
   const a = core(wanted)
   const b = core(jobTitle)
@@ -382,7 +427,7 @@ function checkIntentMismatch(resume, sections) {
 }
 
 /** 统计全部可见条目的要点数与没有数字的要点数 */
-function collectBulletStats(sections) {
+function collectBulletStats(sections: Section[]): { total: number; withoutNumber: number } {
   let total = 0
   let withoutNumber = 0
   sections.forEach((section) => {
