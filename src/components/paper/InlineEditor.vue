@@ -181,6 +181,11 @@ function place(): void {
 
   // 字号取锚点的计算字号 —— 它是 zoom 之前的值，浏览器再按 zoom 缩小，
   // 视觉大小正好与原文字一致（实测 zoom=0.78 下渲染高度与原文字相符）
+  //
+  // 已知取舍：手机上纸面缩得很小（390 宽实测 46%），这里算出的字号可能低于
+  // 16px，iOS 聚焦时会放大整个视口。不做「最低 16px」的钳制 —— 那会让输入框
+  // 明显大于被替换的文字，浮层与锚点错位；手机上的主要编辑路径是右侧面板
+  // （其输入控件全部 ≥16px），纸面就地编辑是次要用路。
   const computedFont = parseFloat(getComputedStyle(anchor).fontSize)
   fontSize.value = Number.isFinite(computedFont) && computedFont > 0 ? computedFont : null
 

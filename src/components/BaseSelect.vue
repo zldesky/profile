@@ -250,9 +250,14 @@ function onSelect(event: Event) {
  * iOS 在聚焦 font-size 小于 16px 的输入框时会自动放大整个页面。
  * 这条必须写在组件内部：scoped 规则的选择器带 [data-v-*] 属性，
  * **优先级高于** editor.css 里那条同名的全局媒体查询，写在外面会被这里的 13px 压掉。
+ *
+ * is-dense 变体必须一起提：`.bsel.is-dense .bsel-input` 是 3 个类的选择器（0,3,0），
+ * 比下面这条（0,1,0）高 —— 不补的话紧凑款在手机上仍是 12px，
+ * 聚焦照样触发 iOS 缩放（实测：联系方式行 6 个下拉全部 12px）。
  */
 @media (max-width: 900px) {
-  .bsel-input {
+  .bsel-input,
+  .bsel.is-dense .bsel-input {
     font-size: 16px;
   }
 }

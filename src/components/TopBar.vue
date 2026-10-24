@@ -350,8 +350,9 @@ function runImport(action: () => void) {
     <span class="tb-sep" aria-hidden="true"></span>
 
     <button
-      class="ed-btn tb-collapse-md"
+      class="ed-btn tb-collapse-md tb-toggle"
       title="管理本地保存的多份简历"
+      aria-label="我的简历"
       @click="managerOpen = true"
     >
       <SvgIcon name="copy" :size="14" />
@@ -362,6 +363,7 @@ function runImport(action: () => void) {
       class="ed-btn tb-collapse-md tb-link"
       :to="{ name: 'collection' }"
       title="浏览官网简历合集"
+      aria-label="简历合集"
     >
       <SvgIcon name="image" :size="14" />
       <span class="btn-label">简历合集</span>
@@ -372,12 +374,18 @@ function runImport(action: () => void) {
       class="ed-btn tb-collapse-md tb-link"
       :to="{ name: 'admin' }"
       title="风格与模板管理后台"
+      aria-label="管理后台"
     >
       <SvgIcon name="palette" :size="14" />
       <span class="btn-label">管理后台</span>
     </router-link>
 
-    <button class="ed-btn tb-collapse-md" :title="toggleLabel" @click="emit('toggle-panel')">
+    <button
+      class="ed-btn tb-collapse-md tb-toggle"
+      :title="toggleLabel"
+      :aria-label="toggleLabel"
+      @click="emit('toggle-panel')"
+    >
       <SvgIcon :name="toggleIcon" :size="14" />
       <span class="btn-label">{{ toggleLabel }}</span>
     </button>
@@ -922,6 +930,25 @@ function runImport(action: () => void) {
 
   .tb-collapse-sm .btn-label {
     display: none;
+  }
+
+  /*
+   * 次要入口（我的简历 / 简历合集 / 管理后台）收成纯图标，给变宽的触控目标让位；
+   * 「预览 / 编辑」是状态切换，文字比图标直观，保留（tb-toggle 豁免）。
+   * 三个按钮的语义已由新加的 aria-label 承接，无障碍树不丢信息。
+   */
+  .tb-collapse-md:not(.tb-toggle) .btn-label {
+    display: none;
+  }
+
+  /*
+   * 触控目标加宽到 ≥40px：此前图标按钮实测只有 32px 宽，
+   * 是全站触控最差的一排（底部条已是 52px）。
+   * 只加宽不加高 —— 顶栏本身已经折行，再加高会吃掉更多纸面空间。
+   */
+  .editor-topbar .ed-btn,
+  .editor-topbar .ed-icon-btn {
+    min-width: 40px;
   }
 }
 
