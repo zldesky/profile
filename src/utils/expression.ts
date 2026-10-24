@@ -271,7 +271,6 @@ export function analyzeEntry(
   )
 }
 
-
 /*
  * ---------------- 时间区间 ----------------
  *
@@ -293,9 +292,4 @@ export {
   toPickerValue,
   yearOptions,
 } from '@/utils/entryTime'
-export type {
-  MonthPoint,
-  TimeInput,
-  TimePickerValue,
-  TimeRange,
-} from '@/utils/entryTime'
+export type { MonthPoint, TimeInput, TimePickerValue, TimeRange } from '@/utils/entryTime'
