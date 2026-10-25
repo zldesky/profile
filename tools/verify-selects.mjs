@@ -1,16 +1,18 @@
 /**
- * 验证下拉框已统一到 BaseSelect，并且**真的还能用**。
+ * 验证下拉框已统一到 BaseSelect（自绘菜单版），并且**真的还能用**。
  * 用法：node tools/verify-selects.mjs [url]
  *
- * 为什么要有它：这轮把 12 处原生 <select> 统一成一个组件，涉及
- * 「取值 / 派发 change / 分组选项 / undefined 占位项 / 尺寸变体」五类差异。
- * 类型检查只能保证 prop 形状对，**不能保证选中后值真的写回 store** ——
- * 而「下拉能打开、选了却没反应」正是这类重构最典型的坏法。
+ * 为什么要有它：BaseSelect 经历了两代 —— v1 包原生 <select>，只统一外观；
+ * v2（本轮）按用户要求把弹开的选项列表也改成自绘菜单（样式对齐「导入/导出
+ * 数据」菜单、宽度按内容自适应、贴边翻转），原生 select 从页面上绝迹。
+ * 两代共同的坏法是「下拉能打开、选了却没反应」——类型检查不报、静默失效，
+ * 必须用真实交互（点开菜单、点选项）验值真的写回。
  *
  * 判定：
- *  1. 页面上不应再有裸 <select class="ed-select">（未迁移的残留）；
- *  2. 每个下拉都有自绘箭头（说明走的是 BaseSelect）；
- *  3. 换一个值之后，选中项真的变了（功能没坏）。
+ *  1. 页面上不应再有原生 <select>（v1 的残留）；
+ *  2. 每个下拉都有触发按钮 + 自绘箭头（说明走的是 BaseSelect）；
+ *  3. 点开菜单选一个值，触发器上的当前值真的变了（功能没坏）；
+ *  4. 管理后台「字体（可选）」的 undefined 空值项：标签往返 + 菜单里无 "undefined"。
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -104,7 +106,9 @@ page.on('console', (m) => {
 /** 打开引导弹窗（首次进入会拦一层） */
 async function dismissOnboarding() {
   await page.evaluate(() => {
-    const s = [...document.querySelectorAll('button')].find((x) => (x.textContent || '').trim() === '跳过引导')
+    const s = [...document.querySelectorAll('button')].find(
+      (x) => (x.textContent || '').trim() === '跳过引导',
+    )
     if (s) s.click()
   })
   await page.waitForTimeout(300)
@@ -127,28 +131,30 @@ async function expandCards() {
  * 只有一个显示。隐藏侧的元素 getBoundingClientRect() 全是 0 ——
  * 早先把「宽度为 0」当问题报，其实是隐藏面板里的正常元素（实测误报了一轮，
  * 还让我去改了一个本来没问题的 flex 规则）。所以宽度只对可见元素判定。
+ *
+ * v2 起页面上的下拉是「.bsel > 触发按钮」，原生 <select> 应当为 0；
+ * 菜单只在打开时才 Teleport 到 body，这里只量常驻的触发器。
  */
 const inspect = () =>
   page.evaluate(() => {
-    const all = [...document.querySelectorAll('select')]
+    const natives = [...document.querySelectorAll('select')]
+    const triggers = [...document.querySelectorAll('.bsel-trigger')]
     const visible = (el) => {
       const r = el.getBoundingClientRect()
-      if (r.width > 0 && r.height > 0) return true
-      // offsetParent 为 null 说明自身或祖先 display:none
-      return false
+      return r.width > 0 && r.height > 0
     }
-    const shown = all.filter(visible)
+    const shown = triggers.filter(visible)
     return {
-      total: all.length,
+      // v1 残留：页面上还挂着原生 select
+      natives: natives.length,
+      legacy: natives.filter((s) => s.classList.contains('ed-select')).length,
+      total: triggers.length,
       visible: shown.length,
-      // 未迁移的残留：带旧 class 的原生 select
-      legacy: all.filter((s) => s.classList.contains('ed-select')).length,
-      // 走了 BaseSelect 的：外层 .bsel
-      wrapped: all.filter((s) => s.closest('.bsel')).length,
-      withChevron: all.filter((s) => s.parentElement?.querySelector('.bsel-chevron')).length,
-      dense: all.filter((s) => s.closest('.bsel')?.classList.contains('is-dense')).length,
+      wrapped: triggers.filter((t) => t.closest('.bsel')).length,
+      withChevron: triggers.filter((t) => t.parentElement?.querySelector('.bsel-chevron')).length,
+      dense: triggers.filter((t) => t.closest('.bsel')?.classList.contains('is-dense')).length,
       // 只对可见元素判宽度：可见却塌成 0 才是真问题（例如容器塌陷）
-      widthZero: shown.filter((s) => s.getBoundingClientRect().width < 20).length,
+      widthZero: shown.filter((t) => t.getBoundingClientRect().width < 20).length,
     }
   })
 
@@ -163,10 +169,15 @@ async function checkPage(label, url, prepare) {
   if (prepare) await prepare()
 
   const st = await inspect()
-  const ok = st.legacy === 0 && st.total > 0 && st.wrapped === st.total && st.widthZero === 0
+  const ok =
+    st.legacy === 0 &&
+    st.natives === 0 &&
+    st.total > 0 &&
+    st.wrapped === st.total &&
+    st.widthZero === 0
   if (ok) pagePass += 1
   console.log(
-    `  ${ok ? '✓' : '***'} ${label.padEnd(14)} 下拉 ${st.total} 个（可见 ${st.visible}）· 未迁移 ${st.legacy} · 走组件 ${st.wrapped} · 有箭头 ${st.withChevron} · 尺寸变体 ${st.dense} · 可见里宽度为 0 的 ${st.widthZero}`,
+    `  ${ok ? '✓' : '***'} ${label.padEnd(14)} 下拉 ${st.total} 个（可见 ${st.visible}）· 原生残留 ${st.natives} · 走组件 ${st.wrapped} · 有箭头 ${st.withChevron} · 尺寸变体 ${st.dense} · 可见里宽度为 0 的 ${st.widthZero}`,
   )
   return st.total
 }
@@ -179,59 +190,78 @@ await page.goto(`${base}/editor`, { waitUntil: 'networkidle' })
 await page.waitForTimeout(1200)
 await dismissOnboarding()
 await page.evaluate(() => {
-  const tab = [...document.querySelectorAll('.panel-tabs button')].find((b) => (b.textContent || '').includes('设计'))
+  const tab = [...document.querySelectorAll('.panel-tabs button')].find((b) =>
+    (b.textContent || '').includes('设计'),
+  )
   tab?.click()
 })
 await page.waitForTimeout(900)
 {
   const st = await inspect()
-  const ok = st.legacy === 0 && st.total > 0 && st.wrapped === st.total && st.widthZero === 0
+  const ok =
+    st.legacy === 0 &&
+    st.natives === 0 &&
+    st.total > 0 &&
+    st.wrapped === st.total &&
+    st.widthZero === 0
   if (ok) pagePass += 1
   pageTotal += 1
   console.log(
-    `  ${ok ? '✓' : '***'} ${'设计面板'.padEnd(12)} 下拉 ${st.total} 个（可见 ${st.visible}）· 未迁移 ${st.legacy} · 走组件 ${st.wrapped} · 有箭头 ${st.withChevron} · 可见里宽度为 0 的 ${st.widthZero}（含分组字体下拉）`,
+    `  ${ok ? '✓' : '***'} ${'设计面板'.padEnd(12)} 下拉 ${st.total} 个（可见 ${st.visible}）· 原生残留 ${st.natives} · 走组件 ${st.wrapped} · 有箭头 ${st.withChevron} · 可见里宽度为 0 的 ${st.widthZero}（含分组字体下拉）`,
   )
 }
 
-/* ---------- ② 功能：换值后真的变了 ---------- */
-console.log('\n② 功能验证（换一个值，看选中项是否变化）：')
+/* ---------- ② 功能：点开菜单选一个值，触发器上的当前值真的变了 ---------- */
+console.log('\n② 功能验证（真实点击：点开菜单 → 点选项 → 看触发器当前值）：')
+let results = []
+let changed = 0
 await page.goto(`${base}/editor`, { waitUntil: 'networkidle' })
 await page.waitForTimeout(1200)
 await dismissOnboarding()
 await expandCards()
 
-const results = await page.evaluate(() => {
-  const out = []
-  const selects = [...document.querySelectorAll('select')].slice(0, 6)
-  for (const sel of selects) {
-    const options = [...sel.options].filter((o) => !o.disabled && o.value !== '')
-    if (options.length < 2) continue
-    const label = sel.closest('.bsel') ? 'BaseSelect' : '原生'
-    const before = sel.value
-    // 选一个不同的
-    const next = options.find((o) => o.value !== before)
-    if (!next) continue
-    sel.value = next.value
-    sel.dispatchEvent(new Event('change', { bubbles: true }))
-    out.push({ label, before, picked: next.value, text: next.textContent.trim().slice(0, 12) })
+{
+  const triggers = page.locator('.editor-panel .bsel-trigger').filter({ visible: true })
+  const total = Math.min(await triggers.count(), 4)
+  for (let i = 0; i < total; i += 1) {
+    const trigger = triggers.nth(i)
+    const before = (await trigger.textContent()).trim()
+
+    /* 展开卡片后面板在重排，首击可能落在重排完成前 —— 打不开就再试一次 */
+    let pickedLabel = null
+    for (let attempt = 0; attempt < 2 && pickedLabel === null; attempt += 1) {
+      await trigger.click()
+      const menu = page.locator('.bsel-menu')
+      const opened = await menu
+        .waitFor({ state: 'visible', timeoutMs: 3000 })
+        .then(() => true)
+        .catch(() => false)
+      if (!opened) {
+        await page.keyboard.press('Escape').catch(() => {})
+        await page.waitForTimeout(400)
+        continue
+      }
+      const options = menu.locator('.bsel-option:not([disabled])')
+      const n = await options.count()
+      for (let j = 0; j < n; j += 1) {
+        const label = (await options.nth(j).textContent()).trim()
+        if (label && label !== before) {
+          pickedLabel = label
+          await options.nth(j).click()
+          break
+        }
+      }
+      await page.waitForTimeout(500)
+    }
+    const after = (await trigger.textContent()).trim()
+    const ok = pickedLabel !== null && after === pickedLabel
+    if (ok) changed += 1
+    results.push({ before, pickedLabel, after })
+    console.log(
+      `  ${ok ? '✓' : '***'} 第 ${i + 1} 个下拉 选「${pickedLabel ?? '（无可选项）'}」-> 当前值 ${after === pickedLabel ? '已跟随' : `未跟随（${after}）`}`,
+    )
   }
-  return out
-})
-
-// 等 Vue 把变化渲染回 DOM，再核对当前值
-await page.waitForTimeout(700)
-const afterValues = await page.evaluate(() =>
-  [...document.querySelectorAll('select')].slice(0, 6).map((s) => s.value),
-)
-
-let changed = 0
-for (const [i, r] of results.entries()) {
-  const now = afterValues[i]
-  const ok = now === r.picked
-  if (ok) changed += 1
-  console.log(
-    `  ${ok ? '✓' : '***'} ${r.label} 选「${r.text}」-> DOM 现值 ${now === r.picked ? '已跟随' : `未跟随（${now}）`}`,
-  )
+  if (results.length === 0) console.log('  *** 内容面板没有可见下拉（模块卡片没展开？）')
 }
 
 /* ---------- ③ 管理后台的下拉（最易坏：含 undefined 占位项与 EnumOption 映射） ---------- */
@@ -243,9 +273,11 @@ try {
   assertComponentsImported()
   assertDistFresh()
   admin = await startAdminServer({ username: 'sel-check', password: 'sel-check-local' })
-  await page.context().addCookies([
-    { name: 'rs_session', value: admin.token, url: admin.base, httpOnly: true, sameSite: 'Lax' },
-  ])
+  await page
+    .context()
+    .addCookies([
+      { name: 'rs_session', value: admin.token, url: admin.base, httpOnly: true, sameSite: 'Lax' },
+    ])
   await page.goto(`${admin.base}/admin`, { waitUntil: 'networkidle', timeout: 40000 })
   await page.waitForTimeout(1500)
 
@@ -282,93 +314,138 @@ try {
    * 这是整批迁移里唯一一处 undefined 语义，值得点名验。
    */
   adminTotal += 1
-  const fontSel = await page.evaluate(() => {
-    // 判据同上：同时具备空值项与实值项才算字体下拉（不靠标签文字）
-    const sel = [...document.querySelectorAll('select')].find((s2) => {
-      const os = [...s2.options]
-      return os.some((o) => o.value === '') && os.some((o) => o.value !== '')
+  /*
+   * 找「字体（可选）」下拉：逐个点开可见触发器，认「菜单里同时有 data-value=""
+   * 的空值项与非空实值项」—— 不能靠标签里有没有「跟随」：空值项自己的标签就是
+   * 「跟随简历当前字体」（也含「跟随」），会把空值项当成实值项（实测踩过）。
+   */
+  const triggers = page.locator('.bsel-trigger').filter({ visible: true })
+  const trigCount = await triggers.count()
+  let fontIndex = -1
+  let fontInfo = null
+  for (let i = 0; i < trigCount && fontIndex === -1; i += 1) {
+    const trigger = triggers.nth(i)
+    await trigger.click()
+    const menu = page.locator('.bsel-menu')
+    await menu.waitFor({ state: 'visible', timeoutMs: 3000 }).catch(() => {})
+    const info = await page.evaluate(() => {
+      const menu = document.querySelector('.bsel-menu')
+      if (!menu) return null
+      const opts = [...menu.querySelectorAll('.bsel-option')]
+      const empty = opts.find((o) => o.dataset.value === '')
+      const real = opts.find((o) => o.dataset.value !== '' && !o.disabled)
+      /*
+       * 只回传**字符串与布尔**：page.evaluate 的返回值走 JSON 序列化，
+       * DOM 元素跨边界会退化成 {}（truthy、textContent 为 undefined）——
+       * 元素一旦带出边界，后面读到的全是 undefined，断言全部失真。
+       */
+      return {
+        hasEmpty: Boolean(empty),
+        hasReal: Boolean(real),
+        emptyLabelAtFind: empty?.textContent?.trim() ?? null,
+        realLabelAtFind: real?.textContent?.trim() ?? null,
+        hasGroupedOptions: menu.querySelectorAll('.bsel-group').length,
+        optionCount: opts.length,
+        // 关键：不能出现字面量 "undefined"（v1 的 :value="undefined" 就退化成它）
+        literalUndefined: opts.some(
+          (o) => o.dataset.value === 'undefined' || o.textContent.includes('undefined'),
+        ),
+        dump: opts
+          .slice(0, 4)
+          .map(
+            (o) =>
+              `value=${JSON.stringify(o.dataset.value)} label=${JSON.stringify((o.textContent || '').trim().slice(0, 10))}`,
+          ),
+      }
     })
-    if (!sel) return null
-    const opts = [...sel.options]
-    const empty = opts.find((o) => o.value === '')
-    const real = opts.find((o) => o.value !== '' && !o.disabled)
-    return {
-      hasEmptyOption: Boolean(empty),
-      // 标签应由调用点决定（这里是「跟随简历当前字体」），不该被组件换成通用占位文案
-      emptyLabel: empty?.textContent?.trim() ?? null,
-      // 关键：不能出现字面量 "undefined" 作为 value
-      literalUndefined: opts.some((o) => o.value === 'undefined'),
-      optionCount: opts.length,
-      realLabel: real?.textContent?.trim() ?? null,
-      hasGroupedOptions: sel.querySelectorAll('optgroup').length,
+    if (info && info.hasEmpty && info.hasReal) {
+      fontIndex = i
+      fontInfo = info
+    } else {
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(250)
     }
-  })
-  if (!fontSel) {
-    console.log('  *** 字体（可选）下拉未找到（可能没进入风格编辑态）')
-  } else {
-    const basicOk = fontSel.hasEmptyOption && !fontSel.literalUndefined
-    if (basicOk) adminOk += 1
-    console.log(
-      `  ${basicOk ? '✓' : '***'} 字体空值项      有空值项=${fontSel.hasEmptyOption}（「${fontSel.emptyLabel}」）· 选项 ${fontSel.optionCount} 个 · 出现字面量 "undefined"=${fontSel.literalUndefined}`,
-    )
   }
 
-  /*
-   * 空值项与实值项之间来回切一次。
-   * 功能测试那一段特意排除了值为空的选项，所以**恰好绕过了这个 undefined 语义** ——
-   * 而它是整批迁移里唯一需要双向转换的地方（DOM 空字符串 ⇄ undefined），
-   * 必须单独验：只验「能选上实值」不足以说明「能清回 undefined」。
-   */
-  adminTotal += 1
-  const roundTrip = await page.evaluate(async () => {
-    /*
-     * 认这个下拉要靠「同时有空值项和实值项」，不能靠标签里有没有「跟随」——
-     * 空值项自己的标签就是「跟随简历当前字体」（也含「跟随」），
-     * 于是会把空值项当成实值项，验证就变成了「空值→空值」，是假通过（实测踩过）。
-     */
-    const sel = [...document.querySelectorAll('select')].find((s2) => {
-      const os = [...s2.options]
-      return os.some((o) => o.value === '') && os.some((o) => o.value !== '')
-    })
-    if (!sel) return { error: '找不到字体下拉' }
-    const opts = [...sel.options]
-    const emptyOpt = opts.find((o) => o.value === '')
-    // 实值项要排除空值项本身：用「值非空」判断，不看标签
-    const realOpt = opts.find((o) => o.value !== '' && !o.disabled)
-    // 诊断：把选项原样带出来，避免再次「以为是字体下拉、其实不是」
-    const dump = opts.slice(0, 4).map((o) => `value=${JSON.stringify(o.value)} label=${JSON.stringify((o.textContent || '').trim().slice(0, 10))}`)
-    // 原始 HTML：能看出 :value="undefined" 到底渲染成了什么
-    const rawHtml = sel.outerHTML.split('</option>').slice(0, 3).join('</option>') + '</option>'
-    if (!emptyOpt || !realOpt) return { error: '缺少实值项或空值项' }
-
-    const fire = (v) => {
-      sel.value = v
-      sel.dispatchEvent(new Event('change', { bubbles: true }))
-    }
-
-    // 已选实值 → 切到空值项
-    fire(realOpt.value)
-    await new Promise((r) => setTimeout(r, 250))
-    const afterReal = sel.value
-    fire('')
-    await new Promise((r) => setTimeout(r, 350))
-    const afterEmpty = sel.value
-    return {
-      dump,
-      rawHtml,
-      realValue: realOpt.value,
-      afterReal,
-      afterEmpty,
-      // 切到空值项后 DOM 值应为空字符串（不是 "undefined"、也不该停在旧实值）
-      cleared: afterEmpty === '' && afterReal === realOpt.value,
-    }
-  })
-  if (roundTrip.error) {
-    console.log(`  *** 空值往返        ${roundTrip.error}`)
+  if (fontIndex === -1 || !fontInfo) {
+    console.log('  *** 字体（可选）下拉未找到（可能没进入风格编辑态）')
   } else {
-    if (roundTrip.cleared) adminOk += 1
+    const basicOk = fontInfo.hasEmpty && !fontInfo.literalUndefined
+    if (basicOk) adminOk += 1
+    // find 时刻已把两个标签快照进 emptyLabelAtFind / realLabelAtFind；
+    // 这里不读元素的实时 textContent —— 往返后菜单可能已卸载
     console.log(
-      `  ${roundTrip.cleared ? '✓' : '***'} 空值往返        实值「${roundTrip.realValue}」→ 空值：DOM 值 ${JSON.stringify(roundTrip.afterEmpty)}（应为空字符串）\n      选项样本: ${(roundTrip.dump || []).join(' | ')}\n      原始 HTML: ${roundTrip.rawHtml}`,
+      `  ${basicOk ? '✓' : '***'} 字体空值项      有空值项=${fontInfo.hasEmpty}（「${fontInfo.emptyLabelAtFind}」）· 选项 ${fontInfo.optionCount} 个 · 分组 ${fontInfo.hasGroupedOptions} 组 · 出现字面量 "undefined"=${fontInfo.literalUndefined}\n      选项样本: ${(fontInfo.dump || []).join(' | ')}`,
+    )
+
+    /*
+     * 空值项与实值项之间真实点击往返一次。
+     * 功能测试那一段选的选项可能恰好不含空值项，所以**恰好绕过了 undefined 语义** ——
+     * 而它是整个组件里唯一需要双向转换的地方（空字符串 ⇄ undefined），必须单独验：
+     * 只验「能选上实值」不足以说明「能清回 undefined」。
+     * v1 验的是 DOM select.value；v2 的权威观感是触发器上的当前值标签。
+     */
+    adminTotal += 1
+    const trigger = triggers.nth(fontIndex)
+    // find 时刻固化的两个标签（字符串），往返断言只认它们
+    const emptyLabelAtFind = fontInfo.emptyLabelAtFind
+    const realLabelAtFind = fontInfo.realLabelAtFind
+
+    // 上面认菜单时它还开着：先收起，后面的「点触发器打开」才是真的打开
+    await page.keyboard.press('Escape')
+    await page
+      .locator('.bsel-menu')
+      .waitFor({ state: 'detached', timeoutMs: 3000 })
+      .catch(() => {})
+
+    await trigger.click()
+    await page
+      .locator('.bsel-menu')
+      .waitFor({ state: 'visible', timeoutMs: 3000 })
+      .catch(() => {})
+    const reopened = await page.evaluate(() => {
+      const menu = document.querySelector('.bsel-menu')
+      if (!menu) return { open: false }
+      const opts = [...menu.querySelectorAll('.bsel-option')]
+      return {
+        open: true,
+        count: opts.length,
+        first: opts[0]?.textContent?.trim() ?? null,
+        emptyFirst: Boolean(opts[0]?.dataset.value === ''),
+      }
+    })
+
+    const realOpt = page
+      .locator('.bsel-menu .bsel-option:not([data-value=""]):not([disabled])')
+      .first()
+    const emptyOpt = page.locator('.bsel-menu .bsel-option[data-value=""]').first()
+
+    // 菜单可见 = place() 已定位；再留一拍让选项命中区稳定（上一版在此处点击过早）
+    await page.waitForTimeout(300)
+    const realLabel = (await realOpt.textContent().catch(() => null))?.trim() ?? null
+    await realOpt.click().catch(() => {})
+    await page.waitForTimeout(450)
+    const afterReal = (await trigger.textContent().catch(() => '')).trim()
+
+    await trigger.click()
+    await page
+      .locator('.bsel-menu')
+      .waitFor({ state: 'visible', timeoutMs: 3000 })
+      .catch(() => {})
+    await page.waitForTimeout(300)
+    const emptyLabel = (await emptyOpt.textContent().catch(() => null))?.trim() ?? null
+    await emptyOpt.click().catch(() => {})
+    await page.waitForTimeout(450)
+    const afterEmpty = (await trigger.textContent().catch(() => '')).trim()
+
+    // 切到实值后标签跟随实值项；切回空值后标签回到空值项自己的标签（不该停在旧实值）
+    const cleared =
+      afterReal === realLabelAtFind &&
+      afterEmpty === emptyLabelAtFind &&
+      emptyLabelAtFind !== realLabelAtFind
+    if (cleared) adminOk += 1
+    console.log(
+      `  ${cleared ? '✓' : '***'} 空值往返        实值「${realLabel ?? realLabelAtFind}」→ 空值「${emptyLabel ?? emptyLabelAtFind}」：选实值后 ${JSON.stringify(afterReal)}，选空值后 ${JSON.stringify(afterEmpty)}\n      find 快照: real=${JSON.stringify(realLabelAtFind)} empty=${JSON.stringify(emptyLabelAtFind)} · 重开菜单: ${JSON.stringify(reopened)}`,
     )
   }
 } catch (error) {

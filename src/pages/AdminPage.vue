@@ -10,7 +10,7 @@
  * 门卫：未登录先登录（弹窗，失败回退 /login）；非管理员账号显示无权限。
  * 内置默认：服务器从未保存过配置时，以代码内置组合作为编辑起点，保存后入库为准。
  */
-import { computed, shallowRef, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import AuthDialog from '@/components/AuthDialog.vue'
@@ -67,8 +67,16 @@ const saving = shallowRef(false)
 const draftPresets = shallowRef<DraftPreset[]>([])
 const draftMatrix = shallowRef<DraftMatrix>({})
 
-/** 编辑中的风格（null = 未在编辑）；key 为空表示新建 */
-const editing = shallowRef<DraftPreset | null>(null)
+/**
+ * 编辑中的风格（null = 未在编辑）；key 为空表示新建。
+ *
+ * 必须用深响应的 ref 而不是 shallowRef：下拉/输入框的 v-model 写的是
+ * editing.value.patch.fontKey 这类**嵌套字段**，浅响应感知不到，
+ * 保存虽然能读到值，但界面回显永远停在旧值 —— v1 的原生 select 由浏览器
+ * 自行更新选中显示，把这个缺陷掩盖了；BaseSelect 改为自绘菜单后
+ * （显示值读 props）当场暴露，真实点击往返测试抓到。
+ */
+const editing = ref<DraftPreset | null>(null)
 
 const fontOptions = Object.entries(FONTS).map(([key, font]) => ({ key, name: font.name }))
 

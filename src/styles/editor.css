@@ -43,6 +43,8 @@
   font: inherit;
   font-size: 13px;
   font-weight: 500;
+  /* .ed-btn 也用在 <a> 上（首页 CTA、登录页等），去掉链接默认下划线 */
+  text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
   transition: 0.15s;

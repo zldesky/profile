@@ -1,19 +1,27 @@
 <script setup lang="ts">
 /**
- * 通用下拉框。
+ * 通用下拉框（自绘菜单版）。
  *
- * 为什么要有它：项目里原本散着 12 处原生 `<select class="ed-select">`，
- * 写法分成两派（6 处 `v-model`、6 处 `:value` + `@change`），
- * 选项来源也是三种形状（`{value,label}` 数组、字符串数组、`<optgroup>` 分组）。
- * 结果就是同一类控件在字体、内边距、箭头、禁用态上各自漂移 ——
- * 统一到一处，顺手把「带分组」和「值为 undefined 的占位项」这两种特例收进组件，
- * 而不是让每个调用点各写一遍。
+ * 历史与现状：v1 刻意保留原生 `<select>`（键盘、移动端、无障碍都现成），只统一外观。
+ * 但弹开的**选项列表由操作系统绘制** —— 灰底、系统字号、宽度=触发器宽度，
+ * 无法与站内菜单（「导入 / 导出数据」那种白底、圆角、阴影、悬停反馈）统一，
+ * 长选项还会被触发器宽度挤得很难看。本轮按用户要求把列表改成自绘菜单，
+ * 样式与 .export-menu 同源；触发器外观保持原样（.bsel-input 一套类名不变，
+ * 外部按它写的宽度规则不受影响）。
  *
- * 刻意**不换掉原生 select**：原生控件在键盘操作、移动端选择器、
- * 无障碍语义上都是现成且正确的，自绘下拉要重写这一整套。
- * 这里只统一它的外观与调用方式。
+ * 原生 select 送掉的键盘与语义，这里自己补齐：
+ *  - 触发器 role=combobox + aria-expanded + aria-label；
+ *  - 菜单 role=listbox + aria-activedescendant，打开即聚焦菜单容器；
+ *  - ↑↓ 移动活跃项（跳过禁用项）、Home/End 到头尾、Enter/Space 选中、
+ *    Esc 关闭并把焦点还给触发器、Tab 直接关闭；
+ *  - 点击外部、面板滚动、窗口缩放都会关闭（滚动监听排除菜单自身）。
+ *
+ * 定位用 fixed + Teleport 到 body：面板是 overflow 滚动容器，absolute 菜单
+ * 会被裁剪；fixed 不受裁剪，但要自己算坐标 —— 宽度取「最长选项的自然宽度与
+ * 触发器宽度较大者」（封顶 360px），上下空间不够时翻转到另一侧，左右贴边时
+ * 收进视口。菜单打开后如果发生滚动直接关闭，不跟随重算（原生 select 同款行为）。
  */
-import { computed } from 'vue'
+import { computed, nextTick, onBeforeUnmount, shallowRef, useId, useTemplateRef, watch } from 'vue'
 
 import SvgIcon from '@/components/SvgIcon.vue'
 
@@ -24,7 +32,7 @@ export interface SelectOption {
   disabled?: boolean
 }
 
-/** 一组选项；有 label 时渲染成 optgroup */
+/** 一组选项；有 label 时在菜单里渲染成组标题 */
 export interface SelectOptionGroup {
   label: string
   items: SelectOption[]
@@ -72,15 +80,8 @@ const items = computed(() => (isGrouped.value ? [] : (props.options as SelectOpt
  * 值为 undefined 的选项怎么处理。
  *
  * 有些下拉需要一个「不限 / 跟随当前」的空值项（例如管理员设置里的
- * 「字体（可选）」）。原生 `<option :value="undefined">` 在 DOM 里会变成字符串
- * "undefined"，读写两个方向都不牢靠。
- *
- * 做法是**只规范化值、不改标签**：这类选项照原样渲染（标签由调用点决定，
- * 各处的说法本来就不一样），只在 DOM 层把它的 value 写成空字符串，
- * change 时再还原成 undefined。
- *
- * 早先的版本是「另渲染一个 placeholder 空值项」，那样会把调用点自己的标签顶掉
- * （实测「跟随简历当前字体」被换成了占位文案），属于多余的间接层。
+ * 「字体（可选）」）。DOM 层把它写成空字符串，change 时再还原成 undefined；
+ * 标签由调用点决定，组件不替它定（各处的说法本来就不一样）。
  */
 const EMPTY = ''
 const hasUndefinedOption = computed(
@@ -92,57 +93,279 @@ const domValue = (v: string | number | undefined) => (v === undefined || v === n
 
 const current = computed(() => domValue(props.modelValue))
 
-function onSelect(event: Event) {
-  const raw = (event.target as HTMLSelectElement).value
+/** 菜单用的扁平列表：分组展开，记住每项属于哪组（渲染组标题用） */
+const flat = computed(() =>
+  isGrouped.value
+    ? groups.value.flatMap((g) => g.items.map((o) => ({ ...o, group: g.label })))
+    : items.value.map((o) => ({ ...o, group: undefined as string | undefined })),
+)
+
+const currentLabel = computed(() => {
+  const hit = flat.value.find((o) => domValue(o.value) === current.value)
+  if (hit) return hit.label
+  if (!props.options.length && props.placeholder) return props.placeholder
+  return current.value === EMPTY ? '' : String(current.value)
+})
+
+function choose(option: { value: string | number | undefined; disabled?: boolean }) {
+  if (option.disabled) return
+  const raw = domValue(option.value)
   // 仅当该下拉确实有 undefined 选项时才还原，避免把「真的空字符串」误变成 undefined
   const next = raw === EMPTY && hasUndefinedOption.value ? undefined : raw
   emit('update:modelValue', next)
   emit('change', next)
+  close(true)
+}
+
+/* ---------------- 开合与定位 ---------------- */
+
+const triggerRef = useTemplateRef<HTMLButtonElement>('triggerRef')
+const menuRef = useTemplateRef<HTMLDivElement>('menuRef')
+const open = shallowRef(false)
+const placed = shallowRef(false)
+/** 菜单的 fixed 定位与尺寸；未定位前置空（is-placing 隐藏，先量后摆） */
+const pos = shallowRef<{ left: number; top: number; width: number; maxHeight: number } | null>(null)
+/** 键盘活跃项（flat 下标）；-1 表示还没有 */
+const activeIndex = shallowRef(-1)
+const menuId = useId()
+const activeId = computed(() =>
+  activeIndex.value >= 0 ? `${menuId}-opt-${activeIndex.value}` : undefined,
+)
+
+const selectedIndex = computed(() =>
+  flat.value.findIndex((o) => domValue(o.value) === current.value),
+)
+
+function openMenu(): void {
+  if (props.disabled || open.value) return
+  open.value = true
+  placed.value = false
+  activeIndex.value = selectedIndex.value
+  document.addEventListener('pointerdown', onDocPointerDown, true)
+  window.addEventListener('scroll', onWinScroll, true)
+  window.addEventListener('resize', onWinScroll)
+  void nextTick(() => {
+    place()
+    /*
+     * 焦点必须在 place() 的渲染**落地之后**再给：place 改状态与 DOM 更新之间
+     * 隔着一帧，菜单此刻还是 is-placing（visibility:hidden）—— 隐藏元素
+     * focus() 会静默失败（实测：焦点留在触发器上，Escape 永远关不掉菜单，
+     * 下一次点击被 toggle 理解成「关闭」）。InlineEditor 的两帧确认是同一个坑。
+     */
+    void nextTick(() => {
+      menuRef.value?.focus({ preventScroll: true })
+      scrollActiveIntoView()
+    })
+  })
+}
+
+function close(refocus = false): void {
+  if (!open.value) return
+  open.value = false
+  document.removeEventListener('pointerdown', onDocPointerDown, true)
+  window.removeEventListener('scroll', onWinScroll, true)
+  window.removeEventListener('resize', onWinScroll)
+  if (refocus) triggerRef.value?.focus({ preventScroll: true })
+}
+
+function toggle(): void {
+  open.value ? close() : openMenu()
+}
+
+/** 量触发器与菜单的自然尺寸，算出 fixed 坐标（先摆隐藏菜单再定位，同 InlineEditor） */
+function place(): void {
+  const trigger = triggerRef.value
+  const menu = menuRef.value
+  if (!trigger || !menu) return
+  const rect = trigger.getBoundingClientRect()
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+
+  // 自然宽度按「菜单自身内容」量（is-placing 状态下 width:max-content、不限高）
+  const naturalW = menu.offsetWidth
+  const naturalH = menu.scrollHeight
+  const maxW = Math.min(360, vw - 16)
+  const width = Math.max(Math.min(rect.width, maxW), Math.min(naturalW, maxW))
+  const spaceBelow = vh - 8 - (rect.bottom + 6)
+  const spaceAbove = rect.top - 14
+  // 下方放不下（含长列表的 288 上限）且上方更宽裕时翻转
+  const flip = spaceBelow < Math.min(naturalH, 200) && spaceAbove > spaceBelow
+  const maxHeight = Math.max(120, Math.min(naturalH, 288, flip ? spaceAbove : spaceBelow))
+  let left = rect.left
+  if (left + width > vw - 8) left = rect.right - width
+  left = Math.max(8, left)
+  const top = flip ? Math.max(8, rect.top - 6 - maxHeight) : rect.bottom + 6
+
+  pos.value = { left: Math.round(left), top: Math.round(top), width: Math.round(width), maxHeight }
+  placed.value = true
+}
+
+function scrollActiveIntoView(): void {
+  if (activeIndex.value < 0) return
+  menuRef.value?.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' })
+}
+
+/* ---------------- 键盘与外部关闭 ---------------- */
+
+function moveActive(step: 1 | -1 | 'first' | 'last'): void {
+  const list = flat.value
+  if (!list.length) return
+  const enabled = list.map((o, i) => (o.disabled ? -1 : i)).filter((i) => i >= 0)
+  if (!enabled.length) return
+  let next: number
+  if (step === 'first') next = enabled[0]
+  else if (step === 'last') next = enabled[enabled.length - 1]
+  else {
+    const at = enabled.indexOf(activeIndex.value)
+    const from = at === -1 ? (step === 1 ? -1 : 0) : at
+    next = enabled[(from + step + enabled.length) % enabled.length]
+  }
+  activeIndex.value = next
+  void nextTick(scrollActiveIntoView)
+}
+
+function onMenuKeydown(event: KeyboardEvent): void {
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    moveActive(1)
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    moveActive(-1)
+  } else if (event.key === 'Home') {
+    event.preventDefault()
+    moveActive('first')
+  } else if (event.key === 'End') {
+    event.preventDefault()
+    moveActive('last')
+  } else if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    const hit = flat.value[activeIndex.value]
+    if (hit) choose(hit)
+  } else if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    close(true)
+  } else if (event.key === 'Tab') {
+    close()
+  }
+}
+
+/** 触发器上的键盘：Enter/Space/方向键打开；菜单开着时 Esc 收起并还焦点 */
+function onTriggerKeydown(event: KeyboardEvent): void {
+  if (props.disabled) return
+  if (open.value && event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    close(true)
+    return
+  }
+  if (['Enter', ' ', 'ArrowDown', 'ArrowUp'].includes(event.key)) {
+    event.preventDefault()
+    openMenu()
+  }
+}
+
+function onDocPointerDown(event: PointerEvent): void {
+  if (!open.value) return
+  const target = event.target
+  if (!(target instanceof Node)) return
+  /*
+   * 菜单 Teleport 到 body，不在 .bsel 子树里 —— 两处都要豁免：
+   * 点菜单选项时 pointerdown 先于 click，这里若把它当「外部」关掉，
+   * 菜单先卸载、click 落空，选项永远点不中（E8 同族：接好了但跑不起来）。
+   */
+  if (menuRef.value?.contains(target)) return
+  if (triggerRef.value?.parentElement?.contains(target)) return
+  close()
+}
+
+/** 任何滚动（含面板内滚动，capture 才收得到）都关闭；菜单自己滚动不算 */
+function onWinScroll(event: Event): void {
+  if (!open.value) return
+  const target = event.target
+  if (target instanceof Node && menuRef.value?.contains(target)) return
+  close()
+}
+
+watch(open, (isOpen) => {
+  if (!isOpen) pos.value = null
+})
+
+onBeforeUnmount(() => close())
+
+function onTriggerClick(): void {
+  if (props.disabled) return
+  toggle()
 }
 </script>
 
 <template>
-  <span class="bsel" :class="{ 'is-dense': dense, 'is-disabled': disabled }">
-    <select
-      class="bsel-input"
-      :value="current"
-      :disabled="disabled"
+  <span class="bsel" :class="{ 'is-dense': dense, 'is-disabled': disabled, 'is-open': open }">
+    <button
+      ref="triggerRef"
+      type="button"
+      class="bsel-input bsel-trigger"
+      role="combobox"
+      :aria-expanded="open"
+      aria-haspopup="listbox"
+      :aria-controls="open ? menuId : undefined"
       :aria-label="ariaLabel || undefined"
-      @change="onSelect"
+      :disabled="disabled"
+      @click="onTriggerClick"
+      @keydown="onTriggerKeydown"
     >
-      <!--
-        完全没有选项时补一条禁用提示：否则原生 select 会画成一个空白框，
-        看不出是「没得选」还是「还没加载」。有选项时不插任何东西 ——
-        undefined 选项由各调用点自己给标签（说法各处不同，组件不该替它定）。
-      -->
-      <option v-if="placeholder && !options.length" :value="EMPTY" disabled>
-        {{ placeholder }}
-      </option>
+      <span class="bsel-value">{{ currentLabel }}</span>
+      <SvgIcon class="bsel-chevron" name="down" :size="14" />
+    </button>
 
-      <template v-if="isGrouped">
-        <optgroup v-for="group in groups" :key="group.label" :label="group.label">
-          <option
-            v-for="option in group.items"
-            :key="String(option.value)"
-            :value="domValue(option.value)"
+    <Teleport to="body">
+      <div
+        v-if="open"
+        :id="menuId"
+        ref="menuRef"
+        class="bsel-menu"
+        :class="{ 'is-placing': !placed, 'is-dense': dense }"
+        role="listbox"
+        :aria-activedescendant="activeId"
+        :aria-label="ariaLabel || undefined"
+        tabindex="-1"
+        :style="
+          placed
+            ? {
+                left: `${pos?.left}px`,
+                top: `${pos?.top}px`,
+                width: `${pos?.width}px`,
+                maxHeight: `${pos?.maxHeight}px`,
+              }
+            : undefined
+        "
+        @keydown="onMenuKeydown"
+      >
+        <template v-for="(option, i) in flat" :key="`${i}-${String(option.value)}`">
+          <div
+            v-if="option.group && (i === 0 || flat[i - 1].group !== option.group)"
+            class="bsel-group"
+          >
+            {{ option.group }}
+          </div>
+          <button
+            :id="`${menuId}-opt-${i}`"
+            type="button"
+            class="bsel-option"
+            role="option"
+            :aria-selected="domValue(option.value) === current"
+            :data-value="domValue(option.value)"
+            :data-active="i === activeIndex ? 'true' : undefined"
             :disabled="option.disabled"
+            @click="choose(option)"
+            @mouseenter="!option.disabled && (activeIndex = i)"
           >
             {{ option.label }}
-          </option>
-        </optgroup>
-      </template>
-      <template v-else>
-        <option
-          v-for="option in items"
-          :key="String(option.value)"
-          :value="domValue(option.value)"
-          :disabled="option.disabled"
-        >
-          {{ option.label }}
-        </option>
-      </template>
-    </select>
-    <SvgIcon class="bsel-chevron" name="down" :size="14" />
+          </button>
+        </template>
+        <div v-if="!flat.length" class="bsel-empty">{{ placeholder || '暂无可选项' }}</div>
+      </div>
+    </Teleport>
   </span>
 </template>
 
@@ -150,7 +373,8 @@ function onSelect(event: Event) {
 /*
  * 箭头用 SvgIcon（name="down"，与项目其它箭头同一套路径）而不是背景图：
  * 背景图在禁用态、不同字号下要各自补规则，而图标作为独立元素只需一条 color。
- * 为此 select 自身 appearance: none，右侧留出箭头的宽度。
+ * 触发器是 <button>（自绘菜单的开关），appearance 由浏览器重置为按钮样式，
+ * 这里显式还原成与 v1 原生 select 相同的外观，外部按 .bsel-input 写的宽度规则不受影响。
  */
 .bsel {
   position: relative;
@@ -162,7 +386,7 @@ function onSelect(event: Event) {
    * 原来的原生 select 直接是 flex 子项，靠 `.ed-row > *` 之类的规则拿到
    * `flex: 1 1 auto`，再加上自身的 width: 100% 就能撑开。
    * 现在多了一层 .bsel 容器：容器是 flex 子项（basis auto、自身内容宽度为 0），
-   * 里面的 select 又是 width: 100%（依赖容器宽度）—— 互相依赖成环，**塌成 0 宽**。
+   * 里面的触发器又是 width: 100%（依赖容器宽度）—— 互相依赖成环，**塌成 0 宽**。
    * 实测设计面板的字体下拉就是这样整个消失的（宽 0），
    * 而类型检查与静态审计都不会报。
    */
@@ -172,6 +396,9 @@ function onSelect(event: Event) {
 }
 
 .bsel-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   width: 100%;
   min-width: 0;
   appearance: none;
@@ -184,6 +411,7 @@ function onSelect(event: Event) {
   font: inherit;
   font-size: 13px;
   line-height: 1.4;
+  text-align: left;
   cursor: pointer;
   transition:
     border-color 0.15s,
@@ -191,18 +419,28 @@ function onSelect(event: Event) {
     background-color 0.15s;
 }
 
-/* 展开的原生选项列表由系统绘制，只有底色与文字色可控，这里对齐界面的浅色底 */
-.bsel-input option {
-  background: var(--ed-surface);
-  color: var(--ed-ink);
+/* 当前值占满一行，箭头固定在右缘 */
+.bsel-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .bsel-chevron {
-  position: absolute;
-  right: 9px;
+  flex: 0 0 auto;
+  margin-right: -14px;
   color: var(--ed-text-3);
   pointer-events: none;
-  transition: color 0.15s;
+  transition:
+    transform 0.15s,
+    color 0.15s;
+}
+
+.bsel.is-open .bsel-chevron {
+  transform: rotate(180deg);
+  color: var(--ed-text-2);
 }
 
 .bsel-input:hover:not(:disabled) {
@@ -227,38 +465,89 @@ function onSelect(event: Event) {
   font-size: 12px;
 }
 
-.bsel.is-dense .bsel-chevron {
-  right: 7px;
-}
-
 /*
- * 分组标题（optgroup 的 label）由系统绘制，无法用 CSS 完全控制，
- * 但统一压成小号、次级色，至少让中文分组名不至于比选项还抢眼。
+ * 自绘菜单：与「导入 / 导出数据」菜单（.export-menu）同一套视觉语言 ——
+ * 白底、细边、圆角、大阴影；选项悬停浅灰、选中品牌浅底。
+ * fixed 定位（Teleport 到 body），坐标与翻转在 place() 里算。
  */
-.bsel-input optgroup {
-  color: var(--ed-text-3);
-  font-size: 12px;
-  font-style: normal;
+.bsel-menu {
+  position: fixed;
+  z-index: 110;
+  min-width: 120px;
+  padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--ed-line-soft);
+  border-radius: var(--ed-radius-md);
+  background: var(--ed-surface);
+  box-shadow: var(--ed-shadow-lg);
 }
 
-.bsel-input optgroup option {
+/* 尚未量完尺寸：占位但不可见（宽度按内容自然铺开，供 place() 量） */
+.bsel-menu.is-placing {
+  visibility: hidden;
+  max-height: none !important;
+  width: max-content !important;
+}
+
+.bsel-group {
+  padding: 6px 10px 2px;
+  color: var(--ed-text-4);
+  font-size: 11px;
+}
+
+.bsel-option {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
   color: var(--ed-ink);
+  font: inherit;
   font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.bsel-option:hover:not(:disabled),
+.bsel-option[data-active='true'] {
+  background: var(--ed-fill-2);
+}
+
+.bsel-option[aria-selected='true'] {
+  background: var(--ed-brand-tint);
+  color: var(--ed-brand-deep);
+  font-weight: 600;
+}
+
+.bsel-option:disabled {
+  color: var(--ed-text-4);
+  cursor: not-allowed;
+}
+
+.bsel-empty {
+  padding: 8px 10px;
+  color: var(--ed-text-4);
+  font-size: 12px;
 }
 
 /*
- * iOS 在聚焦 font-size 小于 16px 的输入框时会自动放大整个页面。
- * 这条必须写在组件内部：scoped 规则的选择器带 [data-v-*] 属性，
- * **优先级高于** editor.css 里那条同名的全局媒体查询，写在外面会被这里的 13px 压掉。
- *
- * is-dense 变体必须一起提：`.bsel.is-dense .bsel-input` 是 3 个类的选择器（0,3,0），
- * 比下面这条（0,1,0）高 —— 不补的话紧凑款在手机上仍是 12px，
- * 聚焦照样触发 iOS 缩放（实测：联系方式行 6 个下拉全部 12px）。
+ * iOS 在聚焦 font-size 小于 16px 的输入控件时会自动放大整个页面。
+ * 触发器是 button（聚焦不缩放页面，但 13px 在手机上太小），菜单选项同理；
+ * 这两条必须写在组件内部：scoped 规则带 [data-v-*]，优先级高于外部全局媒体查询。
+ * is-dense 变体要一起提 —— 它是 3 个类的选择器（0,3,0），比单类高（B4 同族）。
  */
 @media (max-width: 900px) {
-  .bsel-input,
+  .bsel .bsel-input,
   .bsel.is-dense .bsel-input {
     font-size: 16px;
+  }
+
+  .bsel-option {
+    font-size: 16px;
+    padding: 9px 10px;
   }
 }
 </style>
