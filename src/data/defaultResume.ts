@@ -447,3 +447,163 @@ export function createResume(): Resume {
     ],
   }
 }
+
+/**
+ * 返回一份应届生示例简历：2027 届本科、后端开发（Java 主线）。
+ *
+ * 与示例简历（五年经验社招）配套 —— 新建 → 应届生 即得到这份预填内容，
+ * 结构按应届生线：求职意向 → 教育背景 → 实习经历 → 项目经历 → 技能特长
+ * （自我评价可省略，不放）。内容按当下校招行情写：实习与项目都有量化数据，
+ * 技能围绕 Java / Spring Boot / MySQL / Redis / 消息队列这一条后端主线，
+ * 期望薪资给应届本科的常见区间。用户拿到的就是这份，替换成自己的信息即可。
+ */
+export function createGraduateResume(): Resume {
+  return {
+    version: 2 as const,
+    template: 'classic',
+    theme: { ...DEFAULT_THEME },
+    basics: {
+      name: '李昂',
+      jobTitle: '后端开发工程师（2027 届）',
+      avatar: '',
+      showAvatar: true,
+      avatarShape: 'square',
+      avatarWidth: DEFAULT_AVATAR.width,
+      avatarHeight: DEFAULT_AVATAR.height,
+      avatarPos: { dx: 0, dy: 0 },
+      fields: [
+        createGridItem({ icon: 'cake', label: '年龄', value: '22岁' }),
+        createGridItem({ icon: 'phone', label: '联系电话', value: '13800000001' }),
+        createGridItem({ icon: 'mail', label: '联系邮箱', value: 'liang@example.com' }),
+        createGridItem({ icon: 'location', label: '现居城市', value: '上海' }),
+      ],
+    },
+    sections: [
+      {
+        id: uid('sec'),
+        type: 'grid',
+        title: '求职意向',
+        visible: true,
+        layout: { ...DEFAULT_SECTION_LAYOUT },
+        items: [
+          createGridItem({ icon: 'briefcase', label: '求职岗位', value: '后端开发工程师（Java）' }),
+          createGridItem({ icon: 'location', label: '意向城市', value: '上海 / 杭州' }),
+          createGridItem({ icon: 'coin', label: '期望薪资', value: '15K-20K' }),
+          createGridItem({ icon: 'clock', label: '到岗时间', value: '2027 届秋招，可随时实习' }),
+        ],
+      },
+      {
+        id: uid('sec'),
+        type: 'entries',
+        title: '教育背景',
+        visible: true,
+        layout: { ...DEFAULT_SECTION_LAYOUT },
+        showLogo: false,
+        items: [
+          createEntry({
+            time: '2023-09 - 2027-06',
+            org: '某某大学',
+            role: '计算机科学与技术（本科）',
+            meta: [createMeta('专业成绩', 'GPA 3.6/4.0（专业前 15%）')],
+            bullets: [
+              createBullet(
+                '主修课程：数据结构、操作系统、计算机网络、数据库原理、Java 程序设计、分布式系统入门。',
+              ),
+            ],
+          }),
+        ],
+      },
+      {
+        id: uid('sec'),
+        type: 'entries',
+        title: '实习经历',
+        visible: true,
+        layout: { ...DEFAULT_SECTION_LAYOUT },
+        showLogo: false,
+        items: [
+          createEntry({
+            time: '2026-06 - 2026-09',
+            org: '某某互联网科技有限公司',
+            role: '后端开发实习生',
+            bullets: [
+              createBullet(
+                '参与营销活动服务的迭代开发，独立负责 3 个接口从表设计、开发到上线，覆盖日均 50 万次调用。',
+              ),
+              createBullet(
+                '为热点活动接口引入 Redis 缓存与本地缓存两级结构，接口平均耗时从 180ms 降至 45ms。',
+              ),
+              createBullet(
+                '排查并优化 6 条慢 SQL，补齐联合索引与深分页改写，订单查询接口 P99 耗时下降 60%。',
+              ),
+            ],
+          }),
+        ],
+      },
+      {
+        id: uid('sec'),
+        type: 'entries',
+        title: '项目经历',
+        visible: true,
+        layout: { ...DEFAULT_SECTION_LAYOUT },
+        showLogo: false,
+        items: [
+          createEntry({
+            time: '2025-10 - 2026-02',
+            org: '短链接生成服务',
+            role: '独立开发',
+            bullets: [
+              createBullet(
+                '基于 Spring Boot + Redis + MySQL 实现短链生成与 302 跳转，支持自定义短码与过期策略。',
+              ),
+              createBullet(
+                '用布隆过滤器拦截无效长链查询，结合缓存空值与互斥锁解决缓存击穿，单机压测 QPS 8000+。',
+              ),
+              createBullet(
+                '访问明细经 RabbitMQ 异步落库削峰，数据库写入压力降低 70%，并产出每日访问报表。',
+              ),
+            ],
+          }),
+          createEntry({
+            time: '2025-03 - 2025-06',
+            org: '校园活动报名平台',
+            role: '后端负责人（3 人团队）',
+            bullets: [
+              createBullet(
+                '负责报名与签到模块的表结构设计与接口开发，活动开启瞬间用 Redis 预扣名额、消息队列异步落库。',
+              ),
+              createBullet(
+                '设计定时对账任务解决超卖与重复报名，支撑全校 3000 人同时抢报，零超卖事故。',
+              ),
+            ],
+          }),
+        ],
+      },
+      {
+        id: uid('sec'),
+        type: 'skills',
+        title: '技能特长',
+        visible: true,
+        layout: { ...DEFAULT_SECTION_LAYOUT },
+        fields: [
+          createMeta('后端语言', 'Java 基础扎实，熟悉集合、并发编程与 JVM 常见问题的排查思路。'),
+          createMeta(
+            '常用框架',
+            '熟练使用 Spring Boot、MyBatis-Plus，了解 Spring Cloud 微服务组件。',
+          ),
+          createMeta(
+            '数据存储',
+            '熟悉 MySQL 索引与事务，掌握 Redis 缓存设计、分布式锁与 RabbitMQ 异步处理。',
+          ),
+          createMeta('工程工具', '熟练使用 Linux、Git、Maven 与 Docker，了解 CI/CD 流程。'),
+        ],
+        items: [
+          createSkill({ name: 'Java 后端开发', level: 88 }),
+          createSkill({ name: '数据库与缓存', level: 82 }),
+          createSkill({ name: '消息队列', level: 72 }),
+          createSkill({ name: '计算机基础', level: 80 }),
+        ],
+        showBars: false,
+      },
+    ],
+  }
+}

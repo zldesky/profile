@@ -114,7 +114,7 @@ function createDoc(structure: 'blank' | 'social' | 'graduate' = 'blank') {
       ? '已新建空白简历'
       : structure === 'social'
         ? '已新建简历：求职意向 → 工作经历 → 项目经历 → 技能特长 → 教育背景'
-        : '已新建简历：求职意向 → 教育背景 → 实习经历 → 项目经历 → 技能特长',
+        : '已新建 2027 届后端应届生示例简历，替换成自己的信息即可',
   )
 }
 
@@ -245,7 +245,7 @@ function duplicateDoc(doc: DocEntry) {
               </button>
               <button
                 class="ed-btn"
-                title="求职意向 → 教育背景 → 实习经历 → 项目经历 → 技能特长"
+                title="预置 2027 届后端开发应届生示例（求职意向 → 教育背景 → 实习经历 → 项目经历 → 技能特长），替换成自己的内容即可"
                 @click="createDoc('graduate')"
               >
                 <span>应届生</span>

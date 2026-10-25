@@ -1,7 +1,12 @@
 import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { defineStore } from 'pinia'
 
-import { DEFAULT_THEME, createResume, createSectionFromPreset } from '@/data/defaultResume'
+import {
+  DEFAULT_THEME,
+  createGraduateResume,
+  createResume,
+  createSectionFromPreset,
+} from '@/data/defaultResume'
 import { normalizeResume } from '@/data/normalizeResume'
 import { buildBackup, parseBackup } from '@/utils/backup'
 import { AVATAR_REF_PREFIX, loadAvatar } from '@/utils/avatarStore'
@@ -280,24 +285,25 @@ export const useResumeStore = defineStore('resume', () => {
    * 起步结构（structure）：
    * - blank：完全空白，模块自己加；
    * - social（有工作经验）：求职意向 → 工作经历 → 项目经历 → 技能特长 → 教育背景，
-   *   经历是最强卖点，放最前，教育靠后；
-   * - graduate（应届生）：求职意向 → 教育背景 → 实习经历 → 项目经历 → 技能特长，
-   *   学历是最大亮点，教育前置，工作经历以实习替代。
-   *
-   * 两种结构都只给**空模块**（走「添加模块」同一套预设种子），不替用户编内容。
+   *   只给空模块（与「添加模块」同一套种子），经历是最强卖点放最前，教育靠后；
+   * - graduate（应届生）：直接预填一份 **2027 届后端开发应届生示例**
+   *   （求职意向 → 教育背景 → 实习经历 → 项目经历 → 技能特长，内容符合当下
+   *   校招行情），替换成自己的信息即可用。
    */
   function createDoc(structure: 'blank' | 'social' | 'graduate' = 'blank'): string {
     parkCurrentDoc()
     const id = docs.newDocId()
     docList.value.push(docs.makeDocEntry(id))
     activeDocId.value = id
-    resume.value = blankResume()
-    if (structure !== 'blank') {
-      const keys =
-        structure === 'social'
-          ? ['intent', 'work', 'project', 'skill', 'edu']
-          : ['intent', 'edu', 'intern', 'project', 'skill']
-      resume.value.sections = keys.map((key) => createSectionFromPreset(key))
+    if (structure === 'graduate') {
+      resume.value = createGraduateResume()
+    } else {
+      resume.value = blankResume()
+      if (structure === 'social') {
+        resume.value.sections = ['intent', 'work', 'project', 'skill', 'edu'].map((key) =>
+          createSectionFromPreset(key),
+        )
+      }
     }
     updateBaseline()
     docs.writeRegistry(docList.value)
