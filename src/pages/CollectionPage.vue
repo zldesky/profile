@@ -124,11 +124,22 @@ async function openLogin() {
   const opened = await authDialog.open({ mode: 'login' })
   if (!opened) router.push({ name: 'login' })
 }
+
+/** 返回上一页；直接打开（无来路）时回首页 */
+function goBack() {
+  if (window.history.state?.back) router.back()
+  else router.push({ name: 'home' })
+}
 </script>
 
 <template>
   <div class="cl-page">
     <header class="cl-topbar">
+      <button class="ed-btn cl-back" title="返回上一页" @click="goBack">
+        <SvgIcon name="back" :size="14" />
+        <span>返回</span>
+      </button>
+
       <router-link class="cl-brand" :to="{ name: 'editor' }" title="返回编辑器">
         <span class="cl-logo ed-brand-block"><SvgIcon name="layout" :size="15" /></span>
         <span class="cl-name">简历工坊</span>

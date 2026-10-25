@@ -138,6 +138,15 @@ function openInEditor() {
   router.push({ name: 'editor' })
 }
 
+/**
+ * 返回上一页；直接打开（无来路）时回首页。
+ * 分享页常被直接转发给别人 —— 对方没有「上一页」可回，必须给兜底。
+ */
+function goBack() {
+  if (window.history.state?.back) router.back()
+  else router.push({ name: 'home' })
+}
+
 function printResume() {
   window.print()
 }
@@ -165,6 +174,11 @@ const expiryText = computed(() => {
 <template>
   <div class="editor-app">
     <header class="editor-topbar">
+      <button class="ed-btn sp-back" title="返回上一页" @click="goBack">
+        <SvgIcon name="back" :size="14" />
+        <span>返回</span>
+      </button>
+
       <div class="sp-brand">
         <span class="sp-logo ed-brand-block"><SvgIcon name="layout" :size="15" /></span>
         <span class="sp-name">简历工坊</span>
