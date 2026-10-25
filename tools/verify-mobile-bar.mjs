@@ -151,6 +151,43 @@ const backState = await page.evaluate(() => ({
 log(backState.active.join('/') === '内容', '可以切回「内容」')
 log(backState.panelVisible === true, '编辑面板回来了')
 
+/* ---------- 3b. 折叠屏展开/折叠与横屏手机（同一页面内 resize，不重载） ----------
+ *
+ * 断点是 MOBILE_QUERY（见 useMediaQuery.js）：≤768 或 ≤900 且横屏矮窗。
+ * 折叠屏的真实用法是**同一份会话里**展开/折叠 —— 依赖 matchMedia 的 change
+ * 事件把 isMobile 翻过来，不是重新加载页面。这里按真实路径测：
+ *   Pixel 7 (412×915)  → 展开到 904×1080（折叠屏内屏，两栏）→ 折回 412；
+ *   横屏手机 844×390   → 宽度过了 768 但高度不够，仍应保持单栏 + 底部条。
+ */
+const layoutState = () =>
+  page.evaluate(() => ({
+    bar: Boolean(document.querySelector('.mobile-bar')),
+    panelW: Math.round(document.querySelector('.editor-panel')?.getBoundingClientRect().width || 0),
+    stageW: Math.round(
+      document.querySelector('.editor-stage')?.getBoundingClientRect().width || 0,
+    ),
+  }))
+
+await page.setViewportSize({ width: 904, height: 1080 })
+await page.waitForTimeout(600)
+const unfolded = await layoutState()
+log(unfolded.bar === false, '折叠屏内屏（904×1080）：底部条收起，切为两栏')
+log(unfolded.panelW > 0 && unfolded.stageW > 0, `两栏并排可见（面板 ${unfolded.panelW} / 纸区 ${unfolded.stageW}）`)
+
+await page.setViewportSize({ width: 412, height: 915 })
+await page.waitForTimeout(600)
+const folded = await layoutState()
+log(folded.bar === true, '折回外屏（412×915）：底部条回来（不重载页面）')
+log(folded.panelW > 0 && folded.stageW === 0, '恢复单栏：预览隐藏')
+
+await page.setViewportSize({ width: 844, height: 390 })
+await page.waitForTimeout(600)
+const landscape = await layoutState()
+log(landscape.bar === true, '横屏手机（844×390）：高度不足，保持单栏 + 底部条')
+
+await page.setViewportSize({ width: 412, height: 915 })
+await page.waitForTimeout(600)
+
 /* ---------- 4. 宽屏不该有这条 ---------- */
 
 const deskCtx = await browser.newContext({ viewport: { width: 1600, height: 1000 } })

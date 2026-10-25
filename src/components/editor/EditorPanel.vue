@@ -158,7 +158,8 @@ watch(requestSeq, () => {
   overscroll-behavior: contain;
 }
 
-@media (max-width: 900px) {
+/* 与 useMediaQuery 的 MOBILE_QUERY 同一个查询：单栏布局（面板独占整宽）在此命中 */
+@media (max-width: 768px), (max-width: 900px) and (max-height: 500px) {
   /* 窄屏这一栏独占整个宽度：预览此时已被 v-show 隐藏，不存在并排关系 */
   .editor-panel {
     flex: 1 1 auto;
