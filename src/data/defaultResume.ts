@@ -398,25 +398,6 @@ export function createResume(): Resume {
       },
       {
         id: uid('sec'),
-        type: 'entries',
-        title: '教育背景',
-        visible: true,
-        layout: { ...DEFAULT_SECTION_LAYOUT },
-        showLogo: false,
-        items: [
-          createEntry({
-            time: '2015-09 - 2019-06',
-            org: '某某大学',
-            role: '计算机科学与技术（本科）',
-            meta: [createMeta('专业成绩', 'GPA 3.7/4.0，专业排名前 5%')],
-            bullets: [
-              createBullet('主修课程：数据结构、计算机网络、操作系统、数据库原理、软件工程。'),
-            ],
-          }),
-        ],
-      },
-      {
-        id: uid('sec'),
         type: 'skills',
         title: '技能特长',
         visible: true,
@@ -434,6 +415,25 @@ export function createResume(): Resume {
           createSkill({ name: 'Node / 全栈', level: 70 }),
         ],
         showBars: false,
+      },
+      {
+        id: uid('sec'),
+        type: 'entries',
+        title: '教育背景',
+        visible: true,
+        layout: { ...DEFAULT_SECTION_LAYOUT },
+        showLogo: false,
+        items: [
+          createEntry({
+            time: '2015-09 - 2019-06',
+            org: '某某大学',
+            role: '计算机科学与技术（本科）',
+            meta: [createMeta('专业成绩', 'GPA 3.7/4.0，专业排名前 5%')],
+            bullets: [
+              createBullet('主修课程：数据结构、计算机网络、操作系统、数据库原理、软件工程。'),
+            ],
+          }),
+        ],
       },
       {
         id: uid('sec'),
