@@ -308,6 +308,11 @@ async function openLogin() {
   color: var(--ed-ink);
   font-size: 15px;
   font-weight: 700;
+  /*
+   * 窄屏空间不足时 flex 会压缩这个元素，「简历工坊」四个字被竖着折成两行、
+   * 顶栏高度翻倍（360px 登录态实测 96px）—— 品牌名永不折行。
+   */
+  white-space: nowrap;
 }
 
 .cl-chip {
@@ -668,6 +673,17 @@ async function openLogin() {
 @media (max-width: 640px) {
   .cl-main {
     padding: 24px 14px 44px;
+  }
+
+  /*
+   * 登录后顶栏是「品牌 + 页面胶囊 + 用户名 + 进入编辑器」，比未登录宽出约 200px，
+   * 360/320 下必然挤压换行（实测 顶栏 117px、品牌名竖折）。窄屏收掉两处冗余：
+   * 页面胶囊与下方 h1 重复；用户名收成纯图标（完整用户名仍在 title 里）。
+   * 「进入编辑器」是本页主操作，保留文字。
+   */
+  .cl-chip,
+  .cl-user span {
+    display: none;
   }
 
   .cl-grid {
