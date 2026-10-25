@@ -24,13 +24,23 @@ const { toast } = useToast()
  * 下拉选项。SECTION_PRESETS 用的是 { key, title }、SECTION_TYPES 用 { value, label }，
  * 而 BaseSelect 统一收 { value, label } —— 在调用点映射，而不是改动这些常量：
  * 它们还被别处使用（默认简历生成等），为了一次下拉去改公共数据形状得不偿失。
+ *
+ * 简历里已有的模块不再出现在预设下拉里（预设生成的模块标题即 preset.title，
+ * 模块上没有另存预设标记，按标题比对对旧数据同样成立）。
  */
-const presetOptions = computed(() =>
-  SECTION_PRESETS.map((preset) => ({ value: preset.key, label: preset.title })),
-)
+const presetOptions = computed(() => {
+  const used = new Set(store.sections.map((section) => section.title))
+  return SECTION_PRESETS.filter((preset) => !used.has(preset.title)).map((preset) => ({
+    value: preset.key,
+    label: preset.title,
+  }))
+})
 const typeOptions = computed(() =>
   SECTION_TYPES.map((type) => ({ value: type.value, label: `自定义：${type.label}` })),
 )
+
+/** 常用模块全加过了：下拉和添加按钮一起禁用，只留「添加空白模块」自由扩展 */
+const noPresetLeft = computed(() => !presetOptions.value.length)
 
 // 数组整体替换，用 ref；两个下拉框选项是字符串，用 shallowRef
 const expandedIds = ref<string[]>([])
@@ -43,6 +53,20 @@ const typeHint = computed(() => SECTION_TYPES.find((t) => t.value === addingType
 
 const presetHint = computed(
   () => SECTION_PRESETS.find((p) => p.key === presetKey.value)?.desc || '',
+)
+
+/*
+ * presetKey 指向的预设被添加后就从选项里消失了，此时把它挪到下一个还可选的，
+ * 否则触发器会显示一个已不存在的选项、提示文案也停留在旧模块上。
+ */
+watch(
+  presetOptions,
+  (options) => {
+    if (options.length && !options.some((option) => option.value === presetKey.value)) {
+      presetKey.value = options[0].value
+    }
+  },
+  { immediate: true },
 )
 
 function toggle(id: string) {
@@ -203,16 +227,24 @@ watch(requestSeq, async () => {
     </DraggableList>
 
     <div class="ed-add-row">
-      <BaseSelect v-model="presetKey" :options="presetOptions" />
-      <button class="ed-btn ed-btn-primary" @click="addFromPreset">
+      <BaseSelect
+        v-model="presetKey"
+        :options="presetOptions"
+        placeholder="常用模块都已添加"
+        :disabled="noPresetLeft"
+        aria-label="选择要添加的常用模块"
+      />
+      <button class="ed-btn ed-btn-primary" :disabled="noPresetLeft" @click="addFromPreset">
         <SvgIcon name="plus" :size="14" />
         <span>添加</span>
       </button>
     </div>
-    <p class="ed-hint">{{ presetHint }}</p>
+    <p class="ed-hint">
+      {{ noPresetLeft ? '常用模块都已添加，需要更多可用下方「添加空白模块」' : presetHint }}
+    </p>
 
     <div class="ed-add-row">
-      <BaseSelect v-model="addingType" :options="typeOptions" />
+      <BaseSelect v-model="addingType" :options="typeOptions" aria-label="选择空白模块类型" />
       <button class="ed-btn" @click="addSection">
         <SvgIcon name="plus" :size="14" />
         <span>添加空白模块</span>
