@@ -106,10 +106,16 @@ function openDoc(doc: DocEntry) {
   toast(`已切换到「${doc.name}」`)
 }
 
-function createDoc() {
-  store.createDoc()
+function createDoc(structure: 'blank' | 'social' | 'graduate' = 'blank') {
+  store.createDoc(structure)
   emit('close')
-  toast('已新建空白简历')
+  toast(
+    structure === 'blank'
+      ? '已新建空白简历'
+      : structure === 'social'
+        ? '已新建简历：求职意向 → 工作经历 → 项目经历 → 技能特长 → 教育背景'
+        : '已新建简历：求职意向 → 教育背景 → 实习经历 → 项目经历 → 技能特长',
+  )
 }
 
 function duplicateDoc(doc: DocEntry) {
@@ -225,10 +231,27 @@ function duplicateDoc(doc: DocEntry) {
         <div class="rm-footer">
           <template v-if="view === 'docs'">
             <div class="rm-footer-row">
-              <button class="ed-btn" @click="createDoc">
+              <span class="rm-new-label">新建</span>
+              <button class="ed-btn" title="不带任何模块，全部自己添加" @click="createDoc('blank')">
                 <SvgIcon name="plus" :size="14" />
-                <span>新建空白简历</span>
+                <span>空白</span>
               </button>
+              <button
+                class="ed-btn"
+                title="求职意向 → 工作经历 → 项目经历 → 技能特长 → 教育背景"
+                @click="createDoc('social')"
+              >
+                <span>有工作经验</span>
+              </button>
+              <button
+                class="ed-btn"
+                title="求职意向 → 教育背景 → 实习经历 → 项目经历 → 技能特长"
+                @click="createDoc('graduate')"
+              >
+                <span>应届生</span>
+              </button>
+            </div>
+            <div class="rm-footer-row">
               <button class="ed-btn" @click="view = 'history'">
                 <SvgIcon name="clock" :size="14" />
                 <span>历史版本</span>
@@ -238,7 +261,7 @@ function duplicateDoc(doc: DocEntry) {
               </button>
             </div>
             <p class="ed-hint rm-hint">
-              登录后云端同步跟随当前打开的这份简历；其余简历保存在本机。
+              两种起步结构只预置空模块和顺序，内容自己填；登录后云端同步跟随当前打开的这份简历，其余简历保存在本机。
             </p>
           </template>
         </div>
@@ -318,6 +341,13 @@ function duplicateDoc(doc: DocEntry) {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* 新建行的说明字：不抢按钮的视觉重量，只交代这一排是干嘛的 */
+.rm-new-label {
+  flex: 0 0 auto;
+  color: var(--ed-text-3);
+  font-size: 12.5px;
 }
 
 .rm-title {
