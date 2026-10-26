@@ -128,29 +128,31 @@ describe('sanitizeResume：枚举与数值', () => {
     expect(layout.extraGapBottom).toBe(0)
   })
 
-  it('字段级间距：保留合法键并按范围钳制，全零条目丢弃', () => {
+  it('字段级间距（fieldLayouts）已被移除：旧客户端提交它会被丢弃', () => {
+    /*
+     * 这条原先是「保留合法键并按范围钳制」。
+     * 纸面「字段拖拽改位置」功能整体移除后（存档见 git tag archive/field-drag-2026-10），
+     * 服务端白名单不再登记这个键 —— 于是它该被**丢弃**，而不是继续被清洗保留。
+     *
+     * 为什么值得留一条断言而不是直接删掉：这个键是旧备份 / 旧云端快照里真实存在的，
+     * 若哪天有人「顺手」把它加回白名单，那些永远不生效的间距数据又会流进库里。
+     * 断言「提交了也不留」正好把这件事钉住。
+     */
     const { value } = sanitizeResume({
       sections: [
         {
           type: 'entries',
           title: '经历',
           fieldLayouts: {
-            'bulletText:b1': { indent: 9999, extraGap: -9999 },
-            'bad key!': { indent: 10 },
-            'entryTime:b1': { indent: 0, indentRight: 0, extraGap: 0, extraGapBottom: 0 },
+            'bulletText:b1': { indent: 20, extraGap: 15 },
           },
         },
       ],
     })
-    const { fieldLayouts } = value.sections[0]
-    // 非法键被丢弃、全零条目被丢弃
-    expect(Object.keys(fieldLayouts)).toEqual(['bulletText:b1'])
-    // 钳制到 FIELD_LAYOUT_RANGE：indent 上界 96、extraGap 下界 -16
-    expect(fieldLayouts['bulletText:b1'].indent).toBe(96)
-    expect(fieldLayouts['bulletText:b1'].extraGap).toBe(-16)
+    expect(value.sections[0].fieldLayouts).toBeUndefined()
   })
 
-  it('字段级间距为空对象时不写出该键', () => {
+  it('fieldLayouts 为空对象时同样不写出该键', () => {
     const { value } = sanitizeResume({
       sections: [{ type: 'text', title: 't', fieldLayouts: {} }],
     })

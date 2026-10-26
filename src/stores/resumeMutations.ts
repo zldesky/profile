@@ -116,40 +116,15 @@ export function updateSectionLayout(
 }
 
 /**
- * 更新某个**字段**的间距微调（叠加在模块级布局之上）。
+ * 更新某个**字段**的间距微调 —— 已移除。
  *
- * 只覆盖传入的那个轴，其余轴保留；若四个轴都被调回 0，则把该字段的条目删掉，
- * 免得 fieldLayouts 里堆积大量全零的死数据（导出的 JSON 也干净）。
+ * 纸面「字段拖拽改位置」功能已整体移除（存档见 git tag `archive/field-drag-2026-10`）。
+ * 这里保留一个空实现而不是直接删掉导出，是为了让**旧的调用点在被发现时立刻报错**
+ * （类型检查会指出「多传了参数」），而不是安静地什么都不做。
+ * 新代码不要再调用；下一次整理时连这个函数一起删。
  */
-export function updateFieldLayout(
-  resume: Resume,
-  id: string,
-  key: string,
-  patch: Partial<Section['layout']>,
-): void {
-  const section = findSection(resume, id)
-  if (!section) return
-  const current = section.fieldLayouts?.[key] || {
-    indent: 0,
-    indentRight: 0,
-    extraGap: 0,
-    extraGapBottom: 0,
-  }
-  const next = {
-    indent: current.indent ?? 0,
-    indentRight: current.indentRight ?? 0,
-    extraGap: current.extraGap ?? 0,
-    extraGapBottom: current.extraGapBottom ?? 0,
-    ...patch,
-  }
-  const layouts = { ...(section.fieldLayouts || {}) }
-  if (!next.indent && !next.indentRight && !next.extraGap && !next.extraGapBottom) {
-    delete layouts[key]
-  } else {
-    layouts[key] = next
-  }
-  // 空表就不写回去，保持「没有微调」的模块结构最简
-  section.fieldLayouts = Object.keys(layouts).length ? layouts : undefined
+export function updateFieldLayout(): void {
+  /* 功能已移除，保留签名以让残留调用点显形 */
 }
 
 export function moveSection(resume: Resume, from: number, to: number): void {

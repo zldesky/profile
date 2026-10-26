@@ -69,6 +69,12 @@ export const API = {
   resume: '/api/resume',
   pdf: '/api/pdf',
   aiChat: '/api/ai/chat',
+  /** Magpie 本机直连（免 Key）：目标地址由服务端固定，前端只传 model 与 messages */
+  aiMagpie: '/api/ai/magpie',
+  /** Magpie 网关探测 / 一键联调 / 下载安装 */
+  magpieStatus: '/api/magpie/status',
+  magpieProbe: '/api/magpie/probe',
+  magpieInstall: '/api/magpie/install',
   imageProxy: '/api/image-proxy',
   styles: '/api/styles',
   stylesAdmin: '/api/styles-admin',

@@ -77,8 +77,6 @@ export interface GridSection extends Identified {
   title: string
   visible: boolean
   layout: SectionLayout
-  /** 字段级间距微调，按字段身份串索引；缺省表示全部为 0 */
-  fieldLayouts?: FieldLayouts
   items: GridItem[]
 }
 
@@ -88,7 +86,6 @@ export interface EntriesSection extends Identified {
   title: string
   visible: boolean
   layout: SectionLayout
-  fieldLayouts?: FieldLayouts
   /** 机构图标默认关闭，避免非顶尖院校的校徽反成减分项 */
   showLogo: boolean
   items: EntryItem[]
@@ -100,7 +97,6 @@ export interface SkillsSection extends Identified {
   title: string
   visible: boolean
   layout: SectionLayout
-  fieldLayouts?: FieldLayouts
   /** 旧「熟练度进度条」的开关，已不再被读取（保留字段以兼容旧数据） */
   showBars: boolean
   /** 文字描述（如「技术栈：熟练使用…」） */
@@ -114,7 +110,6 @@ export interface TextSection extends Identified {
   title: string
   visible: boolean
   layout: SectionLayout
-  fieldLayouts?: FieldLayouts
   content: string
 }
 
@@ -145,10 +140,12 @@ export interface SectionLayout {
 }
 
 /**
- * 单个字段的间距微调（叠加在模块级 SectionLayout 之上）。
+ * 单个字段的间距微调（已废弃）。
  *
- * 键为字段身份串（见 utils/fieldLayout.ts 的 fieldLayoutKey），
- * 值是四个方向的额外位移（px）。缺省的轴视为 0。
+ * 纸面「字段拖拽改位置」功能已移除（存档见 git tag `archive/field-drag-2026-10`）。
+ * 这两个类型只为**读取旧数据**而保留：旧备份 / 云端快照里可能仍带着
+ * `section.fieldLayouts`，归一化与清洗都会把未知键丢掉，因此不需要真去用它。
+ * 新代码不要再引用。
  */
 export interface FieldLayout {
   /** 左缩进 px */
@@ -161,7 +158,7 @@ export interface FieldLayout {
   extraGapBottom: number
 }
 
-/** 按字段身份串索引的间距设置表 */
+/** 按字段身份串索引的间距设置表（已废弃，见 FieldLayout） */
 export type FieldLayouts = Record<string, FieldLayout>
 
 /** 自由定制模板的布局参数 */

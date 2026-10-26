@@ -8,10 +8,12 @@
  *
  * 用单一根容器包裹，使父级可以用 v-show 切换而不依赖 fragment。
  */
-import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue'
 
 import BasicsEditor from '@/components/editor/BasicsEditor.vue'
+import FillProgress from '@/components/editor/FillProgress.vue'
 import SectionList from '@/components/editor/SectionList.vue'
+import { usePaperJump } from '@/composables/usePaperJump'
 import { useResumeStore } from '@/stores/resume'
 
 const store = useResumeStore()
@@ -70,6 +72,21 @@ function onScroll() {
 
 let scroller: Element | null | undefined = null
 
+/*
+ * 响应「跳到基本信息」。
+ *
+ * SectionList 只认模块卡片，而 basics 不在卡片列表里 —— 它由本组件的
+ * data-section-id="basics" 承载。所以「填写进度条 → 去填」跳到 basics 时，
+ * SectionList 那边会安静地忽略（它找不到模块就 return），
+ * 必须由这里接手，否则按钮点了毫无反应 —— 那种静默失效正是本项目最忌讳的。
+ */
+const { targetId, requestSeq, consume } = usePaperJump()
+watch(requestSeq, () => {
+  if (targetId.value !== 'basics') return
+  consume()
+  go('basics')
+})
+
 onMounted(() => {
   scroller = rootRef.value?.closest('.panel-body') ?? null
   scroller?.addEventListener('scroll', onScroll, { passive: true })
@@ -84,6 +101,12 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="rootRef" class="panel-content">
+    <!--
+      填写进度条放在锚点条之前：它是「我现在该做什么」的答案，
+      而锚点条是「我要去哪儿」的工具 —— 先有目标再有导航。
+    -->
+    <FillProgress />
+
     <nav class="panel-nav" aria-label="编辑定位">
       <button
         v-for="anchor in anchors"
@@ -128,7 +151,25 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
-  transition: 0.15s;
+  /*
+   * **只列颜色类属性，不要写 `transition: 0.15s` —— 那是 `all`。**
+   *
+   * 选中态把 font-weight 从 500 提到 600，而 font-weight 是**可过渡的**：
+   * 每次「反向高亮」切换（滚动过程中）都会把字重动画 150ms，
+   * 动画的每一帧都要重新排版（展开后这一栏 1644 个节点、88 个输入控件），
+   * 单帧直接顶到 20–40ms —— 用户看到的正是「展开模块后上下滚动卡顿」。
+   *
+   * A/B 实测（展开全部 6 张卡片、1440×900、每遍连滚 90 帧、各 3 遍）：
+   *   写 all                  p95 21.6–34.1ms，掉帧最多 18/88
+   *   只列颜色属性（本写法）  p95  7.7–9.8ms，掉帧 0
+   *   选中态字重不改          p95  8.4–13.2ms（同一条规律的另一种修法）
+   * 所以不是「过渡时间太长」，而是**过渡了一个会引发排版的非颜色属性**。
+   * 复现方法、尖峰帧与类变化帧的对齐做法见 PITFALLS.md D9。
+   */
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background-color 0.15s;
 }
 
 .panel-nav button:hover {

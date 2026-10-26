@@ -68,7 +68,7 @@ const firstBullet = page.locator('.paper li[data-field="bulletText"]').first()
 
 /* ---------- 0. 预清理：上次运行若残留加粗，先把第一条要点还原成纯文本 ---------- */
 
-await firstBullet.dblclick()
+await firstBullet.click()
 await page.waitForTimeout(500)
 {
   const iePre = page.locator('.ie-input')
@@ -84,13 +84,13 @@ await page.waitForTimeout(500)
   }
 }
 
-/* ---------- 1. 双击要点打开就地编辑 ---------- */
+/* ---------- 1. 单击要点打开就地编辑 ---------- */
 
-await firstBullet.dblclick()
+await firstBullet.click()
 await page.waitForTimeout(500)
 
 const ie = page.locator('.ie-input')
-log((await ie.count()) === 1, '双击要点后出现就地编辑输入框')
+log((await ie.count()) === 1, '单击要点后出现就地编辑输入框')
 
 const raw0 = await ie.inputValue()
 log(!raw0.includes('**'), `被测要点初始不含加粗标记（前 12 字：${raw0.slice(0, 12)}…）`)
@@ -142,7 +142,7 @@ await shot('bold-3-paper.png')
 
 /* ---------- 4. 重开 → 选区落在粗体内 → Ctrl+B 取消加粗 ---------- */
 
-await firstBullet.dblclick()
+await firstBullet.click()
 await page.waitForTimeout(500)
 log(
   (await ie.inputValue()) === `**${raw0.slice(0, 4)}**${raw0.slice(4)}`,
@@ -171,11 +171,11 @@ log(paperAfterUnbold, '提交后纸面的 <strong> 消失（取消加粗生效�
 
 /* ---------- 5. 不可加粗字段：页头姓名没有按钮，Ctrl+B 也写不进星号 ---------- */
 
-await page.locator('.paper [data-field="name"]').first().dblclick()
+await page.locator('.paper [data-field="name"]').first().click()
 await page.waitForTimeout(500)
 
 const nameInput = page.locator('.ie-input')
-log((await nameInput.count()) === 1, '双击姓名打开就地编辑')
+log((await nameInput.count()) === 1, '单击姓名打开就地编辑')
 log(
   (await page.locator('.ie-bold').count()) === 0,
   '姓名字段不提供加粗按钮（模板直插渲染，不解析标记）',

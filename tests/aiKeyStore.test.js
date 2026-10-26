@@ -38,6 +38,19 @@ describe('AI 预设', () => {
       // 服务端会固定拼 /chat/completions，尾部斜杠会拼出双斜杠
       expect(preset.baseUrl.endsWith('/')).toBe(false)
       const url = new URL(preset.baseUrl)
+
+      /*
+       * Magpie 是唯一的 http 例外，而且是**刻意的**：
+       * 它是本机回环网关（127.0.0.1:3425），根本没有 TLS，也不该有 ——
+       * 给它配证书既无意义（不出本机）又会让「装完就能用」多一步。
+       * 其余所有预设仍然必须是 https：Key 不能明文过公网。
+       */
+      if (preset.noKey) {
+        expect(url.protocol).toBe('http:')
+        expect(url.hostname).toBe('127.0.0.1')
+        continue
+      }
+
       expect(url.protocol).toBe('https:')
       expect(url.hostname).toBeTruthy()
     }
@@ -171,7 +184,25 @@ describe('AI 草稿（防止误关弹窗丢输入）', () => {
       model: 'glm-5.3-flash',
       apiKey: 'sk-abc',
       remember: false,
+      // noKey 会一并落草稿（免 Key 通道靠它恢复），普通预设存成 false
+      noKey: false,
     })
+  })
+
+  it('免 Key 草稿能恢复 noKey 标记（否则重开弹窗会以为还差一个 Key）', () => {
+    saveAIDraft({
+      presetId: 'magpie',
+      baseUrl: 'http://127.0.0.1:3425/v1',
+      model: 'auto/DeepSeek-V4.1-Flash',
+      apiKey: '',
+      remember: true,
+      noKey: true,
+    })
+
+    const draft = loadAIDraft()
+    expect(draft?.noKey).toBe(true)
+    // 免 Key 草稿没有 apiKey，但也不该被当成"空草稿"丢掉
+    expect(draft?.apiKey).toBe('')
   })
 
   it('只填了 Key 也算草稿（用户最容易丢的就是它）', () => {
@@ -235,5 +266,79 @@ describe('AI 草稿（防止误关弹窗丢输入）', () => {
 
     expect(() => loadAIDraft()).not.toThrow()
     expect(loadAIDraft()).toBeNull()
+  })
+})
+
+/**
+ * 免 Key 通道（Magpie 本机直连）的配置语义。
+ *
+ * 这一组守的是本次改动里最容易**静默失效**的一处：
+ * `loadAISettings` 原来要求「地址 + 模型 + apiKey 三者齐全」才算已配置。
+ * 免 Key 通道没有 apiKey，若不做例外，它会被永远判成「未配置」——
+ * 表现是：用户点了「一键联调」明明成功，回到润色弹窗却仍提示去设置。
+ * 不报错、不抛异常，只是那条路永远走不通。
+ */
+describe('免 Key 配置（Magpie 本机直连）', () => {
+  beforeEach(() => {
+    installBrowserGlobals()
+    clearAISettings()
+    clearAIDraft()
+  })
+
+  afterEach(() => {
+    uninstallBrowserGlobals()
+  })
+
+  it('没有 apiKey 但标了 noKey 时算已配置', () => {
+    saveAISettings({
+      baseUrl: 'http://127.0.0.1:3425/v1',
+      model: 'auto/DeepSeek-V4.1-Flash',
+      remember: true,
+      noKey: true,
+    })
+
+    const settings = loadAISettings()
+    expect(settings).not.toBeNull()
+    expect(settings?.noKey).toBe(true)
+    expect(settings?.apiKey).toBe('')
+  })
+
+  it('没有 apiKey 也没标 noKey 时仍算未配置（BYOK 不能被半截配置骗过）', () => {
+    saveAISettings({
+      baseUrl: 'https://api.deepseek.com',
+      model: 'deepseek-chat',
+      remember: true,
+    })
+
+    expect(loadAISettings()).toBeNull()
+  })
+
+  it('noKey 会持久化：刷新后仍然可用，而不是退化成未配置', () => {
+    saveAISettings({
+      baseUrl: 'http://127.0.0.1:3425/v1',
+      model: 'auto/DeepSeek-V4.1-Flash',
+      remember: true,
+      noKey: true,
+    })
+
+    // 直接读原始存储，确认 noKey 真的写进去了（而不是只在内存里）
+    const raw = JSON.parse(localStorage.getItem('resume-studio-ai-v1'))
+    expect(raw.noKey).toBe(true)
+  })
+
+  it('预设里有且只有一条免 Key 通道，且它指向本机回环', () => {
+    const noKeyPresets = AI_PRESETS.filter((p) => p.noKey)
+    expect(noKeyPresets).toHaveLength(1)
+
+    const magpie = noKeyPresets[0]
+    expect(magpie.id).toBe('magpie')
+    expect(new URL(magpie.baseUrl).hostname).toBe('127.0.0.1')
+    // 默认模型必须是 auto 路由组：写死具体型号会随套餐/额度变化失效
+    expect(magpie.model.startsWith('auto/')).toBe(true)
+    expect(magpie.models).toContain(magpie.model)
+  })
+
+  it('免 Key 预设排在第一项（新用户第一眼看到的就是不用注册的那条）', () => {
+    expect(AI_PRESETS[0].noKey).toBe(true)
   })
 })

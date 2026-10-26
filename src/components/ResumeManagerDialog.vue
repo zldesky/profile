@@ -9,6 +9,7 @@
 import { shallowRef, useTemplateRef } from 'vue'
 
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import ResumeWizardDialog from '@/components/ResumeWizardDialog.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { useDialogA11y } from '@/composables/useDialogA11y.ts'
 import { useToast } from '@/composables/useToast'
@@ -95,6 +96,13 @@ function confirmRestore() {
 }
 
 /* ---- 其它操作 ---- */
+
+/** 写简历向导：先定求职类型与方向，再一键铺骨架 */
+const wizardOpen = shallowRef(false)
+
+function openWizard() {
+  wizardOpen.value = true
+}
 
 function openDoc(doc: DocEntry) {
   if (doc.id === store.activeDocId) {
@@ -230,6 +238,21 @@ function duplicateDoc(doc: DocEntry) {
 
         <div class="rm-footer">
           <template v-if="view === 'docs'">
+            <!--
+              写简历向导放在「新建」这一排的最前面，而且是唯一的主按钮：
+              它是大多数人真正想要的起点（先定方向、自动铺骨架），
+              而下面三个是「我知道自己要什么结构」时的直接入口。
+            -->
+            <div class="rm-footer-row rm-wizard-row">
+              <button
+                class="ed-btn ed-btn-primary rm-wizard-btn"
+                title="先选求职类型与方向，自动铺好模块顺序、求职意向与要点模板"
+                @click="openWizard"
+              >
+                <SvgIcon name="sparkles" :size="14" />
+                <span>AI 起稿：先定方向</span>
+              </button>
+            </div>
             <div class="rm-footer-row">
               <span class="rm-new-label">新建</span>
               <button class="ed-btn" title="不带任何模块，全部自己添加" @click="createDoc('blank')">
@@ -284,6 +307,9 @@ function duplicateDoc(doc: DocEntry) {
           @confirm="confirmRestore"
           @cancel="pendingRestore = null"
         />
+
+        <!-- 向导自成一层弹窗，套用后会关闭并提示；不打断本弹窗的列表 -->
+        <ResumeWizardDialog :open="wizardOpen" @close="wizardOpen = false" />
       </div>
     </div>
   </Teleport>
@@ -341,6 +367,19 @@ function duplicateDoc(doc: DocEntry) {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/*
+ * 向导按钮独占一行且拉满宽度：它是这一块里最该被点的那个，
+ * 和下面「新建」三个平级按钮挤在一排会让主次分不清。
+ */
+.rm-wizard-row {
+  margin-bottom: 2px;
+}
+
+.rm-wizard-btn {
+  flex: 1 1 auto;
+  justify-content: center;
 }
 
 /* 新建行的说明字：不抢按钮的视觉重量，只交代这一排是干嘛的 */

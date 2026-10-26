@@ -45,8 +45,6 @@
     "verify:share": "node tools/verify-share-privacy.mjs",
     "verify:spacing": "node tools/verify-spacing-four-way.mjs",
     "verify:toolbar": "node tools/verify-toolbar-four-way.mjs",
-    "verify:field-nudge": "node tools/verify-field-nudge.mjs",
-    "verify:field-icon-drag": "node tools/verify-field-icon-drag.mjs",
     "verify:expression": "node tools/verify-expression.mjs",
     "verify:time-field": "node tools/verify-time-field.mjs",
     "verify:text-normalize": "node tools/verify-text-normalize.mjs",
@@ -58,6 +56,9 @@
     "build:host-template": "node tools/build-host-template.mjs",
     "preview:host-theme": "node tools/preview-host-theme.mjs",
     "verify:key-link": "node tools/verify-key-link.mjs",
+    "verify:magpie-ui": "node tools/verify-magpie-ui.mjs",
+    "verify:wizard": "node tools/verify-wizard-and-jd.mjs",
+    "probe:magpie-cors": "node tools/probe-magpie-cors.mjs",
     "verify:package": "node tools/verify-delivery-package.mjs"
   },
   "lint-staged": {

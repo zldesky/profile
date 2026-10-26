@@ -51,12 +51,37 @@ const DRAFT_KEY = 'resume-studio-ai-draft-v1'
  * @property {string[]} models
  * @property {string} [keyUrl] 去申请 / 查看 Key 的直达地址
  * @property {string} [freeNote] 免费额度说明（没有就显示一句通用提示）
+ * @property {boolean} [noKey] 免 Key 通道：不需要 apiKey，走本机 Magpie 网关
  */
 
 /**
  * @type {AiPreset[]}
  */
 export const AI_PRESETS = [
+  {
+    /*
+     * Magpie 本机直连放在第一位：它是这个项目里**唯一不用注册、不用掏 Key** 的路，
+     * 而对新用户来说「先跑通一次」比「先去某处申请 Key」重要得多。
+     *
+     * baseUrl 指向本机网关。注意浏览器**不能**直连它（Magpie 不放行 CORS 预检，
+     * 实测见 tools/probe-magpie-cors.mjs），请求实际由本机服务转发 ——
+     * 所以这里填的地址只是给界面显示与「服务端配置对得上」用的，
+     * 真正发往哪里由服务端 MAGPIE_BASE_URL 决定，前端改不了。
+     */
+    id: 'magpie',
+    label: 'Magpie（本机直连，免 Key）',
+    baseUrl: 'http://127.0.0.1:3425/v1',
+    model: 'auto/DeepSeek-V4.1-Flash',
+    models: [
+      'auto/DeepSeek-V4.1-Flash',
+      'workbuddy/deepseek-v4.1-flash',
+      'workbuddy/kimi-k3.1-pro',
+      'workbuddy-ai/deepseek-v4.1-flash-sg',
+    ],
+    keyUrl: 'https://usemagpie.ai/zh/',
+    freeNote: '用本机 Magpie 已登录账号的额度，无需 API Key（仅本机部署可用）',
+    noKey: true,
+  },
   {
     id: 'deepseek',
     label: 'DeepSeek',
@@ -190,24 +215,40 @@ export function presetById(id) {
 }
 
 /**
+ * 判断一条配置是否完整可用。
+ *
+ * 免 Key 预设（Magpie）例外：它**不需要 apiKey**，地址与模型齐了就算配置好。
+ * 这一条如果漏了，免 Key 通道会永远被判成「未配置」——
+ * 用户点了「一键联调」明明成功，回到润色弹窗却还是提示去设置，是最典型的静默失效。
+ *
+ * @param {any} value
+ * @returns {boolean}
+ */
+export function isUsableSettings(value) {
+  if (!value || !value.baseUrl || !value.model) return false
+  return value.noKey === true || Boolean(value.apiKey)
+}
+
+/**
  * 读取配置。记住的优先，其次当前会话的；都没有（或 Key 已丢失）返回 null。
- * apiKey 必须同时在：只配了地址没有 Key 的残缺配置不能算已配置，
+ * apiKey 必须同时在（免 Key 预设除外，见 isUsableSettings）：
+ * 只配了地址没有 Key 的残缺配置不能算已配置，
  * 否则润色弹窗不再引导去设置，用户只会撞到一条生硬的服务端报错。
- * @returns {{ baseUrl: string, model: string, apiKey: string, remember: boolean } | null}
+ * @returns {{ baseUrl: string, model: string, apiKey: string, remember: boolean, noKey: boolean } | null}
  */
 export function loadAISettings() {
   try {
     const saved = JSON.parse(localStorage.getItem(PERSIST_KEY) || 'null')
-    if (saved && saved.baseUrl && saved.model && saved.apiKey) {
-      return { ...saved, remember: true }
+    if (isUsableSettings(saved)) {
+      return { noKey: false, ...saved, remember: true }
     }
   } catch {
     /* 损坏数据按未配置处理 */
   }
   try {
     const session = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null')
-    if (session && session.baseUrl && session.model && session.apiKey) {
-      return { ...session, remember: false }
+    if (isUsableSettings(session)) {
+      return { noKey: false, ...session, remember: false }
     }
   } catch {
     /* 同上 */
@@ -218,9 +259,14 @@ export function loadAISettings() {
 /**
  * 保存配置。remember=true 落 localStorage，否则只落 sessionStorage。
  * 两条路互斥：保存时会清掉另一边的旧配置。
+ *
+ * noKey 一并持久化：它是「这条配置不需要 Key」的标记，
+ * 丢了的话下次读出来会被当成残缺配置，免 Key 通道就再也进不去了。
+ *
+ * @param {{ baseUrl: string, model: string, apiKey?: string, remember?: boolean, noKey?: boolean }} settings
  */
-export function saveAISettings({ baseUrl, model, apiKey, remember }) {
-  const payload = JSON.stringify({ baseUrl, model, apiKey })
+export function saveAISettings({ baseUrl, model, apiKey = '', remember = false, noKey = false }) {
+  const payload = JSON.stringify({ baseUrl, model, apiKey, noKey: Boolean(noKey) })
   try {
     if (remember) {
       localStorage.setItem(PERSIST_KEY, payload)
@@ -258,11 +304,11 @@ export function clearAISettings() {
  * 草稿与正式配置分开存（DRAFT_KEY 与 PERSIST_KEY 互不影响），
  * 因此草稿绝不会让 AI 功能误判为「已配置」。
  */
-export function saveAIDraft({ presetId, baseUrl, model, apiKey, remember }) {
+export function saveAIDraft({ presetId, baseUrl, model, apiKey, remember, noKey }) {
   try {
     sessionStorage.setItem(
       DRAFT_KEY,
-      JSON.stringify({ presetId, baseUrl, model, apiKey, remember }),
+      JSON.stringify({ presetId, baseUrl, model, apiKey, remember, noKey: Boolean(noKey) }),
     )
   } catch {
     /* 存储被禁用时静默：草稿只是便利，不该影响主流程 */

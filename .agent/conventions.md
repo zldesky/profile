@@ -31,19 +31,26 @@ src/main.js       1 个
 少写了 `history`），总数对、分布错，读者看到总数正确就会信整张表。
 `npm run check:agent-docs` 只比对**总数**，**名单要人自己数** —— 这是它明确的覆盖边界。
 
-注意 `src/utils/` 里还有 16 个**已经迁完的 `.ts`**（`aiClient` `aiFill` `api` `cloudResume`
-`collectionApi` `completeness` `entryTime` `exportFlow` `fieldLayout` `filename` `helpers`
-`markdownSource` `pageFill` `pdfImport` `resumeStyle` `sectionStyle` `serverPdf` `shareApi`
-`styleMatrix` `textNormalize` `validators` `zip`）—— 它们受类型检查，
+注意 `src/utils/` 里还有 23 个**已经迁完的 `.ts`**（`aiClient` `aiFill` `api` `cloudResume`
+`collectionApi` `completeness` `entryTime` `exportFlow` `expression` `filename` `helpers`
+`markdownSource` `pageFill` `pdfImport` `resumeStyle` `richText` `sectionStyle` `serverPdf`
+`shareApi` `styleMatrix` `textNormalize` `validators` `zip`）—— 它们受类型检查，
 不要算进上面那 19 个。同一个目录里 `.ts` 与 `.js` 混住，是这个项目迁移到一半的现状。
+
+> `fieldLayout.ts` 已随「字段拖拽改位置」功能删除（存档见 git tag
+> `archive/field-drag-2026-10`）。
+>
+> **这行数字以前是错的**：原写「16 个」，而名单列了 21 个、目录里实际 23 个 ——
+> 三个数字互不相符，且没有任何检查发现（`check:agent-docs` 只核对 `.js` 的总数）。
+> 现在按目录实际文件重列，并补齐漏掉的 `expression` / `richText`。
+> 加文件时请顺手改这一行；**名单要能自己数出等于这个数字**。
 
 **迁移进度**：上一轮把 26 降到 22，方法是先动**网络边界** —— `aiClient` `cloudResume`
 `serverPdf`（`src/utils/`）与 `useCloudSync`（`src/composables/`）四个文件转 `.ts`。
 选它们的理由是类型在这里最值钱（响应体形状、错误码），而且它们的手写 `fetch`
 正好一并收进了 `utils/api.ts`。
 
-此后 `fieldLayout` 与 `styleMatrix` 等新增文件直接以 `.ts` 起步，
-所以基线仍是 **22 个 `.js`**、`src/utils/` 下 13 个 `.ts`。
+此后 `styleMatrix` 等新增文件直接以 `.ts` 起步。
 下一步迁什么要按「出事代价」排，不要按文件大小排 —— 见 `guards.md` 的诚实清单。
 
 **这对 AI 的直接影响**：你要用的函数如果来自上面那些 `.js`，它的参数与返回值

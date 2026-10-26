@@ -62,11 +62,18 @@ async function openEditorAt(field) {
   }, field)
   if (!box) return { ok: false, why: '纸面上没有这个锚点' }
   /*
-   * 就地编辑的手势是**双击**：单击已被「选中字段微调」占用
-   * （PreviewPane.onPaperDblClick / onPaperClick）。这里曾经用单击，
-   * 手势改版后 5 个用例全数「没有弹出编辑框」，脚本却没人跑所以一直没发现。
+   * 就地编辑的手势是**单击**。
+   *
+   * 这里曾经改成双击：当时单击被「选中字段微调（拖动改间距）」占用了。
+   * 而那个功能已整体移除（存档见 git tag `archive/field-drag-2026-10`），
+   * 单击重新交还给就地编辑 —— 所以脚本也回到单击。
+   *
+   * 实测确认（真 Edge，逐个字段）：单击 name / gridValue / sectionTitle 都能弹出编辑框，
+   * 而双击**弹不出来**（onPaperClick 里 `event.detail > 1` 直接返回）。
+   * 也就是说：手势跟错的是脚本，不是产品 —— 这类「脚本对着旧实现写的」正是本仓库
+   * 反复强调要先怀疑脚本的那类情况。
    */
-  await page.mouse.dblclick(box.x, box.y)
+  await page.mouse.click(box.x, box.y)
   await page.waitForTimeout(450)
   const editor = await findEditor()
   return editor ? { ok: true, ...editor } : { ok: false, why: '没有弹出编辑框' }

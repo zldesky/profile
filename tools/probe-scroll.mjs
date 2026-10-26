@@ -15,7 +15,12 @@
  * 用法：
  *   node tools/probe-scroll.mjs                      # 默认 127.0.0.1:3001/editor
  *   node tools/probe-scroll.mjs http://localhost:5173
+ *   node tools/probe-scroll.mjs http://localhost:5173/editor
  *   node tools/probe-scroll.mjs http://localhost:5173 --token <会话令牌>   # 需登录才渲染面板
+ *
+ * 只给站点根地址也行：面板在 /editor，本脚本会自动补上路径。
+ * （早先照文档传 `http://localhost:5173` 会导航到首页，然后报「面板没渲染」——
+ *  那是**探针没站到面板所在的页面**，不是产品坏了。见 PITFALLS.md A 类。）
  *
  * 前提：站点要跑起来。连 3001 需先 `npm run build`，且多半要 --token，
  * 否则面板不会渲染 —— 那时本的脚本会直接判 FAIL（量不到 ≠ 通过）。
@@ -23,7 +28,15 @@
 import { chromium } from '../server/node_modules/playwright-core/index.mjs'
 
 const argv = process.argv.slice(2)
-const url = argv.find((a) => a.startsWith('http')) || 'http://127.0.0.1:3001/editor'
+const rawUrl = argv.find((a) => a.startsWith('http')) || 'http://127.0.0.1:3001/editor'
+/*
+ * 面板挂在 /editor：只给站点根地址时补上路径。
+ * 不补的话会去量首页 —— 那里没有 .panel-body，脚本会报「面板没渲染」，
+ * 而真实原因是探针站错了页面（PITFALLS A 类）。
+ */
+const url = new URL(rawUrl)
+if (url.pathname === '/' || url.pathname === '') url.pathname = '/editor'
+const target = url.toString()
 const tokenFlag = argv.indexOf('--token')
 const token = tokenFlag >= 0 ? argv[tokenFlag + 1] : ''
 
@@ -39,14 +52,14 @@ const browser = await chromium.launch({ channel: 'msedge' })
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
 
 if (token) {
-  await context.addCookies([{ name: 'rs_session', value: token, url: new URL(url).origin }])
+  await context.addCookies([{ name: 'rs_session', value: token, url: url.origin }])
 }
 
 const page = await context.newPage()
 const errors = []
 page.on('pageerror', (e) => errors.push(String(e)))
 
-await page.goto(url, { waitUntil: 'networkidle', timeout: 40000 })
+await page.goto(target, { waitUntil: 'networkidle', timeout: 40000 })
 await page.waitForTimeout(1500)
 
 // 关掉新手引导，否则遮罩会挡住面板
@@ -96,6 +109,51 @@ console.log(
     ` 卡片 ${metrics.cards} 张 输入控件 ${metrics.inputs} 个 DOM 节点 ${metrics.nodes} 个`,
 )
 
+/* ---------------- 功能护栏：反向高亮必须还活着 ---------------- */
+
+/*
+ * 这条断言是为「优化滚动性能」加的门槛，不是功能测试本身。
+ *
+ * 原因：把 ContentPanel 里那个「滚动时高亮当前模块锚点」的监听删掉，
+ * p95 立刻从 20–40ms 掉到 9ms —— 指标全线变绿，功能却没了。
+ * 这正是 PITFALLS.md E8 那一类（「接好了」不等于「跑起来了」）：
+ * 优化不能以悄悄去掉功能为代价，所以必须有断言盯着它。
+ *
+ * 判据：把第 3 张卡片的顶边滚到滚动区顶边**之上** 120px。
+ * 此时锚点条判定的那条线（滚动区顶部往下 90px 内）必然落在它里面，
+ * 高亮的锚点文本必须等于这张卡片的标题。
+ */
+const anchorCheck = await page.evaluate(() => {
+  const body = document.querySelector('.panel-body')
+  const cards = [...document.querySelectorAll('.ed-card[data-section-id]')]
+  const card = cards[2]
+  if (!body || !card) return { ok: false, reason: `卡片只有 ${cards.length} 张，不够定位第 3 张` }
+  const bodyTop = body.getBoundingClientRect().top
+  const cardTop = card.getBoundingClientRect().top
+  // 卡片顶边向上移 120px（超过判据的 90px），于是它跨过了那条线
+  body.scrollTop += cardTop - bodyTop + 120
+  const titleInput = card.querySelector('.ed-card-title')
+  return {
+    ok: true,
+    title: titleInput instanceof HTMLInputElement ? titleInput.value.trim() : '',
+  }
+})
+if (!anchorCheck.ok) {
+  log(false, '滚动到某模块时锚点条跟着高亮（反向高亮没被删掉）', anchorCheck.reason)
+} else {
+  // 高亮挂在 rAF 上，是异步落地的：等一帧以上再看
+  await page.waitForTimeout(400)
+  const activeText = await page.evaluate(() => {
+    const btn = document.querySelector('.panel-nav button.is-active')
+    return btn ? (btn.textContent ?? '').trim() : ''
+  })
+  log(
+    activeText === anchorCheck.title,
+    '滚动到某模块时锚点条跟着高亮（反向高亮没被删掉）',
+    `期望「${anchorCheck.title}」，实际「${activeText || '(没有高亮项)'}」`,
+  )
+}
+
 /* ---------------- 分段量滚动 ---------------- */
 
 /**
@@ -139,7 +197,8 @@ async function measureSegment(label, fromRatio, toRatio) {
       // 丢掉首帧（含上一次的收尾）与采样器自身的开销
       const sample = frames.slice(2)
       sample.sort((a, b) => a - b)
-      const pick = (p) => Math.round(sample[Math.min(sample.length - 1, Math.floor(sample.length * p))] * 10) / 10
+      const pick = (p) =>
+        Math.round(sample[Math.min(sample.length - 1, Math.floor(sample.length * p))] * 10) / 10
       return {
         frames: sample.length,
         p50: pick(0.5),
@@ -178,7 +237,8 @@ const longTaskInfo = await page.evaluate(async () => {
   const entries = []
   try {
     const po = new PerformanceObserver((list) => {
-      for (const e of list.getEntries()) entries.push({ name: e.entryType, duration: Math.round(e.duration) })
+      for (const e of list.getEntries())
+        entries.push({ name: e.entryType, duration: Math.round(e.duration) })
     })
     po.observe({ entryTypes: ['longtask'] })
 
@@ -276,7 +336,9 @@ if (designVisible) {
       max: Math.round(Math.max(...s)),
     }
   })
-  console.log(`  冷启动（首次连续滚动 120 帧）：超 25ms 的帧 ${cold.spikes} 个，最大 ${cold.max} ms`)
+  console.log(
+    `  冷启动（首次连续滚动 120 帧）：超 25ms 的帧 ${cold.spikes} 个，最大 ${cold.max} ms`,
+  )
 
   // 热身一遍之后再分段量 —— 段内数据才是「日常滚动」的体感
   const designSegments = [
@@ -289,11 +351,7 @@ if (designVisible) {
   const designFrames = designSegments.reduce((n, s) => n + s.frames, 0)
   const designDroppedPct = designFrames ? Math.round((designDropped / designFrames) * 100) : 0
   console.log(`\n▌设计页签最卡的一段：p95 ${designWorst.p95} ms`)
-  log(
-    designWorst.p95 <= 25,
-    '设计页签各段滚动 p95 不超过 25ms',
-    `实测 ${designWorst.p95} ms`,
-  )
+  log(designWorst.p95 <= 25, '设计页签各段滚动 p95 不超过 25ms', `实测 ${designWorst.p95} ms`)
   log(designDroppedPct <= 10, '设计页签整体掉帧率不超过 10%', `实测 ${designDroppedPct}%`)
   // 冷启动基线：一次性成本，容许存在，但不该频繁（≤2 帧）
   log(cold.spikes <= 2, '设计页签冷启动超 25ms 的帧不超过 2 个', `实测 ${cold.spikes} 个`)

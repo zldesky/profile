@@ -440,3 +440,85 @@ describe('来源与请求体防线', () => {
     expect(res.status).toBeGreaterThanOrEqual(400)
   })
 })
+
+/**
+ * Magpie 本机直连（免 Key）的端点契约。
+ *
+ * 这里**不测「能不能真的调通模型」** —— 那取决于本机有没有装 Magpie、
+ * 装的那份有没有登录账号，是环境状态而不是代码行为。拿它做断言只会得到一个
+ * 时绿时红的测试，而那种测试比没有更糟（本仓库 A 类坑就是这个）。
+ *
+ * 要测的是**不依赖环境的契约**，尤其是三条安全闸门：
+ *  1. 匿名一律 401（它花的是本机账号额度，不能对外开）；
+ *  2. 安装必须显式 confirm:true（防止被静默触发下载并执行 exe）；
+ *  3. status 如实回报可用性，而不是让界面自己猜。
+ * 这三条任何一条失效都不会报错，只会安静地变成安全缺口 —— 所以必须钉住。
+ */
+describe('Magpie 本机直连端点', () => {
+  it('status 匿名返回 401（免 Key 不等于免登录）', async () => {
+    const res = await fetch(`${base}/api/magpie/status`)
+    expect(res.status).toBe(401)
+  })
+
+  it('probe 与 chat 匿名都返回 401', async () => {
+    const probe = await fetch(`${base}/api/magpie/probe`, { method: 'POST' })
+    expect(probe.status).toBe(401)
+
+    const chat = await fetch(`${base}/api/ai/magpie`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }] }),
+    })
+    expect(chat.status).toBe(401)
+  })
+
+  it('install 匿名返回 401（不能靠匿名请求下载并执行程序）', async () => {
+    const res = await fetch(`${base}/api/magpie/install`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ confirm: true }),
+    })
+    expect(res.status).toBe(401)
+  })
+
+  it('已登录时 status 给出明确答复，且不泄露无关配置', async () => {
+    const { client } = await registerUser('mag')
+    const res = await client.get('/api/magpie/status')
+    expect(res.status).toBe(200)
+    expect(res.json.ok).toBe(true)
+    // available 是服务端判定的结果：本测试实例跑在回环地址上，默认开启
+    expect(typeof res.json.available).toBe('boolean')
+    expect(res.json.baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:/)
+    // 安装目录要说出来，界面才能如实告诉用户「会存到哪」
+    expect(typeof res.json.installDir).toBe('string')
+
+    const text = JSON.stringify(res.json)
+    expect(text).not.toMatch(/PDF_ACCESS_PASSWORD/i)
+    expect(text).not.toMatch(/apiKey/i)
+  })
+
+  it('install 不带 confirm 时返回 400，且不会真的下载', async () => {
+    const { client } = await registerUser('mag2')
+    const res = await client.post('/api/magpie/install', {})
+    // 关键是这条：不能因为「已登录」就自动开始下载
+    expect(res.status).toBe(400)
+    expect(String(res.json.message)).toContain('确认')
+  })
+
+  it('install 带 confirm:false 同样被拒（不能被 falsy 值绕过）', async () => {
+    const { client } = await registerUser('mag3')
+    const res = await client.post('/api/magpie/install', { confirm: false })
+    expect(res.status).toBe(400)
+  })
+
+  it('chat 的对话格式非法时返回 400，不会转发到上游', async () => {
+    const { client } = await registerUser('mag4')
+    const empty = await client.post('/api/ai/magpie', { messages: [] })
+    expect(empty.status).toBe(400)
+
+    const tooLong = await client.post('/api/ai/magpie', {
+      messages: [{ role: 'user', content: 'x'.repeat(8001) }],
+    })
+    expect(tooLong.status).toBe(400)
+  })
+})

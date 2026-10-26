@@ -9,6 +9,8 @@ export interface AiSettings {
   baseUrl: string
   model: string
   apiKey: string
+  /** 免 Key 通道（Magpie 本机直连）：为 true 时走 /api/ai/magpie，不携带 Key */
+  noKey?: boolean
 }
 
 export interface AiMessage {
@@ -18,6 +20,16 @@ export interface AiMessage {
 
 /**
  * 发起一次对话补全。
+ *
+ * 两条通道，分流依据只有 settings.noKey：
+ *  - **免 Key**（Magpie 本机直连）→ `/api/ai/magpie`，只传 model 与 messages。
+ *    目标网关地址由服务端固定，前端传不了 —— 这条通道没有 SSRF 面。
+ *  - **BYOK** → `/api/ai/chat`，Key 随请求携带、服务端即用即弃。
+ *
+ * 为什么不合并成一个端点：`/api/ai/chat` 的地址来自前端，必须过 aiGuard 的
+ * SSRF 防线，而那条防线**故意拒绝环回地址**。两条通道的安全前提不同，
+ * 混在一起迟早会把「拒绝环回」这条为了省事拆掉。
+ *
  * @param options.settings AI 配置
  * @param options.messages 对话消息
  * @returns 模型返回的文本
@@ -31,6 +43,14 @@ export async function aiChat({
   messages: AiMessage[]
   temperature?: number
 }): Promise<string> {
+  if (settings.noKey) {
+    const local = await request<{ content: string }>(API.aiMagpie, {
+      method: 'POST',
+      body: { model: settings.model, messages, temperature },
+    })
+    return local.content
+  }
+
   const data = await request<{ content: string }>(API.aiChat, {
     method: 'POST',
     body: {

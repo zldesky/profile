@@ -14,7 +14,7 @@ import {
   FONTS,
   FONT_KEY_MIGRATION,
 } from '@/data/presets'
-import type { Basics, CustomLayout, FieldLayouts, Resume, Section, Theme } from '@/types/resume'
+import type { Basics, CustomLayout, Resume, Section, Theme } from '@/types/resume'
 import { uid } from '@/utils/helpers'
 
 /** 未归一化的原始数据：字段与类型都不可信，逐段收窄 */
@@ -22,31 +22,6 @@ type RawRecord = Record<string, any>
 
 /** 当前数据结构版本 */
 export const RESUME_VERSION = 2
-
-/**
- * 归一化字段级间距表：只保留四个数值轴，丢弃其它键与全零条目。
- *
- * 范围不在前端这里放宽或收紧 —— 写入时已由 rangeForField 钳制，
- * 这里只做「形状」上的清洗（防止手改 JSON 塞进非数字 / 垃圾键）。
- */
-function normalizeFieldLayouts(raw: unknown): FieldLayouts | undefined {
-  if (!raw || typeof raw !== 'object') return undefined
-  const out: FieldLayouts = {}
-  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (!value || typeof value !== 'object') continue
-    const v = value as Record<string, unknown>
-    const layout = {
-      indent: Number(v.indent) || 0,
-      indentRight: Number(v.indentRight) || 0,
-      extraGap: Number(v.extraGap) || 0,
-      extraGapBottom: Number(v.extraGapBottom) || 0,
-    }
-    if (layout.indent || layout.indentRight || layout.extraGap || layout.extraGapBottom) {
-      out[key] = layout
-    }
-  }
-  return Object.keys(out).length ? out : undefined
-}
 
 /** 为导入的数据补齐缺失的 id，避免渲染时 key 重复 */
 function ensureId<T extends RawRecord>(item: T, prefix: string): T {
@@ -112,8 +87,13 @@ function normalizeSections(sections: RawRecord[]): Section[] {
     section.visible = section.visible !== false
     section.title = section.title || '未命名模块'
     section.layout = { ...DEFAULT_SECTION_LAYOUT, ...(section.layout || {}) }
-    // 字段级间距：只保留四个数值轴，缺失或非对象时置空；全零的条目清掉
-    section.fieldLayouts = normalizeFieldLayouts(section.fieldLayouts)
+    /*
+     * 旧数据里的 section.fieldLayouts 是「字段拖拽改位置」留下的间距表，
+     * 那个功能已移除（存档见 git tag archive/field-drag-2026-10）。
+     * 这里显式删掉：留着也不会被渲染，但会一路带进导出的 JSON 与云端快照，
+     * 变成永远不生效的死数据 —— 清掉比留着干净。
+     */
+    delete section.fieldLayouts
 
     if (section.type === 'grid') {
       normalizeGridSection(section)

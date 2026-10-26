@@ -37,6 +37,18 @@ import { createCaptcha } from './captcha.ts'
 import { CATEGORY_KEYS, createDatabase } from './db.ts'
 import { fetchRemoteImage } from './imageProxy.ts'
 import {
+  MAGPIE_DEFAULT_BASE,
+  MAGPIE_DEFAULT_MODEL,
+  canAutoInstall,
+  chatViaMagpie,
+  downloadMagpie,
+  findInstalledMagpie,
+  isLoopbackUrl,
+  launchMagpie,
+  probeMagpieGateway,
+  resolveInstallDir,
+} from './magpie.ts'
+import {
   BEARER_SUBJECT,
   GLOBAL_SUBJECT,
   SESSION_TTL_DAYS,
@@ -144,6 +156,23 @@ const shareLimiter = createSlidingWindowCounter({ max: 20, windowMs: 60 * 60 * 1
 const aiLimiter = createSlidingWindowCounter({ max: 60, windowMs: 60 * 60 * 1000 })
 /** 图片代抓同频限频：它是另一个重出网端点，不能成为唯一没有闸门的出口 */
 const imageLimiter = createSlidingWindowCounter({ max: 60, windowMs: 60 * 60 * 1000 })
+
+/**
+ * Magpie 本机直连的开关与地址。
+ *
+ * 为什么它默认关闭、并且只在回环部署下可用：
+ * 「免 Key」花的是**本机已登录的 Magpie 账号额度**（`/v1/magpie/quotas` 实测返回
+ * 套餐与剩余 credits）。若服务对公网暴露，这条通道就等于把本机额度开放给任意访客。
+ * 所以两重闸门：显式开启 + 仅回环监听，缺一不可。
+ */
+const MAGPIE_ENABLED =
+  !/^(off|false|0)$/i.test(String(process.env.MAGPIE_ENABLED ?? '').trim()) && isLoopbackHost(HOST)
+/** 网关地址由服务端固定，前端传不进来（见 server/magpie.ts 顶部注释） */
+const MAGPIE_BASE_URL = String(process.env.MAGPIE_BASE_URL || MAGPIE_DEFAULT_BASE).trim()
+/** 免 Key 通道同样要限频：它花的是真实额度 */
+const magpieLimiter = createSlidingWindowCounter({ max: 120, windowMs: 60 * 60 * 1000 })
+/** 安装是重动作（下载 60MB + 起进程），单独给一个更紧的闸门 */
+const magpieInstallLimiter = createSlidingWindowCounter({ max: 5, windowMs: 60 * 60 * 1000 })
 
 /** 库文件路径可用环境变量覆盖；测试与多实例部署时用得上 */
 const db = createDatabase({
@@ -980,6 +1009,230 @@ app.post('/api/ai/chat', guards.requireAuth, async (req, res) => {
       return
     }
     res.status(502).json({ ok: false, message: `AI 服务连接失败：${errorMessage(error)}` })
+  }
+})
+
+/* ---------------- Magpie 本机直连（免 API Key，仅回环部署可用） ---------------- */
+
+/**
+ * 为什么单独一组端点，而不复用 `/api/ai/chat`：
+ *
+ * 1. `/api/ai/chat` 的目标地址来自前端，必须过 `aiGuard.ts` 的 SSRF 防线，
+ *    而那条防线**故意拒绝环回地址**（`127.0.0.1` 会得到「环回地址」拒绝）。
+ *    拆掉它换取方便是不允许的 —— 那会让这个服务变成任意内网探测跳板。
+ * 2. 这里的目标地址**由服务端固定**（`MAGPIE_BASE_URL`），前端只能传
+ *    model / messages，传不了 URL。所以本组端点没有 SSRF 面。
+ *
+ * 三端点的能力边界：
+ *   status  —— 只读探测，任何已登录用户可调
+ *   chat    —— 转发一次对话（花本机额度，有限频）
+ *   install —— 下载并启动可执行文件，最重，三重闸门（见下）
+ */
+
+/** Magpie 是否可用：给界面一个明确答复，而不是让它自己猜然后莫名失败 */
+function magpieAvailability(): {
+  enabled: boolean
+  reason: string
+  baseUrl: string
+  installDir: string
+} {
+  if (!MAGPIE_ENABLED) {
+    const reason = isLoopbackHost(HOST)
+      ? 'Magpie 直连已关闭（MAGPIE_ENABLED=off）'
+      : `Magpie 直连仅在本机部署时可用；当前监听 ${HOST}，已自动停用（它花的是本机 Magpie 账号的额度）`
+    return { enabled: false, reason, baseUrl: MAGPIE_BASE_URL, installDir: resolveInstallDir().dir }
+  }
+  if (!isLoopbackUrl(MAGPIE_BASE_URL)) {
+    return {
+      enabled: false,
+      reason: 'MAGPIE_BASE_URL 必须是本机回环地址',
+      baseUrl: MAGPIE_BASE_URL,
+      installDir: resolveInstallDir().dir,
+    }
+  }
+  return {
+    enabled: true,
+    reason: '',
+    baseUrl: MAGPIE_BASE_URL,
+    installDir: resolveInstallDir().dir,
+  }
+}
+
+/** 探测网关 + 本机是否已安装。前端靠它决定按钮是「一键联调」还是「下载并安装」 */
+app.get('/api/magpie/status', guards.requireAuth, async (req, res) => {
+  const availability = magpieAvailability()
+  if (!availability.enabled) {
+    res.json({
+      ok: true,
+      available: false,
+      reason: availability.reason,
+      canAutoInstall: false,
+      installDir: availability.installDir,
+    })
+    return
+  }
+
+  const [gateway, installedAt] = await Promise.all([
+    probeMagpieGateway({ baseUrl: availability.baseUrl }),
+    findInstalledMagpie(),
+  ])
+
+  res.set('Cache-Control', 'no-store')
+  res.json({
+    ok: true,
+    available: true,
+    reason: '',
+    baseUrl: availability.baseUrl,
+    installDir: availability.installDir,
+    canAutoInstall: canAutoInstall(),
+    installed: Boolean(installedAt),
+    installedAt,
+    running: gateway.running,
+    version: gateway.version,
+    models: gateway.models,
+    defaultModel: MAGPIE_DEFAULT_MODEL,
+    // 网关没起来时把原因原样带回去，界面据此说人话
+    message: gateway.message,
+  })
+})
+
+/**
+ * 一键联调：真的发一次最小对话。
+ *
+ * 只探测端口是不够的 —— Magpie 可能在跑但没有可用账号（未登录 / 额度用尽），
+ * 那时端口照样通、`/models` 也可能通，真正调用才 401/402。
+ * 所以联调必须**真的走一次 /chat/completions**，这也正是「一键联调」该有的含义。
+ */
+app.post('/api/magpie/probe', guards.requireAuth, async (req, res) => {
+  const availability = magpieAvailability()
+  if (!availability.enabled) {
+    res.status(400).json({ ok: false, message: availability.reason })
+    return
+  }
+  if (!magpieLimiter.tryTake(`magpie:${subjectOf(req)}`)) {
+    res.status(429).json({ ok: false, message: 'Magpie 调用过于频繁，请一小时后再试' })
+    return
+  }
+
+  const model =
+    typeof req.body?.model === 'string' && req.body.model.trim()
+      ? req.body.model.trim()
+      : MAGPIE_DEFAULT_MODEL
+
+  const startedAt = Date.now()
+  try {
+    const content = await chatViaMagpie({
+      baseUrl: availability.baseUrl,
+      model,
+      messages: [{ role: 'user', content: '回复「OK」两个字，不要其它内容。' }],
+      temperature: 0,
+      timeoutMs: 45000,
+    })
+    res.json({
+      ok: true,
+      model,
+      latencyMs: Date.now() - startedAt,
+      // 把模型原话带回界面：能回出内容，才说明额度、账号、网络都通了
+      reply: content.slice(0, 40),
+    })
+  } catch (error) {
+    res.status(502).json({ ok: false, message: errorMessage(error) })
+  }
+})
+
+/** 免 Key 转发。目标地址固定，不接受前端传 URL */
+app.post('/api/ai/magpie', guards.requireAuth, async (req, res) => {
+  const availability = magpieAvailability()
+  if (!availability.enabled) {
+    res.status(400).json({ ok: false, message: availability.reason })
+    return
+  }
+
+  const { model, messages, temperature } = req.body || {}
+  if (
+    !Array.isArray(messages) ||
+    !messages.length ||
+    messages.length > 20 ||
+    messages.some(
+      (m) => !m || typeof m.content !== 'string' || !m.content.trim() || m.content.length > 8000,
+    )
+  ) {
+    res.status(400).json({ ok: false, message: '对话内容格式不正确' })
+    return
+  }
+  if (model !== undefined && (typeof model !== 'string' || model.length > 200)) {
+    res.status(400).json({ ok: false, message: '模型名称过长' })
+    return
+  }
+
+  if (!magpieLimiter.tryTake(`magpie:${subjectOf(req)}`)) {
+    res.status(429).json({ ok: false, message: 'Magpie 调用过于频繁，请一小时后再试' })
+    return
+  }
+
+  try {
+    const content = await chatViaMagpie({
+      baseUrl: availability.baseUrl,
+      model: typeof model === 'string' && model.trim() ? model.trim() : MAGPIE_DEFAULT_MODEL,
+      messages,
+      temperature: Number.isFinite(Number(temperature)) ? Number(temperature) : 0.7,
+    })
+    res.json({ ok: true, content })
+  } catch (error) {
+    res.status(502).json({ ok: false, message: errorMessage(error) })
+  }
+})
+
+/**
+ * 下载并安装 Magpie（默认落 `D:\Tool`），可选启动。
+ *
+ * 三重闸门，缺一不可 —— 这是本服务唯一会**下载并执行外部可执行文件**的端点：
+ *  1. 必须登录（guards.requireAuth）；
+ *  2. 必须 `confirm: true`：前端弹窗确认后才发，避免被脚本静默触发；
+ *  3. 仅回环部署（`MAGPIE_ENABLED` 已包含 isLoopbackHost(HOST)），
+ *     否则公网访客就能让你机器下载并运行一个 exe。
+ * 下载本身还有 sha256 校验与主机白名单（见 server/magpie.ts）。
+ */
+app.post('/api/magpie/install', guards.requireAuth, async (req, res) => {
+  const availability = magpieAvailability()
+  if (!availability.enabled) {
+    res.status(400).json({ ok: false, message: availability.reason })
+    return
+  }
+  if (req.body?.confirm !== true) {
+    res.status(400).json({
+      ok: false,
+      message: '安装需要用户明确确认（请求体里带 confirm: true）',
+    })
+    return
+  }
+  if (!canAutoInstall()) {
+    res.status(400).json({
+      ok: false,
+      message: '当前系统不支持自动安装，请到 usemagpie.ai 手动下载',
+    })
+    return
+  }
+  if (!magpieInstallLimiter.tryTake(`magpie-install:${subjectOf(req)}`)) {
+    res.status(429).json({ ok: false, message: '安装尝试过于频繁，请一小时后再试' })
+    return
+  }
+
+  try {
+    const result = await downloadMagpie({ destDir: availability.installDir })
+    let pid = 0
+    let launchError = ''
+    // 启动失败不算安装失败：文件已经正确落盘，用户还能手动双击它
+    if (req.body?.launch !== false) {
+      try {
+        pid = await launchMagpie(result.filePath)
+      } catch (error) {
+        launchError = errorMessage(error)
+      }
+    }
+    res.json({ ok: true, ...result, pid, launchError })
+  } catch (error) {
+    res.status(500).json({ ok: false, message: errorMessage(error) })
   }
 })
 

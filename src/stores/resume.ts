@@ -619,6 +619,14 @@ export const useResumeStore = defineStore('resume', () => {
     restoreSnapshot,
     exportAllData,
     importAllData,
+    /**
+     * 强制采一份历史快照。
+     *
+     * 给「会整体替换内容」的操作在**覆盖之前**留档（写简历向导套骨架、
+     * 将来其它批量替换）。它原先只是内部函数，没有对外入口 ——
+     * 于是向导想留档就只能自己复制一份逻辑，那是更差的做法。
+     */
+    sampleSnapshot,
 
     setTheme,
     resetTheme,
@@ -639,11 +647,6 @@ export const useResumeStore = defineStore('resume', () => {
     updateSection: (id: string, patch: tree.Patch) => tree.updateSection(resume.value, id, patch),
     updateSectionLayout: (id: string, patch: Parameters<typeof tree.updateSectionLayout>[2]) =>
       tree.updateSectionLayout(resume.value, id, patch),
-    updateFieldLayout: (
-      id: string,
-      key: string,
-      patch: Parameters<typeof tree.updateFieldLayout>[3],
-    ) => tree.updateFieldLayout(resume.value, id, key, patch),
     moveSection: (from: number, to: number) => tree.moveSection(resume.value, from, to),
     reorderSectionsByIds: (ids: string[]) => tree.reorderSectionsByIds(resume.value, ids),
     reorderEntriesByIds: (sid: string, ids: string[]) =>
